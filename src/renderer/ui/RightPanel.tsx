@@ -195,7 +195,7 @@ export function RightPanel() {
   return (
     <div className="panel right">
       <div className="p-head">
-        <div className="title">{nodes.length === 0 ? t('Design') : nodes.length === 1 ? t(isBooleanGroup(nodes[0]) ? BOOLEAN_NAMES[nodes[0].booleanOperation!] : nodes[0].type.charAt(0) + nodes[0].type.slice(1).toLowerCase()) : `${nodes.length} ${t('layers')}`}</div>
+        <div className="title">{nodes.length === 0 ? t('Design') : nodes.length === 1 ? t(nodes[0].isComponent ? 'Component' : nodes[0].componentId ? 'Instance' : isBooleanGroup(nodes[0]) ? BOOLEAN_NAMES[nodes[0].booleanOperation!] : nodes[0].type.charAt(0) + nodes[0].type.slice(1).toLowerCase()) : `${nodes.length} ${t('layers')}`}</div>
         <button className="icon-btn" title="Hide panel (Ctrl+Alt+\)" onClick={() => runAction('toggle-right')}>
           {Icons.sidebarR}
         </button>
@@ -715,6 +715,16 @@ function NodeInspector({ nodes }: { nodes: GNode[] }) {
           </div>
           <button className="icon-btn" title={t('Flatten') + ' (Ctrl+E)'} onClick={layerActions.flatten}>
             {BoolIcons.FLATTEN}
+          </button>
+        </div>
+      )}
+      {nodes.length === 1 && nodes[0].componentId && (
+        <div className="section bool-bar">
+          <button className="btn" onClick={layerActions.goToMainComponent}>
+            {t('Go to main component')}
+          </button>
+          <button className="btn" title="Ctrl+Alt+B" onClick={layerActions.detachInstance}>
+            {t('Detach')}
           </button>
         </div>
       )}

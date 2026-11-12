@@ -82,13 +82,163 @@ function itemOf(ed: Editor, id: string): PathItem | null {
     }
   }
   if (!item) return null
+  item.transform(nodeMatrix(n))
+  return item
+}
+
+/** local coordinates of a layer -> its parent's coordinates (position, rotation, flip) */
+function nodeMatrix(n: GNode): InstanceType<typeof paper.Matrix> {
   const m = new paper.Matrix()
   m.translate(n.x + n.width / 2, n.y + n.height / 2)
   if (n.rotation) m.rotate(-n.rotation, 0, 0)
   if (n.flipX || n.flipY) m.scale(n.flipX ? -1 : 1, n.flipY ? -1 : 1)
   m.translate(-n.width / 2, -n.height / 2)
-  item.transform(m)
-  return item
+  return m
+}
+
+/** union of many pieces, pairwise (keeps every single union small) */
+function unionAll(items: PathItem[]): PathItem | null {
+  while (items.length > 1) {
+    const next: PathItem[] = []
+    for (let i = 0; i < items.length; i += 2) next.push(i + 1 < items.length ? items[i].unite(items[i + 1]) : items[i])
+    items = next
+  }
+  return items[0] ?? null
+}
+
+/** Area covered by a stroke of `weight` centred on the outline of `item` (curves are followed in small steps). */
+function centerStroke(item: PathItem, weight: number, round: boolean, cap: GNode['strokeCap']): PathItem | null {
+  const hw = weight / 2
+  const pieces: PathItem[] = []
+  const poly = (pts: number[][]) => pieces.push(new paper.Path({ segments: pts, closed: true }))
+  for (const src of item instanceof paper.CompoundPath ? (item.children as PPath[]) : [item as PPath]) {
+    const p = src.clone() as PPath
+    p.flatten(0.2)
+    const pts = p.segments.map((s) => s.point).filter((q, i, a) => i === 0 || q.getDistance(a[i - 1]) > 1e-4)
+    const closed = p.closed
+    if (closed && pts.length > 2 && pts[0].getDistance(pts[pts.length - 1]) < 1e-4) pts.pop()
+    const n = pts.length
+    if (n < 2) continue
+    const dir = (i: number) => pts[(i + 1) % n].subtract(pts[i]).normalize()
+    const segs = closed ? n : n - 1
+    for (let i = 0; i < segs; i++) {
+      const a = pts[i]
+      const b = pts[(i + 1) % n]
+      const u = dir(i)
+      const nx = -u.y * hw
+      const ny = u.x * hw
+      poly([[a.x + nx, a.y + ny], [b.x + nx, b.y + ny], [b.x - nx, b.y - ny], [a.x - nx, a.y - ny]])
+    }
+    // joins
+    for (let i = closed ? 0 : 1; i < (closed ? n : n - 1); i++) {
+      const v = pts[i]
+      if (round) {
+        pieces.push(new paper.Path.Circle(v, hw))
+        continue
+      }
+      const u = dir((i - 1 + n) % n)
+      const w = dir(i)
+      const cross = u.x * w.y - u.y * w.x
+      if (Math.abs(cross) < 1e-6) continue
+      // the wedge on the outer side of the corner
+      const s = cross > 0 ? -1 : 1
+      const n1 = new paper.Point(-u.y * s, u.x * s)
+      const n2 = new paper.Point(-w.y * s, w.x * s)
+      const sum = n1.add(n2)
+      const k = sum.length / 2 // cos of half the turning angle
+      const p1 = v.add(n1.multiply(hw))
+      const p2 = v.add(n2.multiply(hw))
+      if (k > 0.25) {
+        const m = v.add(sum.normalize().multiply(hw / k))
+        poly([[v.x, v.y], [p1.x, p1.y], [m.x, m.y], [p2.x, p2.y]])
+      } else poly([[v.x, v.y], [p1.x, p1.y], [p2.x, p2.y]])
+    }
+    // caps of open paths
+    if (!closed && cap && cap !== 'NONE') {
+      for (const [v, u] of [[pts[0], dir(0).multiply(-1)], [pts[n - 1], dir(n - 2)]] as const) {
+        if (cap === 'ROUND') pieces.push(new paper.Path.Circle(v, hw))
+        else {
+          const nx = -u.y * hw
+          const ny = u.x * hw
+          poly([[v.x + nx, v.y + ny], [v.x + nx + u.x * hw, v.y + ny + u.y * hw], [v.x - nx + u.x * hw, v.y - ny + u.y * hw], [v.x - nx, v.y - ny]])
+        }
+      }
+    }
+  }
+  return unionAll(pieces)
+}
+
+export interface OutlineResult {
+  d: string
+  x: number
+  y: number
+  w: number
+  h: number
+  fillRule: 'nonzero' | 'evenodd'
+}
+
+function finish(item: PathItem | null): OutlineResult | null {
+  if (!item || item.isEmpty()) return null
+  const b = item.bounds
+  item.translate(new paper.Point(-b.x, -b.y))
+  return { d: item.pathData, x: b.x, y: b.y, w: b.width, h: b.height, fillRule: item.fillRule === 'evenodd' ? 'evenodd' : 'nonzero' }
+}
+
+/**
+ * "Outline stroke": the area painted by the first visible stroke of a layer as a filled path
+ * in world coordinates. Rectangles and ellipses give exact shapes; other paths are traced.
+ */
+export function strokeOutline(ed: Editor, id: string): OutlineResult | null {
+  setup()
+  const n = ed.nodes.get(id)
+  const s = n?.strokes.find((x) => x.visible !== false && x.weight > 0)
+  if (!n || !s) return null
+  const w = s.weight
+  const simple = n.type === 'RECTANGLE' || n.type === 'ELLIPSE' || n.type === 'FRAME' || n.type === 'IMAGE' || n.type === 'SECTION'
+  const bool = isBooleanGroup(n)
+  const closed = n.type !== 'VECTOR' || /z/i.test(n.path ?? '')
+  const align = closed ? (s.align ?? 'CENTER') : 'CENTER'
+  let ring: PathItem | null = null
+  if (simple) {
+    // exact: the shape grown by one distance minus the shape shrunk by another
+    const grown = (d: number): PathItem | null => {
+      const v: GNode = { ...n, width: n.width + d * 2, height: n.height + d * 2 }
+      const rr = cornerRadiiOf(n, { w: n.width, h: n.height })
+      if (rr) {
+        v.cornerRadii = rr.map((r) => (r > 0 ? Math.max(0, r + d) : 0)) as [number, number, number, number]
+        v.cornerRadius = undefined
+      }
+      const dd = shapeD(v)
+      if (!dd) return null
+      const it = paper.PathItem.create(dd)
+      it.translate(new paper.Point(-d, -d))
+      return it
+    }
+    const [o, i] = align === 'INSIDE' ? [0, -w] : align === 'OUTSIDE' ? [w, 0] : [w / 2, -w / 2]
+    const outer = grown(o)
+    const inner = grown(i)
+    ring = outer && inner ? outer.subtract(inner) : outer
+  } else if (n.type === 'VECTOR' || bool) {
+    let shape: PathItem | null = null
+    if (bool) shape = combine(ed.children(id, n.pageId).map((c) => itemOf(ed, c)).filter((x): x is PathItem => !!x), n.booleanOperation!)
+    else if (n.path) {
+      const sx = n.width / (n.pathBox?.w || n.width || 1)
+      const sy = n.height / (n.pathBox?.h || n.height || 1)
+      shape = paper.PathItem.create(segsToD(transformSegs(parsePath(n.path), [sx, 0, 0, sy, 0, 0])))
+    }
+    if (!shape) return null
+    const round = n.strokeCap === 'ROUND'
+    if (align === 'CENTER') ring = centerStroke(shape, w, round, n.strokeCap)
+    else {
+      const wide = centerStroke(shape, w * 2, round, n.strokeCap)
+      ring = wide ? (align === 'INSIDE' ? wide.intersect(shape) : wide.subtract(shape)) : null
+    }
+  }
+  if (!ring) return null
+  ring.transform(nodeMatrix(n))
+  const pw = n.parentId ? ed.world(n.parentId) : { x: 0, y: 0 }
+  ring.translate(new paper.Point(pw.x, pw.y))
+  return finish(ring)
 }
 
 /** everything that changes the result: geometry of the whole subtree */

@@ -1,7 +1,7 @@
 // Layer actions shared by the context menu and keyboard shortcuts (Figma-compatible behaviour).
 import type { BooleanOperation, Effect, GNode, Paint, Stroke } from '@shared/types'
-import { flattenPath, isBooleanGroup } from '../editor/boolean'
-import { round2 } from '../editor/util'
+import { flattenPath, isBooleanGroup, strokeOutline } from '../editor/boolean'
+import { keyBetween, round2 } from '../editor/util'
 import { editor as ed } from '../editor/editor'
 import { copySelection, copyAsPng, handlePaste } from '../editor/clipboard'
 import { alignNodes } from '../editor/commands'
@@ -118,6 +118,139 @@ export const layerActions = {
       ed.selection = [v.id]
     })
     ed.emit('selection')
+  },
+  /** Ctrl+Alt+O: turn strokes into filled shapes */
+  outlineStroke() {
+    const targets = sel().filter((n) => n.strokes.some((s) => s.visible !== false && s.weight > 0))
+    if (!targets.length) {
+      ed.showToast(t('No stroke to outline'))
+      return
+    }
+    const made: string[] = []
+    ed.act(() => {
+      for (const n of targets) {
+        const res = strokeOutline(ed, n.id)
+        if (!res) continue
+        const stroke = n.strokes.find((s) => s.visible !== false && s.weight > 0)!
+        const pw = n.parentId ? ed.world(n.parentId) : { x: 0, y: 0 }
+        const sib = ed.children(n.parentId, n.pageId)
+        const i = sib.indexOf(n.id)
+        const hasFill = n.fills.some((f) => f.visible !== false) && n.type !== 'FRAME'
+        const v = ed.addNode({
+          type: 'VECTOR',
+          name: hasFill || n.type === 'FRAME' ? n.name + ' stroke' : n.name,
+          parentId: n.parentId,
+          pageId: n.pageId,
+          // right above the layer it came from
+          order: keyBetween(n.order, i + 1 < sib.length ? ed.nodes.get(sib[i + 1])!.order : null),
+          x: round2(res.x - pw.x),
+          y: round2(res.y - pw.y),
+          width: round2(res.w),
+          height: round2(res.h),
+          path: res.d,
+          pathBox: { w: res.w, h: res.h },
+          fillRule: res.fillRule,
+          fills: [{ type: 'SOLID', color: { ...stroke.color } }],
+          opacity: n.opacity
+        })
+        made.push(v.id)
+        // the fill (or the frame with its content) stays as its own layer, as in Figma
+        if (hasFill || n.type === 'FRAME' || n.type === 'GROUP') ed.updateNode(n.id, { strokes: [] })
+        else ed.deleteNode(n.id)
+      }
+      if (made.length) ed.selection = made
+    })
+    ed.emit('selection')
+    if (!made.length) ed.showToast(t('No stroke to outline'))
+  },
+  /** Ctrl+Alt+K: make a main component from the selection */
+  createComponent() {
+    const n = sel()
+    if (!n.length) return
+    if (n.some((x) => ed.instanceOf(x.id) || ed.mainComponentOf(x.id))) {
+      ed.showToast(t('Already part of a component'))
+      return
+    }
+    ed.act(() => {
+      let id: string | null
+      if (n.length === 1 && n[0].type === 'FRAME') id = n[0].id
+      else {
+        id = ed.group(ed.selection, n.length === 1 ? n[0].name : 'Component')
+        if (id) ed.updateNode(id, { type: 'FRAME', clipsContent: false })
+      }
+      if (!id) return
+      ed.updateNode(id, { isComponent: true })
+      ed.selection = [id]
+    })
+    ed.emit('selection')
+  },
+  /** Ctrl+Alt+B: instance -> plain frame */
+  detachInstance: () => ed.detachInstance(),
+  goToMainComponent() {
+    const inst = ed.instanceOf(ed.selection[0])
+    const main = inst?.componentId ? ed.nodes.get(inst.componentId) : undefined
+    if (!main) {
+      ed.showToast(t('The main component was deleted'))
+      return
+    }
+    if (main.pageId !== ed.currentPageId) ed.setCurrentPage(main.pageId)
+    ed.setSelection([main.id])
+    ed.zoomToRect(ed.world(main.id), 1)
+  },
+  /** Ctrl+Shift+R: paste over the selection (same place, same position in the layer list) */
+  async pasteReplace() {
+    const targets = ed.roots(ed.selection).filter((id) => ed.nodes.has(id))
+    if (!targets.length) return void layerActions.paste()
+    const info = targets.map((id) => {
+      const n = ed.nodes.get(id)!
+      const w = ed.world(id)
+      return { id, parentId: n.parentId, order: n.order, cx: w.x + w.w / 2, cy: w.y + w.h / 2 }
+    })
+    ed.begin()
+    try {
+      const before = new Set(ed.nodes.keys())
+      // nothing selected while pasting: the layers land on the page, not inside the layer being replaced
+      ed.selection = []
+      await layerActions.paste()
+      const pasted = ed.roots(ed.selection).filter((id) => !before.has(id))
+      if (!pasted.length) return
+      const out: string[] = []
+      info.forEach((tgt, k) => {
+        // the first target takes the pasted layers, the others get copies
+        const ids = k === 0 ? pasted : pasted.map((id) => ed.cloneSubtree(id, null, ed.currentPageId))
+        const b = ed.selectionBounds(ids)!
+        const dx = tgt.cx - (b.x + b.w / 2)
+        const dy = tgt.cy - (b.y + b.h / 2)
+        let order = tgt.order
+        ed.deleteNode(tgt.id)
+        const sib = ed.children(tgt.parentId)
+        const next = sib.map((s) => ed.nodes.get(s)!.order).find((o) => o > tgt.order) ?? null
+        for (const id of ids) {
+          ed.moveBy(id, dx, dy)
+          ed.reparent(id, tgt.parentId, order)
+          order = keyBetween(order, next)
+          out.push(id)
+        }
+      })
+      ed.selection = out
+    } finally {
+      ed.commit()
+      ed.emit('selection')
+    }
+  },
+  /** move the selection to another page (same coordinates) */
+  moveToPage(pageId: string) {
+    const roots = ed.roots(ed.selection)
+    if (!roots.length || pageId === ed.currentPageId) return
+    ed.act(() => {
+      for (const id of roots) {
+        const w = ed.world(id)
+        ed.updateNode(id, { parentId: null, pageId, x: w.x, y: w.y, order: ed.orderKeyAtTop(null, pageId) })
+      }
+      ed.selection = []
+    })
+    ed.emit('selection')
+    ed.showToast(t('Moved to page') + ' “' + (ed.pages.get(pageId)?.name ?? '') + '”')
   },
   /** Shift+A: turn the selected frame into an auto layout frame, or wrap the selection in one */
   addAutoLayout() {
@@ -264,6 +397,12 @@ export function handleLayerShortcut(e: KeyboardEvent): boolean {
   if (mod && e.shiftKey && code === 'KeyL' && has) return done(layerActions.toggleLock)
   if (mod && e.altKey && code === 'KeyG' && has) return done(layerActions.frameSelection)
   if (mod && e.altKey && code === 'KeyM' && has) return done(layerActions.toggleMask)
+  if (mod && e.altKey && code === 'KeyO' && has) return done(layerActions.outlineStroke)
+  if (mod && e.altKey && code === 'KeyK' && has) return done(layerActions.createComponent)
+  if (mod && e.altKey && code === 'KeyB' && has) return done(layerActions.detachInstance)
+  if (mod && e.shiftKey && !e.altKey && code === 'KeyR') return done(() => void layerActions.pasteReplace())
+  // ] and [ alone: bring to front / send to back
+  if (!mod && !e.altKey && !e.shiftKey && has && (code === 'BracketRight' || code === 'BracketLeft')) return done(code === 'BracketRight' ? layerActions.front : layerActions.back)
   if (mod && e.altKey && code === 'KeyC' && has) return done(copyProperties)
   if (mod && e.altKey && code === 'KeyV' && has) return done(pasteProperties)
   if (mod && code === 'KeyR' && !e.shiftKey && !e.altKey && has) return done(layerActions.rename)

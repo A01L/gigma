@@ -264,6 +264,19 @@ function buildServer(run: RunCommand): McpServer {
     'Combine shapes into one, like Figma: UNION adds them, SUBTRACT cuts the upper layers out of the bottom one, INTERSECT keeps the overlap, EXCLUDE keeps everything but the overlap. The layers stay editable inside the resulting boolean group, which takes the fill of the bottom layer. Pass the id of an existing boolean group alone to change its operation.',
     { ids: z.array(z.string()).min(1), operation: z.enum(['UNION', 'SUBTRACT', 'INTERSECT', 'EXCLUDE']), name: z.string().optional() }
   )
+  tool(
+    'create_component',
+    'Make a main component from layers (a single frame is converted, several layers are wrapped in a frame). Instances made with create_instance follow every later change of the main component, keeping their own overrides (text, fills, strokes, effects, opacity, visibility).',
+    { ids: z.array(z.string()).min(1), name: z.string().optional() }
+  )
+  tool('create_instance', 'Place an instance of a main component. Returns the instance and its layers, which can be overridden with update_node (e.g. text of a button label).', {
+    componentId: z.string(),
+    x: z.number(),
+    y: z.number(),
+    parentId: parent
+  })
+  tool('detach_instance', 'Turn instances into plain frames (no longer linked to the main component).', { ids: z.array(z.string()).min(1) })
+  tool('outline_stroke', 'Convert the strokes of layers into filled vector shapes (Figma "Outline stroke").', { ids: z.array(z.string()).min(1) })
   tool('flatten_nodes', 'Replace layers (shapes, groups, boolean groups) with a single vector path: their merged outline.', { ids: z.array(z.string()).min(1) })
   tool('duplicate_nodes', 'Duplicate nodes (with children). Returns the new ids.', {
     ids: z.array(z.string()).min(1),

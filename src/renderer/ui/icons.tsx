@@ -83,6 +83,15 @@ export const BoolIcons = {
 export function TypeIcon({ type }: { type: string }) {
   if (type in BoolIcons) return BoolIcons[type as keyof typeof BoolIcons]
   switch (type) {
+    // main component: four diamonds; instance: one hollow diamond (Figma's marks), both purple
+    case 'COMPONENT':
+      return (
+        <span style={{ color: '#9747ff', display: 'grid' }}>
+          {S(<path d="M8 1.8l2 2-2 2-2-2zM8 10.2l2 2-2 2-2-2zM3.8 6l2 2-2 2-2-2zM12.2 6l2 2-2 2-2-2z" fill="currentColor" stroke="none" />, 14)}
+        </span>
+      )
+    case 'INSTANCE':
+      return <span style={{ color: '#9747ff', display: 'grid' }}>{S(<path d="M8 2.2L13.8 8 8 13.8 2.2 8z" />, 14)}</span>
     case 'FRAME':
       return S(<path d="M5 2v12M11 2v12M2 5h12M2 11h12" />, 14)
     case 'GROUP':

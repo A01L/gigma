@@ -160,7 +160,9 @@ export function handleKey(e: KeyboardEvent): void {
   if (isTyping() || ed.editingTextId) return
   if (handleLayerShortcut(e)) return
   const mod = e.ctrlKey || e.metaKey
-  const k = e.key.toLowerCase()
+  // shortcuts follow the physical key, so they work on any keyboard layout (Russian included)
+  const PHYSICAL: Record<string, string> = { BracketLeft: '[', BracketRight: ']', Backslash: '\\', Equal: '=', Minus: '-', NumpadAdd: '+', NumpadSubtract: '-' }
+  const k = /^Key[A-Z]$/.test(e.code) ? e.code.slice(3).toLowerCase() : /^Digit\d$/.test(e.code) && mod ? e.code.slice(5) : (PHYSICAL[e.code] ?? e.key.toLowerCase())
   const menuOwned = isDesktop // in the desktop app these come from the native menu accelerators
   const act = (a: string) => {
     e.preventDefault()

@@ -174,6 +174,15 @@ export interface BaseNode {
   flipY?: boolean
   /** keep W/H ratio when editing dimensions in the inspector */
   constrainProportions?: boolean
+  // ---- components (same idea as Figma: one main component, many linked instances) ----
+  /** FRAME: this is a main component */
+  isComponent?: boolean
+  /** FRAME: this is an instance of the main component with that id */
+  componentId?: string
+  /** layer inside an instance: id of the layer of the main component it mirrors */
+  sourceId?: string
+  /** instance layers: properties changed on the instance, kept when the main component changes */
+  overrides?: string[]
   /** GROUP only: a boolean group, drawn as one shape computed from its children (bottom child first) */
   booleanOperation?: BooleanOperation
   /** how the layer mixes with what is below it (Figma blend modes); undefined = normal */

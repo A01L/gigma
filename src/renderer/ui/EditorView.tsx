@@ -44,7 +44,8 @@ export function EditorView({ onHome }: { onHome: () => void }) {
     c.onEditAnnotation = (id) => setAnnotationId(id)
     requestAnimationFrame(() => ed.zoomToFit())
     const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k' && !e.shiftKey) {
+      // Ctrl+K: actions (physical key, any layout); Ctrl+Alt+K is "Create component"
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyK' && !e.shiftKey && !e.altKey) {
         e.preventDefault()
         setActionsOpen(true)
         return

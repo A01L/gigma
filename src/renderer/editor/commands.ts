@@ -517,6 +517,35 @@ const handlers: Record<CommandName, (a: Args) => unknown | Promise<unknown>> = {
     if (n.type !== 'VECTOR') throw new Error('nothing to flatten: the layers have no area')
     return created(n)
   },
+  create_component: async (a) => {
+    a.ids.forEach(requireNode)
+    const { layerActions } = await import('../ui/layerActions')
+    ed.setSelection(a.ids)
+    layerActions.createComponent()
+    const n = ed.nodes.get(ed.selection[0])!
+    if (!n.isComponent) throw new Error('could not create a component: the layers are already part of a component or an instance')
+    if (a.name) ed.act(() => ed.updateNode(n.id, { name: a.name }))
+    return created(n)
+  },
+  create_instance: (a) => {
+    const main = requireNode(a.componentId)
+    if (!main.isComponent) throw new Error('componentId is not a main component (use create_component first)')
+    const parentId = checkParent(a.parentId)
+    const n = ed.act(() => ed.createInstance(main.id, parentId, a.x, a.y))
+    return { ...created(ed.nodes.get(n.id)!), layers: ed.descendants(n.id).map((id) => ({ id, name: ed.nodes.get(id)!.name, type: ed.nodes.get(id)!.type })) }
+  },
+  detach_instance: (a) => {
+    a.ids.forEach(requireNode)
+    ed.detachInstance(a.ids)
+    return { detached: a.ids.length }
+  },
+  outline_stroke: async (a) => {
+    a.ids.forEach(requireNode)
+    const { layerActions } = await import('../ui/layerActions')
+    ed.setSelection(a.ids)
+    layerActions.outlineStroke()
+    return ed.selection.map((id) => created(ed.nodes.get(id)!))
+  },
   ungroup_nodes: (a) => {
     a.ids.forEach(requireNode)
     ed.setSelection(a.ids)

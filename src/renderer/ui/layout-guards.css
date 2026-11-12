@@ -71,6 +71,22 @@
 .ctx-menu .tm-label {
   font-weight: 500;
 }
+.ctx-menu .tool-menu-item.active {
+  background: var(--accent);
+  color: #fff;
+}
+.ctx-menu .tm-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 240px;
+}
+.ctx-icon {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  flex: none;
+  opacity: 0.85;
+}
 .ctx-sep {
   height: 1px;
   background: #3a3a3a;

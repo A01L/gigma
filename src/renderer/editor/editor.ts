@@ -29,6 +29,13 @@ export type Tool =
   | 'annotation'
 export type Topic = 'doc' | 'selection' | 'camera' | 'ui' | 'pages'
 
+/** properties an instance layer may differ in from the main component (Figma's overrides) */
+const OVERRIDABLE = ['characters', 'fills', 'strokes', 'effects', 'opacity', 'visible', 'textStyle', 'blendMode'] as const
+/** never copied from the main component */
+const INSTANCE_OWN = new Set<string>(['id', 'parentId', 'pageId', 'isComponent', 'componentId', 'sourceId', 'overrides'])
+/** the instance itself keeps its own place on the canvas */
+const ROOT_OWN = new Set<string>(['x', 'y', 'order', 'name', 'rotation', 'flipX', 'flipY', 'locked', 'layoutGrow', 'layoutAlign', 'layoutPositioning', 'isMask'])
+
 interface IndexItem {
   minX: number
   minY: number
@@ -398,11 +405,12 @@ export class Editor {
       this.tx = null
       this.txDepth--
     }
-    // keep auto layout frames arranged
+    // keep auto layout frames arranged and instances in step with their main components
     this.txDepth++
     this.tx = tx
     try {
       this.runAutoLayout(tx)
+      if (this.runComponentSync(tx)) this.runAutoLayout(tx, false)
     } finally {
       this.tx = null
       this.txDepth--
@@ -425,7 +433,129 @@ export class Editor {
   /** set by the canvas while a drag is committed: layers dropped into an auto layout frame land where they were dropped */
   dropByPosition = false
 
-  private runAutoLayout(tx: HistoryEntry): void {
+  // ---------------- components ----------------
+  /** nearest main component that contains the node (or is the node) */
+  mainComponentOf(id: string | null | undefined): GNode | null {
+    for (let n = id ? this.nodes.get(id) : undefined; n; n = n.parentId ? this.nodes.get(n.parentId) : undefined) if (n.isComponent) return n
+    return null
+  }
+  /** the instance that contains the node (or is the node) */
+  instanceOf(id: string | null | undefined): GNode | null {
+    for (let n = id ? this.nodes.get(id) : undefined; n; n = n.parentId ? this.nodes.get(n.parentId) : undefined) if (n.componentId) return n
+    return null
+  }
+  /** Add an instance of a main component (its layers are filled in when the transaction commits). */
+  createInstance(mainId: string, parentId: string | null, x: number, y: number, order?: string): GNode {
+    const main = this.nodes.get(mainId)!
+    const { isComponent: _c, overrides: _o, sourceId: _s, ...rest } = clone(main)
+    return this.addNode({ ...rest, id: uid(), parentId, pageId: this.currentPageId, order: order ?? this.orderKeyAtTop(parentId), x, y, componentId: mainId })
+  }
+  /** Turn instances into plain frames. */
+  detachInstance(ids = this.selection): void {
+    this.act(() => {
+      for (const id of ids) {
+        const inst = this.instanceOf(id)
+        if (!inst) continue
+        for (const d of [inst.id, ...this.descendants(inst.id)]) this.updateNode(d, { componentId: undefined, sourceId: undefined, overrides: undefined })
+      }
+    })
+  }
+
+  /** Record overrides made on instances and push changes of main components to their instances. */
+  private runComponentSync(tx: HistoryEntry): boolean {
+    let dirty = new Set<string>()
+    const fresh = new Set<string>()
+    const mark = (id: string | null | undefined, into: Set<string>) => {
+      for (let n = id ? this.nodes.get(id) : undefined; n; n = n.parentId ? this.nodes.get(n.parentId) : undefined) if (n.isComponent) into.add(n.id)
+    }
+    for (const [id, e] of [...tx.nodes]) {
+      const n = this.nodes.get(id)
+      const b = e.before
+      mark(id, dirty)
+      mark(b?.parentId, dirty)
+      if (!n) continue
+      // a new or re-linked instance needs its layers
+      if (n.componentId && (!b || b.componentId !== n.componentId)) fresh.add(id)
+      // edits made on an instance become overrides
+      if (b && (n.sourceId || n.componentId) && n.sourceId === b.sourceId && n.componentId === b.componentId) {
+        const changed = OVERRIDABLE.filter((k) => !n.overrides?.includes(k) && JSON.stringify(n[k]) !== JSON.stringify(b[k]))
+        if (changed.length) this.updateNode(id, { overrides: [...(n.overrides ?? []), ...changed] })
+      }
+    }
+    if (!dirty.size && !fresh.size) return false
+    let any = false
+    for (const id of fresh) any = this.syncInstance(id) || any
+    for (let round = 0; round < 6 && dirty.size; round++) {
+      const next = new Set<string>()
+      for (const n of [...this.nodes.values()]) {
+        if (!n.componentId || !dirty.has(n.componentId) || !this.nodes.has(n.id)) continue
+        if (this.syncInstance(n.id)) {
+          any = true
+          // an instance that lives inside another main component changes that component too
+          mark(n.parentId, next)
+        }
+      }
+      dirty = next
+    }
+    return any
+  }
+
+  /** Make the layers of an instance mirror its main component, keeping overrides. Returns true when something changed. */
+  private syncInstance(instId: string): boolean {
+    const inst = this.nodes.get(instId)
+    const main = inst?.componentId ? this.nodes.get(inst.componentId) : undefined
+    if (!inst || !main || !main.isComponent || this.isAncestor(main.id, instId)) return false
+    let changed = false
+    const copyProps = (t: GNode, src: GNode, root: boolean) => {
+      const patch: Record<string, unknown> = {}
+      for (const k of new Set([...Object.keys(src), ...Object.keys(t)]) as Set<keyof GNode>) {
+        if (INSTANCE_OWN.has(k) || t.overrides?.includes(k)) continue
+        if (root && ROOT_OWN.has(k)) continue
+        if (JSON.stringify(src[k]) !== JSON.stringify(t[k])) patch[k] = src[k] === undefined ? undefined : clone(src[k])
+      }
+      // a nested instance is mirrored as plain layers: its own main keeps the original in step
+      if (!root && t.componentId) patch.componentId = undefined
+      if (Object.keys(patch).length) {
+        this.updateNode(t.id, patch as Partial<GNode>)
+        changed = true
+      }
+    }
+    copyProps(inst, main, true)
+    const mirror = new Map<string, GNode>()
+    for (const d of this.descendants(instId)) {
+      const n = this.nodes.get(d)!
+      if (n.sourceId) mirror.set(n.sourceId, n)
+    }
+    const seen = new Set<string>()
+    const walk = (srcParent: string, dstParent: string) => {
+      for (const c of this.children(srcParent, main.pageId)) {
+        const src = this.nodes.get(c)!
+        let t = mirror.get(c)
+        if (!t) {
+          const { isComponent: _c, componentId: _i, overrides: _o, ...rest } = clone(src)
+          t = this.addNode({ ...rest, id: uid(), parentId: dstParent, pageId: inst.pageId, sourceId: c })
+          changed = true
+        } else {
+          if (t.parentId !== dstParent || t.order !== src.order || t.pageId !== inst.pageId) {
+            this.updateNode(t.id, { parentId: dstParent, order: src.order, pageId: inst.pageId })
+            changed = true
+          }
+          copyProps(t, src, false)
+        }
+        seen.add(t.id)
+        walk(c, t.id)
+      }
+    }
+    walk(main.id, instId)
+    for (const n of mirror.values())
+      if (!seen.has(n.id) && this.nodes.has(n.id)) {
+        this.deleteNode(n.id)
+        changed = true
+      }
+    return changed
+  }
+
+  private runAutoLayout(tx: HistoryEntry, intent = true): void {
     const frames = new Set<string>()
     const moved = new Map<string, Set<string>>()
     const addChain = (pid: string | null | undefined) => {
@@ -441,7 +571,8 @@ export class Editor {
       const b = e.before
       addChain(id)
       addChain(b?.parentId)
-      if (!n || !b) continue
+      // the checks below read the user's intent; they are skipped when re-running after a component sync
+      if (!n || !b || !intent) continue
       const dw = Math.abs(n.width - b.width) > 0.01
       const dh = Math.abs(n.height - b.height) > 0.01
       const p = n.parentId ? this.nodes.get(n.parentId) : undefined
@@ -929,7 +1060,8 @@ export class Editor {
     this.act(() => {
       for (const id of this.roots(ids)) {
         const n = this.nodes.get(id)!
-        const copy = this.cloneSubtree(id, n.parentId, n.pageId)
+        // a copy of a main component is an instance of it, as in Figma
+        const copy = n.isComponent ? this.createInstance(id, n.parentId, n.x, n.y).id : this.cloneSubtree(id, n.parentId, n.pageId)
         if (offset) this.moveBy(copy, offset, offset)
         out.push(copy)
       }
@@ -971,6 +1103,17 @@ export class Editor {
     const dx = at ? at.x - (rb.x + rb.w / 2) : 0
     const dy = at ? at.y - (rb.y + rb.h / 2) : 0
     const out: string[] = []
+    // pasting a main component that lives in this document gives an instance of it
+    const byId = new Map(nodes.map((n) => [n.id, n]))
+    const asInstance = new Set<string>()
+    for (const n of nodes) {
+      if (!n.isComponent || !this.nodes.get(n.id)?.isComponent) continue
+      asInstance.add(n.id)
+    }
+    const inInstance = (n: GNode): boolean => {
+      for (let p = n.parentId ? byId.get(n.parentId) : undefined; p; p = p.parentId ? byId.get(p.parentId) : undefined) if (asInstance.has(p.id)) return true
+      return false
+    }
     this.act(() => {
       for (const n of nodes) {
         const isRoot = !n.parentId || !idMap.has(n.parentId)
@@ -980,6 +1123,14 @@ export class Editor {
           pageId: this.currentPageId,
           parentId: isRoot ? parentId : idMap.get(n.parentId!)!,
           order: isRoot ? this.orderKeyAtTop(parentId) : n.order
+        }
+        if (asInstance.has(n.id)) {
+          copy.isComponent = undefined
+          copy.componentId = n.id
+        } else if (inInstance(n)) {
+          copy.sourceId = n.id
+          copy.isComponent = undefined
+          copy.componentId = undefined
         }
         if (isRoot) {
           copy.x = n.x + dx - pw.x

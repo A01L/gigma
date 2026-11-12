@@ -11,6 +11,10 @@ import { parsePath, segsBounds, segsToD, transformSegs, type Seg } from './svgpa
 import { DEFAULT_CODE, setCodeReadyCallback } from './code-render'
 
 const BLUE = '#0d99ff'
+/** components and instances */
+const PURPLE = '#9747ff'
+/** selection colour of a layer: purple inside components and instances */
+const accentOf = (id: string) => (ed.mainComponentOf(id) || ed.instanceOf(id) ? PURPLE : BLUE)
 /** cursor shown just outside the corners of the selection: drag to rotate */
 const ROTATE_CURSOR =
   `url("data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><g stroke="#fff" stroke-width="4"><path d="M6 15a7 7 0 0 1 9-9"/><path d="M12 4l3.5 2-2 3.5M4 12l2 3.5 3.5-2"/></g><g stroke="#000" stroke-width="1.6"><path d="M6 15a7 7 0 0 1 9-9"/><path d="M12 4l3.5 2-2 3.5M4 12l2 3.5 3.5-2"/></g></svg>')}") 12 12, crosshair`
@@ -194,7 +198,10 @@ export class CanvasController {
         this.frameLabels.push({ id, r: { x: s.x + 8, y: s.y + 8, w: lw, h: 22 } })
         continue
       }
-      ctx.fillStyle = sel ? BLUE : '#8a8a8a'
+      // components and instances are purple, with Figma's marks in front of the name
+      const comp = n.isComponent || n.componentId
+      if (comp) label = (n.isComponent ? '❖ ' : '◇ ') + label
+      ctx.fillStyle = comp ? PURPLE : sel ? BLUE : '#8a8a8a'
       const maxW = Math.max(s.w, 20)
       while (label.length > 1 && ctx.measureText(label).width > maxW) label = label.slice(0, -2) + '…'
       ctx.fillText(label, s.x, s.y - 4)
@@ -298,7 +305,7 @@ export class CanvasController {
 
     // hover
     if (ed.hoverId && !ed.selection.includes(ed.hoverId) && ed.nodes.has(ed.hoverId) && !this.drag) {
-      ctx.strokeStyle = BLUE
+      ctx.strokeStyle = accentOf(ed.hoverId)
       ctx.lineWidth = 1.5
       this.outline(ed.hoverId)
     }
@@ -314,7 +321,8 @@ export class CanvasController {
     // selection
     const sel = ed.selection.filter((id) => ed.nodes.has(id) && ed.nodes.get(id)!.pageId === ed.currentPageId)
     if (sel.length && ed.editingTextId === null) {
-      ctx.strokeStyle = BLUE
+      const accent = sel.every((id) => accentOf(id) === PURPLE) ? PURPLE : BLUE
+      ctx.strokeStyle = accent
       ctx.lineWidth = 1
       if (sel.length > 1)
         for (const id of sel) this.outline(id)
@@ -345,7 +353,7 @@ export class CanvasController {
       const tw = ctx.measureText(text).width + 10
       const px = b.x + b.w / 2 - tw / 2
       const py = b.y + b.h + 8
-      ctx.fillStyle = BLUE
+      ctx.fillStyle = accent
       ctx.beginPath()
       ctx.roundRect(px, py, tw, 17, 3)
       ctx.fill()
