@@ -156,8 +156,8 @@ erDiagram
     PROJECT ||--o{ PAGE : содержит
     PAGE ||--o{ NODE : содержит
     NODE ||--o{ NODE : "дочерние слои"
-    PROJECT ||--o{ STYLE : "стили цвета и текста"
-    NODE }o--o| STYLE : "связан со стилем"
+    PROJECT ||--o{ SHARED_STYLE : "стили цвета и текста"
+    NODE }o--o| SHARED_STYLE : "связан со стилем"
     NODE }o--o| NODE : "экземпляр компонента"
     PROJECT ||--o{ BLOB : изображения
     NODE {
