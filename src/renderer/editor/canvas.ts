@@ -4,7 +4,7 @@
 import type { GNode } from '@shared/types'
 import { rgbaToCss } from '@shared/types'
 import { editor as ed } from './editor'
-import { drawScene, setImageLoadedCallback } from './render'
+import { applyNodeTransform, drawScene, hasTransform, outlineShape, setImageLoadedCallback } from './render'
 import { rectsIntersect, round2, unionRects, type Rect } from './util'
 import { polygonPath, smoothPath, starPath } from './shapes'
 import { parsePath, segsBounds, segsToD, transformSegs, type Seg } from './svgpath'
@@ -390,15 +390,20 @@ export class CanvasController {
   /** stroke the box of a layer, rotated with it */
   private outline(id: string): void {
     const ctx = this.ctx
-    const s = this.toScreen(ed.world(id))
-    const rot = ed.nodes.get(id)?.rotation
+    const n = ed.nodes.get(id)
+    if (!n) return
+    const r = ed.world(id)
+    const { zoom, x, y } = ed.camera
+    const lw = ctx.lineWidth
     ctx.save()
-    if (rot) {
-      ctx.translate(s.x + s.w / 2, s.y + s.h / 2)
-      ctx.rotate((-rot * Math.PI) / 180)
-      ctx.translate(-(s.x + s.w / 2), -(s.y + s.h / 2))
-    }
-    ctx.strokeRect(Math.round(s.x) + 0.5, Math.round(s.y) + 0.5, Math.round(s.w), Math.round(s.h))
+    // draw in world space so the outline follows the real shape, with every rotation applied
+    ctx.translate(x, y)
+    ctx.scale(zoom, zoom)
+    for (const a of [...ed.ancestors(id).reverse(), n]) if (hasTransform(a)) applyNodeTransform(ctx, a, ed.world(a.id))
+    ctx.lineWidth = lw / zoom
+    const shape = outlineShape(ed, id)
+    if (shape) ctx.stroke(shape)
+    else ctx.strokeRect(r.x, r.y, r.w, r.h)
     ctx.restore()
   }
 

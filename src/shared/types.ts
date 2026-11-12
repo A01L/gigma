@@ -144,6 +144,8 @@ export type BlendMode = (typeof BLEND_MODES)[number]
 /** canvas globalCompositeOperation / CSS mix-blend-mode name */
 export const blendCss = (m: BlendMode | undefined): string => (!m || m === 'NORMAL' ? 'source-over' : m.toLowerCase().replace(/_/g, '-'))
 
+export type BooleanOperation = 'UNION' | 'SUBTRACT' | 'INTERSECT' | 'EXCLUDE'
+
 export interface BaseNode {
   id: string
   type: NodeType
@@ -172,6 +174,8 @@ export interface BaseNode {
   flipY?: boolean
   /** keep W/H ratio when editing dimensions in the inspector */
   constrainProportions?: boolean
+  /** GROUP only: a boolean group, drawn as one shape computed from its children (bottom child first) */
+  booleanOperation?: BooleanOperation
   /** how the layer mixes with what is below it (Figma blend modes); undefined = normal */
   blendMode?: BlendMode
   // ---- auto layout (frames), same fields and semantics as Figma ----

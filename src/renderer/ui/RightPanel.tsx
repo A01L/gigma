@@ -3,10 +3,11 @@ import { createPortal } from 'react-dom'
 import type { BlendMode, Effect, EffectType, GNode, GradientPaint, Paint, RGBA } from '@shared/types'
 import { BLEND_MODES, defaultEffect, hexToRgba, rgbaToCss, rgbaToHex } from '@shared/types'
 import { isAutoLayout } from '../editor/autolayout'
-import { layerActions } from './layerActions'
+import { BOOLEAN_NAMES, layerActions } from './layerActions'
+import { isBooleanGroup } from '../editor/boolean'
 import { editor as ed } from '../editor/editor'
 import { useEditor } from './hooks'
-import { Icons } from './icons'
+import { BoolIcons, Icons } from './icons'
 import { exportSelectionPng, exportSelectionSvg, restoreFigmaImages, runAction } from './actions'
 import { replaceImageFill } from '../editor/figma-images'
 import { isImageMissing } from '../editor/render'
@@ -194,7 +195,7 @@ export function RightPanel() {
   return (
     <div className="panel right">
       <div className="p-head">
-        <div className="title">{nodes.length === 0 ? t('Design') : nodes.length === 1 ? t(nodes[0].type.charAt(0) + nodes[0].type.slice(1).toLowerCase()) : `${nodes.length} ${t('layers')}`}</div>
+        <div className="title">{nodes.length === 0 ? t('Design') : nodes.length === 1 ? t(isBooleanGroup(nodes[0]) ? BOOLEAN_NAMES[nodes[0].booleanOperation!] : nodes[0].type.charAt(0) + nodes[0].type.slice(1).toLowerCase()) : `${nodes.length} ${t('layers')}`}</div>
         <button className="icon-btn" title="Hide panel (Ctrl+Alt+\)" onClick={() => runAction('toggle-right')}>
           {Icons.sidebarR}
         </button>
@@ -699,8 +700,24 @@ function NodeInspector({ nodes }: { nodes: GNode[] }) {
     </svg>
   )
 
+  const boolGroup = nodes.length === 1 && isBooleanGroup(nodes[0]) ? nodes[0] : null
+
   return (
     <>
+      {(nodes.length > 1 || boolGroup) && (
+        <div className="section bool-bar">
+          <div className="seg">
+            {(['UNION', 'SUBTRACT', 'INTERSECT', 'EXCLUDE'] as const).map((op) => (
+              <button key={op} className={boolGroup?.booleanOperation === op ? 'on' : ''} title={`${t(BOOLEAN_NAMES[op])} (Alt+Shift+${op === 'UNION' ? 'U' : op[0]})`} onClick={() => layerActions.booleanOp(op)}>
+                {BoolIcons[op]}
+              </button>
+            ))}
+          </div>
+          <button className="icon-btn" title={t('Flatten') + ' (Ctrl+E)'} onClick={layerActions.flatten}>
+            {BoolIcons.FLATTEN}
+          </button>
+        </div>
+      )}
       <Section title={t('Position')}>
         <SubLabel>{t('Alignment')}</SubLabel>
         <div className="row split">

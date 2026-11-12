@@ -4,6 +4,7 @@
 // lossless node data in <metadata> so Gigma -> Gigma copy/paste keeps everything.
 import type { GNode, Paint, RGBA, Stroke } from '@shared/types'
 import { blendCss, rgbaToHex } from '@shared/types'
+import { booleanAsVector, isBooleanGroup } from './boolean'
 import { backend } from '../backend'
 import type { Editor } from './editor'
 import { layoutText, DEFAULT_TEXT_STYLE, justifyWords, lineX, textBaseline, verticalOffset } from './text'
@@ -393,8 +394,10 @@ async function nodeSvg(ed: Editor, id: string, ox: number, oy: number, defs: str
 }
 
 async function nodeSvgInner(ed: Editor, id: string, ox: number, oy: number, defs: string[]): Promise<string> {
-  const n = ed.nodes.get(id)!
-  if (!n.visible) return ''
+  const src = ed.nodes.get(id)!
+  if (!src.visible) return ''
+  // a boolean group is exported as the single path it draws
+  const n = isBooleanGroup(src) ? booleanAsVector(ed, src) : src
   const w = ed.world(id)
   const x = w.x - ox
   const y = w.y - oy

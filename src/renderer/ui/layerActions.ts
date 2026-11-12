@@ -1,5 +1,7 @@
 // Layer actions shared by the context menu and keyboard shortcuts (Figma-compatible behaviour).
-import type { Effect, GNode, Paint, Stroke } from '@shared/types'
+import type { BooleanOperation, Effect, GNode, Paint, Stroke } from '@shared/types'
+import { flattenPath, isBooleanGroup } from '../editor/boolean'
+import { round2 } from '../editor/util'
 import { editor as ed } from '../editor/editor'
 import { copySelection, copyAsPng, handlePaste } from '../editor/clipboard'
 import { alignNodes } from '../editor/commands'
@@ -7,6 +9,18 @@ import { isAutoLayout } from '../editor/autolayout'
 import { t } from './i18n'
 
 const sel = () => ed.selection.map((id) => ed.nodes.get(id)).filter(Boolean) as GNode[]
+
+export const BOOLEAN_NAMES: Record<BooleanOperation, string> = { UNION: 'Union', SUBTRACT: 'Subtract', INTERSECT: 'Intersect', EXCLUDE: 'Exclude' }
+
+/** the layer whose fills / strokes a boolean result inherits: the layer itself, or the bottom leaf of a plain group */
+function paintSource(id: string | undefined): GNode | undefined {
+  let n = id ? ed.nodes.get(id) : undefined
+  while (n && n.type === 'GROUP' && !n.booleanOperation) {
+    const first: string | undefined = ed.children(n.id, n.pageId)[0]
+    n = first ? ed.nodes.get(first) : undefined
+  }
+  return n
+}
 
 export const layerActions = {
   copy: () => void copySelection(false),
@@ -42,6 +56,68 @@ export const layerActions = {
       const id = ed.group(ed.selection, 'Frame')
       if (id) ed.updateNode(id, { type: 'FRAME', clipsContent: false })
     })
+  },
+  /** Union / Subtract / Intersect / Exclude: wrap the selection in a boolean group (or change the selected one) */
+  booleanOp(op: BooleanOperation) {
+    const n = sel()
+    if (!n.length) return
+    const name = BOOLEAN_NAMES[op]
+    if (n.length === 1 && isBooleanGroup(n[0])) {
+      const g = n[0]
+      // keep a custom name, follow the operation otherwise
+      const auto = Object.values(BOOLEAN_NAMES).includes(g.name)
+      ed.act(() => ed.updateNode(g.id, { booleanOperation: op, ...(auto ? { name } : {}) }))
+      return
+    }
+    ed.act(() => {
+      const id = ed.group(ed.selection, name)
+      if (!id) return
+      // like Figma: the result takes the look of the bottom layer
+      const src = paintSource(ed.children(id)[0])
+      ed.updateNode(id, {
+        booleanOperation: op,
+        fills: src?.fills.length ? structuredClone(src.fills) : src?.strokes.length ? [] : [{ type: 'SOLID', color: { r: 0.85, g: 0.85, b: 0.85, a: 1 } }],
+        strokes: structuredClone(src?.strokes ?? []),
+        effects: structuredClone(src?.effects)
+      })
+    })
+  },
+  /** Ctrl+E: replace the selection with one vector path (its outline) */
+  flatten() {
+    const roots = ed.roots(ed.selection).sort((a, b) => (ed.paintOrderKey(a) < ed.paintOrderKey(b) ? -1 : 1))
+    if (!roots.length) return
+    const res = flattenPath(ed, roots)
+    if (!res) {
+      ed.showToast(t('Nothing to flatten'))
+      return
+    }
+    const top = ed.nodes.get(roots[roots.length - 1])!
+    const bottom = ed.nodes.get(roots[0])!
+    const src = isBooleanGroup(bottom) ? bottom : paintSource(bottom.id)
+    const parentId = roots.every((id) => ed.nodes.get(id)!.parentId === top.parentId) ? top.parentId : null
+    const pw = parentId ? ed.world(parentId) : { x: 0, y: 0 }
+    ed.act(() => {
+      const v = ed.addNode({
+        type: 'VECTOR',
+        name: roots.length === 1 ? top.name : 'Vector',
+        parentId,
+        order: parentId === top.parentId ? top.order : undefined,
+        x: round2(res.x - pw.x),
+        y: round2(res.y - pw.y),
+        width: round2(res.w),
+        height: round2(res.h),
+        path: res.d,
+        pathBox: { w: res.w, h: res.h },
+        fillRule: res.fillRule,
+        fills: src?.fills.length ? structuredClone(src.fills) : src?.strokes.length ? [] : [{ type: 'SOLID', color: { r: 0.85, g: 0.85, b: 0.85, a: 1 } }],
+        strokes: structuredClone(src?.strokes ?? []),
+        effects: structuredClone(src?.effects),
+        opacity: roots.length === 1 ? top.opacity : 1
+      })
+      for (const id of roots) ed.deleteNode(id)
+      ed.selection = [v.id]
+    })
+    ed.emit('selection')
   },
   /** Shift+A: turn the selected frame into an auto layout frame, or wrap the selection in one */
   addAutoLayout() {
@@ -195,6 +271,13 @@ export function handleLayerShortcut(e: KeyboardEvent): boolean {
   if (!mod && e.shiftKey && !e.altKey && code === 'KeyV' && has) return done(layerActions.flipV)
   if (!mod && e.shiftKey && code === 'Digit2' && has) return done(layerActions.zoomToSelection)
   if (!mod && e.shiftKey && code === 'KeyA' && has) return done(e.altKey ? layerActions.removeAutoLayout : layerActions.addAutoLayout)
+  // Alt+Shift+U / S / I / E: boolean operations; Ctrl+E: flatten
+  if (!mod && e.altKey && e.shiftKey && has) {
+    const ops: Record<string, BooleanOperation> = { KeyU: 'UNION', KeyS: 'SUBTRACT', KeyI: 'INTERSECT', KeyE: 'EXCLUDE' }
+    if (ops[code]) return done(() => layerActions.booleanOp(ops[code]))
+    if (code === 'KeyF') return done(layerActions.flatten)
+  }
+  if (mod && !e.shiftKey && !e.altKey && code === 'KeyE' && has) return done(layerActions.flatten)
   // Alt + A/D/W/S/H/V: align
   if (e.altKey && !mod && has) {
     const map: Record<string, string> = { KeyA: 'left', KeyD: 'right', KeyW: 'top', KeyS: 'bottom', KeyH: 'center', KeyV: 'middle' }

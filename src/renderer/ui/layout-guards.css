@@ -100,6 +100,18 @@
   min-width: 200px;
 }
 
+/* boolean operations bar on top of the inspector */
+.bool-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+}
+.bool-bar .seg button {
+  min-width: 32px;
+  height: 26px;
+}
 /* auto layout: 3 x 3 alignment grid */
 .al-grid {
   display: grid;

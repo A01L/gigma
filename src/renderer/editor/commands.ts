@@ -499,6 +499,24 @@ const handlers: Record<CommandName, (a: Args) => unknown | Promise<unknown>> = {
     ed.act(() => ed.updateNode(n.id, { resolved: true }))
     return { ok: true }
   },
+  boolean_operation: async (a) => {
+    a.ids.forEach(requireNode)
+    const { layerActions } = await import('../ui/layerActions')
+    ed.setSelection(a.ids)
+    layerActions.booleanOp(a.operation)
+    const n = ed.nodes.get(ed.selection[0])!
+    if (a.name) ed.act(() => ed.updateNode(n.id, { name: a.name }))
+    return created(n)
+  },
+  flatten_nodes: async (a) => {
+    a.ids.forEach(requireNode)
+    const { layerActions } = await import('../ui/layerActions')
+    ed.setSelection(a.ids)
+    layerActions.flatten()
+    const n = ed.nodes.get(ed.selection[0])!
+    if (n.type !== 'VECTOR') throw new Error('nothing to flatten: the layers have no area')
+    return created(n)
+  },
   ungroup_nodes: (a) => {
     a.ids.forEach(requireNode)
     ed.setSelection(a.ids)

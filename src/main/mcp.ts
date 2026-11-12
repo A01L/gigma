@@ -259,6 +259,12 @@ function buildServer(run: RunCommand): McpServer {
   tool('delete_nodes', 'Delete nodes (and their children).', { ids: z.array(z.string()).min(1) })
   tool('group_nodes', 'Group sibling nodes.', { ids: z.array(z.string()).min(1), name: z.string().optional() })
   tool('ungroup_nodes', 'Ungroup groups (or frames): children move to the parent.', { ids: z.array(z.string()).min(1) })
+  tool(
+    'boolean_operation',
+    'Combine shapes into one, like Figma: UNION adds them, SUBTRACT cuts the upper layers out of the bottom one, INTERSECT keeps the overlap, EXCLUDE keeps everything but the overlap. The layers stay editable inside the resulting boolean group, which takes the fill of the bottom layer. Pass the id of an existing boolean group alone to change its operation.',
+    { ids: z.array(z.string()).min(1), operation: z.enum(['UNION', 'SUBTRACT', 'INTERSECT', 'EXCLUDE']), name: z.string().optional() }
+  )
+  tool('flatten_nodes', 'Replace layers (shapes, groups, boolean groups) with a single vector path: their merged outline.', { ids: z.array(z.string()).min(1) })
   tool('duplicate_nodes', 'Duplicate nodes (with children). Returns the new ids.', {
     ids: z.array(z.string()).min(1),
     offsetX: z.number().default(0),

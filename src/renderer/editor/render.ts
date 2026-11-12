@@ -16,6 +16,7 @@ import { rectsIntersect, unionRects, type Rect } from './util'
 import { arrowHeadPoints } from './shapes'
 import { parsePath, transformSegs } from './svgpath'
 import { getCodeBitmap, codeBitmapAsync } from './code-render'
+import { booleanAsVector, isBooleanGroup } from './boolean'
 
 // ---------------- image cache ----------------
 type ImgEntry = { bmp: ImageBitmap | null; missing: boolean; promise: Promise<ImageBitmap | null> }
@@ -187,6 +188,33 @@ function worldShape(n: GNode, r: Rect): Path2D | null {
   return p
 }
 
+/**
+ * What is stroked on hover and for each layer of a multi-selection, as in Figma: the real outline of
+ * the layer (ellipse, rounded corners, vector path, boolean result), and underlines for text lines.
+ * World coordinates; null = no special outline, use the plain box.
+ */
+export function outlineShape(ed: Editor, id: string): Path2D | null {
+  const src = ed.nodes.get(id)
+  if (!src) return null
+  const r = ed.world(id)
+  const n = isBooleanGroup(src) ? booleanAsVector(ed, src) : src
+  if (n.type === 'TEXT') {
+    const l = layoutText(n)
+    const oy = verticalOffset(n, l)
+    const p = new Path2D()
+    for (const ln of l.lines) {
+      if (!ln.text) continue
+      const y = r.y + oy + ln.y + l.lineHeight * 0.88
+      const x = r.x + lineX(n, ln, r.w)
+      p.moveTo(x, y)
+      p.lineTo(x + ln.width, y)
+    }
+    return p
+  }
+  if (n.type === 'SPEC' || n.type === 'CODE' || n.type === 'SLICE' || n.type === 'ANNOTATION') return null
+  return worldShape(n, r)
+}
+
 /** current world->device scale (shadows and filters are specified in device pixels) */
 const deviceScale = (ctx: CanvasRenderingContext2D) => {
   const m = ctx.getTransform()
@@ -338,8 +366,10 @@ function drawNode(ctx: CanvasRenderingContext2D, ed: Editor, id: string, o: Draw
 }
 
 function drawNodeInner(ctx: CanvasRenderingContext2D, ed: Editor, id: string, o: DrawOpts): void {
-  const n = ed.nodes.get(id)
+  let n = ed.nodes.get(id)
   if (!n || !n.visible) return
+  // a boolean group is drawn as the single shape computed from its children
+  if (isBooleanGroup(n)) n = booleanAsVector(ed, n)
   // never part of the artwork: slices are export regions, annotations are notes (drawn as overlay)
   if (n.type === 'SLICE' || n.type === 'ANNOTATION') return
   const r = ed.world(id)
@@ -555,6 +585,7 @@ function drawCode(ctx: CanvasRenderingContext2D, n: GNode, r: Rect): void {
 /** Clip the context to a mask layer's shape (Figma "Use as mask"). */
 function clipToMask(ctx: CanvasRenderingContext2D, ed: Editor, n: GNode): void {
   const r = ed.world(n.id)
+  if (isBooleanGroup(n)) n = booleanAsVector(ed, n)
   if (n.type === 'VECTOR' && n.path) {
     const m = ctx.getTransform()
     ctx.translate(r.x, r.y)

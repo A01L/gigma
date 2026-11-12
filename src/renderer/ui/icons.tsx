@@ -71,7 +71,17 @@ export const Icons = {
   tAlignR: S(<path d="M3 4h10M7 8h6M5 12h8" />)
 }
 
+/** boolean operations: two overlapping squares, the kept area is filled */
+export const BoolIcons = {
+  UNION: S(<path d="M2.5 2.5h7v4h4v7h-7v-4h-4z" fill="currentColor" fillOpacity="0.35" />),
+  SUBTRACT: S([<path key="a" d="M2.5 2.5h7v4h-3v3h-4z" fill="currentColor" fillOpacity="0.35" />, <path key="b" d="M9.5 6.5h4v7h-7v-4" strokeOpacity="0.55" />]),
+  INTERSECT: S([<path key="a" d="M6.5 6.5h3v3h-3z" fill="currentColor" fillOpacity="0.45" />, <path key="b" d="M6.5 6.5v-4h-4v7h4M9.5 9.5v4h4v-7h-4" strokeOpacity="0.55" />]),
+  EXCLUDE: S(<path d="M2.5 2.5h7v7h-7zM6.5 6.5h7v7h-7z" fill="currentColor" fillOpacity="0.35" fillRule="evenodd" />),
+  FLATTEN: S(<path d="M8 2.5v7M5 6.8l3 3 3-3M3 13h10" />)
+}
+
 export function TypeIcon({ type }: { type: string }) {
+  if (type in BoolIcons) return BoolIcons[type as keyof typeof BoolIcons]
   switch (type) {
     case 'FRAME':
       return S(<path d="M5 2v12M11 2v12M2 5h12M2 11h12" />, 14)

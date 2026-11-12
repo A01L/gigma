@@ -292,7 +292,7 @@ function Layers() {
                 {r.hasKids ? (expanded.has(r.id) ? Icons.chevD : Icons.chevR) : null}
               </span>
               <span className="type-icon">
-                <TypeIcon type={n.isMask ? 'MASK' : n.fills.some((f) => f.type === 'IMAGE') ? 'IMAGE' : n.type} />
+                <TypeIcon type={n.isMask ? 'MASK' : n.type === 'GROUP' && n.booleanOperation ? n.booleanOperation : n.fills.some((f) => f.type === 'IMAGE') ? 'IMAGE' : n.type} />
               </span>
               {renaming === r.id ? (
                 <InlineRename value={n.name} onDone={(v) => (setRenaming(null), v && ed.act(() => ed.updateNode(r.id, { name: v })))} />

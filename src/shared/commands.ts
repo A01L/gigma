@@ -36,6 +36,8 @@ export type CommandName =
   | 'create_annotation'
   | 'resolve_annotation'
   | 'ungroup_nodes'
+  | 'boolean_operation'
+  | 'flatten_nodes'
   | 'duplicate_nodes'
   | 'reorder_nodes'
   | 'align_nodes'
