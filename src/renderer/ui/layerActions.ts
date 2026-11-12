@@ -3,6 +3,7 @@ import type { Effect, GNode, Paint, Stroke } from '@shared/types'
 import { editor as ed } from '../editor/editor'
 import { copySelection, copyAsPng, handlePaste } from '../editor/clipboard'
 import { alignNodes } from '../editor/commands'
+import { isAutoLayout } from '../editor/autolayout'
 import { t } from './i18n'
 
 const sel = () => ed.selection.map((id) => ed.nodes.get(id)).filter(Boolean) as GNode[]
@@ -41,6 +42,61 @@ export const layerActions = {
       const id = ed.group(ed.selection, 'Frame')
       if (id) ed.updateNode(id, { type: 'FRAME', clipsContent: false })
     })
+  },
+  /** Shift+A: turn the selected frame into an auto layout frame, or wrap the selection in one */
+  addAutoLayout() {
+    const n = sel()
+    if (!n.length) return
+    if (n.length === 1 && isAutoLayout(n[0])) return
+    ed.act(() => {
+      let fid: string | null
+      let pad = 0
+      const own = n.length === 1 && n[0].type === 'FRAME'
+      if (own) fid = n[0].id
+      else {
+        fid = ed.group(ed.selection, 'Frame')
+        if (!fid) return
+        ed.updateNode(fid, { type: 'FRAME', clipsContent: false })
+        // a single layer becomes a "button": padding around it
+        if (n.length === 1) pad = 10
+      }
+      const f = ed.nodes.get(fid!)!
+      const kids = ed.children(f.id, f.pageId).map((id) => ed.nodes.get(id)!).filter((k) => k.visible)
+      // direction: the axis the layers are spread along
+      const span = (a: 'x' | 'y') => (kids.length ? Math.max(...kids.map((k) => k[a])) - Math.min(...kids.map((k) => k[a])) : 0)
+      const horiz = kids.length > 1 ? span('x') >= span('y') : true
+      const pos = (k: GNode) => (horiz ? k.x : k.y)
+      const size = (k: GNode) => (horiz ? k.width : k.height)
+      const sorted = [...kids].sort((a, b) => pos(a) - pos(b))
+      // layout order follows the position on the canvas
+      const keys = kids.map((k) => k.order)
+      sorted.forEach((k, i) => k.order !== keys[i] && ed.updateNode(k.id, { order: keys[i] }))
+      let gap = 10
+      if (sorted.length > 1) {
+        let sum = 0
+        for (let i = 1; i < sorted.length; i++) sum += pos(sorted[i]) - pos(sorted[i - 1]) - size(sorted[i - 1])
+        gap = Math.max(0, Math.round(sum / (sorted.length - 1)))
+      }
+      const patch: Partial<GNode> = { layoutMode: horiz ? 'HORIZONTAL' : 'VERTICAL', itemSpacing: gap, primaryAxisSizingMode: 'AUTO', counterAxisSizingMode: 'AUTO', primaryAxisAlignItems: 'MIN', counterAxisAlignItems: 'MIN' }
+      if (own && kids.length) {
+        // keep the look: padding = distance from the frame edges to the content
+        const r = Math.max(...kids.map((k) => k.x + k.width))
+        const b = Math.max(...kids.map((k) => k.y + k.height))
+        Object.assign(patch, {
+          paddingLeft: Math.max(0, Math.round(Math.min(...kids.map((k) => k.x)))),
+          paddingTop: Math.max(0, Math.round(Math.min(...kids.map((k) => k.y)))),
+          paddingRight: Math.max(0, Math.round(f.width - r)),
+          paddingBottom: Math.max(0, Math.round(f.height - b))
+        })
+      } else Object.assign(patch, { paddingLeft: pad, paddingRight: pad, paddingTop: pad, paddingBottom: pad, x: f.x - pad, y: f.y - pad })
+      ed.updateNode(f.id, patch)
+      ed.selection = [f.id]
+    })
+    ed.emit('selection')
+  },
+  /** Alt+Shift+A: back to a plain frame (children keep their places) */
+  removeAutoLayout() {
+    ed.act(() => sel().forEach((n) => isAutoLayout(n) && ed.updateNode(n.id, { layoutMode: undefined })))
   },
   front: () => ed.reorder(Infinity),
   back: () => ed.reorder(-Infinity),
@@ -138,6 +194,7 @@ export function handleLayerShortcut(e: KeyboardEvent): boolean {
   if (!mod && e.shiftKey && !e.altKey && code === 'KeyH' && has) return done(layerActions.flipH)
   if (!mod && e.shiftKey && !e.altKey && code === 'KeyV' && has) return done(layerActions.flipV)
   if (!mod && e.shiftKey && code === 'Digit2' && has) return done(layerActions.zoomToSelection)
+  if (!mod && e.shiftKey && code === 'KeyA' && has) return done(e.altKey ? layerActions.removeAutoLayout : layerActions.addAutoLayout)
   // Alt + A/D/W/S/H/V: align
   if (e.altKey && !mod && has) {
     const map: Record<string, string> = { KeyA: 'left', KeyD: 'right', KeyW: 'top', KeyS: 'bottom', KeyH: 'center', KeyV: 'middle' }

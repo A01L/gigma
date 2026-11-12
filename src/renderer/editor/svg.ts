@@ -3,7 +3,7 @@
 // and "Copy as SVG" in Figma gives us SVG we can import. Gigma additionally embeds its own
 // lossless node data in <metadata> so Gigma -> Gigma copy/paste keeps everything.
 import type { GNode, Paint, RGBA, Stroke } from '@shared/types'
-import { rgbaToHex } from '@shared/types'
+import { blendCss, rgbaToHex } from '@shared/types'
 import { backend } from '../backend'
 import type { Editor } from './editor'
 import { layoutText, DEFAULT_TEXT_STYLE, justifyWords, lineX, textBaseline, verticalOffset } from './text'
@@ -323,6 +323,7 @@ function paintAttrs(n: GNode): string {
     if (st.color.a < 1) s += ` stroke-opacity="${f(st.color.a)}"`
   }
   if (n.opacity < 1) s += ` opacity="${f(n.opacity)}"`
+  if (n.blendMode && n.blendMode !== 'NORMAL') s += ` style="mix-blend-mode:${blendCss(n.blendMode)}"`
   return s
 }
 

@@ -53,6 +53,7 @@ export function ContextMenu({ x, y, onClose }: { x: number; y: number; onClose: 
         { label: 'Group selection', key: 'Ctrl+G', run: A.group },
         { label: 'Frame selection', key: 'Ctrl+Alt+G', run: A.frameSelection },
         { label: 'Ungroup', key: 'Ctrl+Shift+G', run: A.ungroup, disabled: !container },
+        nodes.length === 1 && nodes[0].layoutMode ? { label: 'Remove auto layout', key: 'Alt+Shift+A', run: A.removeAutoLayout } : { label: 'Add auto layout', key: 'Shift+A', run: A.addAutoLayout },
         { label: 'Rename', key: 'Ctrl+R', run: A.rename, disabled: nodes.length !== 1 },
         'sep',
         { label: nodes.every((n) => n.isMask) ? 'Remove mask' : 'Use as mask', key: 'Ctrl+Alt+M', run: A.toggleMask },

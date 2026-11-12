@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import type { Effect, EffectType, GNode, GradientPaint, Paint, RGBA } from '@shared/types'
-import { defaultEffect, hexToRgba, rgbaToCss, rgbaToHex } from '@shared/types'
+import type { BlendMode, Effect, EffectType, GNode, GradientPaint, Paint, RGBA } from '@shared/types'
+import { BLEND_MODES, defaultEffect, hexToRgba, rgbaToCss, rgbaToHex } from '@shared/types'
+import { isAutoLayout } from '../editor/autolayout'
+import { layerActions } from './layerActions'
 import { editor as ed } from '../editor/editor'
 import { useEditor } from './hooks'
 import { Icons } from './icons'
@@ -462,6 +464,196 @@ function SelectionColors({ nodes }: { nodes: GNode[] }) {
   )
 }
 
+const BLEND_LABELS: Record<BlendMode, string> = {
+  NORMAL: 'Normal',
+  DARKEN: 'Darken',
+  MULTIPLY: 'Multiply',
+  COLOR_BURN: 'Color burn',
+  LIGHTEN: 'Lighten',
+  SCREEN: 'Screen',
+  COLOR_DODGE: 'Color dodge',
+  OVERLAY: 'Overlay',
+  SOFT_LIGHT: 'Soft light',
+  HARD_LIGHT: 'Hard light',
+  DIFFERENCE: 'Difference',
+  EXCLUSION: 'Exclusion',
+  HUE: 'Hue',
+  SATURATION: 'Saturation',
+  COLOR: 'Color',
+  LUMINOSITY: 'Luminosity'
+}
+
+type Sizing = 'FIXED' | 'HUG' | 'FILL'
+const parentOf = (n: GNode) => (n.parentId ? ed.nodes.get(n.parentId) : undefined)
+/** how a layer is sized on an axis, in Figma's terms */
+function sizingOf(n: GNode, axis: 'w' | 'h'): Sizing {
+  const p = parentOf(n)
+  if (isAutoLayout(p) && n.layoutPositioning !== 'ABSOLUTE') {
+    const primary = (p.layoutMode === 'HORIZONTAL') === (axis === 'w')
+    if (primary ? (n.layoutGrow ?? 0) > 0 : n.layoutAlign === 'STRETCH') return 'FILL'
+  }
+  if (isAutoLayout(n)) {
+    const primary = (n.layoutMode === 'HORIZONTAL') === (axis === 'w')
+    if ((primary ? n.primaryAxisSizingMode : n.counterAxisSizingMode) === 'AUTO') return 'HUG'
+  }
+  return 'FIXED'
+}
+function setSizing(n: GNode, axis: 'w' | 'h', v: Sizing): void {
+  const patch: Partial<GNode> = {}
+  const p = parentOf(n)
+  if (isAutoLayout(p)) {
+    if ((p.layoutMode === 'HORIZONTAL') === (axis === 'w')) patch.layoutGrow = v === 'FILL' ? 1 : undefined
+    else patch.layoutAlign = v === 'FILL' ? 'STRETCH' : undefined
+  }
+  if (isAutoLayout(n)) {
+    if ((n.layoutMode === 'HORIZONTAL') === (axis === 'w')) patch.primaryAxisSizingMode = v === 'HUG' ? 'AUTO' : 'FIXED'
+    else patch.counterAxisSizingMode = v === 'HUG' ? 'AUTO' : 'FIXED'
+  }
+  ed.updateNode(n.id, patch)
+}
+
+/** Figma's "Resizing": Fixed / Hug contents / Fill container for width and height */
+function ResizingRow({ nodes }: { nodes: GNode[] }) {
+  const canHug = nodes.every((n) => isAutoLayout(n))
+  const canFill = nodes.every((n) => isAutoLayout(parentOf(n)) && n.layoutPositioning !== 'ABSOLUTE')
+  if (!canHug && !canFill) return null
+  const options = [
+    { value: 'FIXED', label: t('Fixed') },
+    ...(canHug ? [{ value: 'HUG', label: t('Hug') }] : []),
+    ...(canFill ? [{ value: 'FILL', label: t('Fill container') }] : [])
+  ]
+  return (
+    <>
+      <SubLabel>{t('Resizing')}</SubLabel>
+      <div className="grid2">
+        {(['w', 'h'] as const).map((axis) => (
+          <div className="field" key={axis} title={axis === 'w' ? t('Width') : t('Height')}>
+            <span className="lbl">{axis.toUpperCase()}</span>
+            <Select value={same(nodes.map((n) => sizingOf(n, axis))) as string} onChange={(v) => ed.act(() => nodes.forEach((n) => setSizing(n, axis, v as Sizing)))} options={options} />
+          </div>
+        ))}
+      </div>
+    </>
+  )
+}
+
+function AutoLayoutSection({ nodes }: { nodes: GNode[] }) {
+  const [sides, setSides] = useState(false)
+  const frames = nodes.filter((n) => isAutoLayout(n))
+  const all = frames.length === nodes.length
+  const each = (patch: Partial<GNode>) => frames.forEach((f) => ed.updateNode(f.id, patch))
+  const action = all ? (
+    <button className="icon-btn" title={t('Remove auto layout') + ' (Alt+Shift+A)'} onClick={layerActions.removeAutoLayout}>
+      <svg width="12" height="12" viewBox="0 0 12 12" stroke="currentColor">
+        <path d="M2 6h8" />
+      </svg>
+    </button>
+  ) : (
+    <button className="icon-btn" title={t('Add auto layout') + ' (Shift+A)'} onClick={layerActions.addAutoLayout}>
+      {Icons.plus}
+    </button>
+  )
+  if (!all) return <Section title={t('Auto layout')} action={action} />
+  const f = frames[0]
+  const mode = same(frames.map((x) => x.layoutMode))
+  const horiz = f.layoutMode === 'HORIZONTAL'
+  const between = frames.every((x) => x.primaryAxisAlignItems === 'SPACE_BETWEEN')
+  const pv = (k: 'paddingLeft' | 'paddingRight' | 'paddingTop' | 'paddingBottom') => same(frames.map((x) => x[k] ?? 0))
+  const pair = (a: Mixed, b: Mixed): Mixed => (a === b ? a : 'mixed')
+  const showSides = sides || pair(pv('paddingLeft'), pv('paddingRight')) === 'mixed' || pair(pv('paddingTop'), pv('paddingBottom')) === 'mixed'
+  // 3 x 3 alignment grid: column / row index -> MIN / CENTER / MAX on the matching axis
+  const A = ['MIN', 'CENTER', 'MAX'] as const
+  const cell = (col: number, row: number): Partial<GNode> => {
+    const p = A[horiz ? col : row]
+    const c = A[horiz ? row : col]
+    return between ? { counterAxisAlignItems: c } : { primaryAxisAlignItems: p, counterAxisAlignItems: c }
+  }
+  const isOn = (col: number, row: number) => {
+    const want = cell(col, row)
+    return frames.every((x) => (x.counterAxisAlignItems ?? 'MIN') === want.counterAxisAlignItems && (between || (x.primaryAxisAlignItems ?? 'MIN') === want.primaryAxisAlignItems))
+  }
+  const padIcon = (d: string) => (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor">
+      <path d={d} />
+    </svg>
+  )
+  return (
+    <Section title={t('Auto layout')} action={action}>
+      <div className="row split">
+        <div className="seg">
+          <button className={mode === 'VERTICAL' ? 'on' : ''} title={t('Vertical layout')} onClick={() => ed.act(() => each({ layoutMode: 'VERTICAL' }))}>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor">
+              <path d="M7 2v10M4 9l3 3 3-3" />
+            </svg>
+          </button>
+          <button className={mode === 'HORIZONTAL' ? 'on' : ''} title={t('Horizontal layout')} onClick={() => ed.act(() => each({ layoutMode: 'HORIZONTAL' }))}>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor">
+              <path d="M2 7h10M9 4l3 3-3 3" />
+            </svg>
+          </button>
+        </div>
+        <div style={{ width: 96, flex: 'none' }} title={t('Gap between items')}>
+          {between ? (
+            <div className="field">
+              <span className="lbl">{padIcon(horiz ? 'M2 2v8M10 2v8M5 6h2' : 'M2 2h8M2 10h8M6 5v2')}</span>
+              <input readOnly value={t('Auto')} />
+            </div>
+          ) : (
+            <NumberField label={padIcon(horiz ? 'M2 2v8M10 2v8M5 6h2' : 'M2 2h8M2 10h8M6 5v2')} value={same(frames.map((x) => x.itemSpacing ?? 0))} apply={(v) => each({ itemSpacing: v })} />
+          )}
+        </div>
+      </div>
+      <div className="row split" style={{ alignItems: 'flex-start' }}>
+        <div className="al-grid" title={t('Alignment')}>
+          {[0, 1, 2].map((row) =>
+            [0, 1, 2].map((col) => (
+              <button key={row + '-' + col} className={isOn(col, row) ? 'on' : ''} onClick={() => ed.act(() => each(cell(col, row)))}>
+                <i />
+              </button>
+            ))
+          )}
+        </div>
+        <div style={{ width: 96, flex: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <label className="checkbox" style={{ padding: 0 }} title={t('Spread the items across the frame')}>
+            <input type="checkbox" checked={between} onChange={(e) => ed.act(() => each({ primaryAxisAlignItems: e.target.checked ? 'SPACE_BETWEEN' : 'MIN' }))} />
+            {t('Space between')}
+          </label>
+        </div>
+      </div>
+      <SubLabel>{t('Padding')}</SubLabel>
+      <div className="row tight">
+        <div style={{ flex: 1, minWidth: 0 }} title={t('Horizontal padding')}>
+          <NumberField label={padIcon('M2 2v8M10 2v8M4.5 4.5h3v3h-3z')} min={0} value={pair(pv('paddingLeft'), pv('paddingRight'))} apply={(v) => each({ paddingLeft: v, paddingRight: v })} />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }} title={t('Vertical padding')}>
+          <NumberField label={padIcon('M2 2h8M2 10h8M4.5 4.5h3v3h-3z')} min={0} value={pair(pv('paddingTop'), pv('paddingBottom'))} apply={(v) => each({ paddingTop: v, paddingBottom: v })} />
+        </div>
+        <button className={'icon-btn' + (showSides ? ' active-soft' : '')} title={t('Individual padding')} onClick={() => setSides(!showSides)}>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor">
+            <path d="M2 4.5v5M12 4.5v5M4.5 2h5M4.5 12h5" />
+          </svg>
+        </button>
+      </div>
+      {showSides && (
+        <div className="grid2">
+          {(
+            [
+              ['paddingLeft', 'Left', 'M2 2v8'],
+              ['paddingTop', 'Top', 'M2 2h8'],
+              ['paddingRight', 'Right', 'M10 2v8'],
+              ['paddingBottom', 'Bottom', 'M2 10h8']
+            ] as const
+          ).map(([k, label, d]) => (
+            <div key={k} title={t(label)}>
+              <NumberField label={padIcon(d + 'M4.5 4.5h3v3h-3z')} min={0} value={pv(k)} apply={(v) => each({ [k]: v })} />
+            </div>
+          ))}
+        </div>
+      )}
+    </Section>
+  )
+}
+
 function NodeInspector({ nodes }: { nodes: GNode[] }) {
   const each = (fn: (n: GNode) => void) => nodes.forEach(fn)
   const worlds = nodes.map((n) => ed.world(n.id))
@@ -573,6 +765,7 @@ function NodeInspector({ nodes }: { nodes: GNode[] }) {
             {locked ? Icons.lock : Icons.unlock}
           </button>
         </div>
+        <ResizingRow nodes={nodes} />
         {frames.length > 0 && (
           <label className="checkbox">
             <input
@@ -583,7 +776,19 @@ function NodeInspector({ nodes }: { nodes: GNode[] }) {
             {t('Clip content')}
           </label>
         )}
+        {nodes.every((n) => isAutoLayout(n.parentId ? ed.nodes.get(n.parentId) : undefined)) && (
+          <label className="checkbox" title={t('The layer keeps its own position inside the auto layout frame')}>
+            <input
+              type="checkbox"
+              checked={nodes.every((n) => n.layoutPositioning === 'ABSOLUTE')}
+              onChange={(e) => ed.act(() => each((n) => ed.updateNode(n.id, { layoutPositioning: e.target.checked ? 'ABSOLUTE' : undefined })))}
+            />
+            {t('Ignore auto layout')}
+          </label>
+        )}
       </Section>
+
+      <AutoLayoutSection nodes={nodes} />
 
       <Section title={t('Appearance')} action={<EyeBtn on={visible} onClick={() => ed.act(() => each((n) => ed.updateNode(n.id, { visible: !visible })))} />}>
         <div className="row tight" style={{ alignItems: 'flex-end' }}>
@@ -641,6 +846,16 @@ function NodeInspector({ nodes }: { nodes: GNode[] }) {
             ))}
           </div>
         )}
+        <SubLabel>{t('Blend mode')}</SubLabel>
+        <div className="row">
+          <div className="field" style={{ flex: 1 }}>
+            <Select
+              value={same(nodes.map((n) => n.blendMode ?? 'NORMAL')) as string}
+              onChange={(v) => ed.act(() => each((n) => ed.updateNode(n.id, { blendMode: v === 'NORMAL' ? undefined : (v as BlendMode) })))}
+              options={BLEND_MODES.map((m) => ({ value: m, label: t(BLEND_LABELS[m]) }))}
+            />
+          </div>
+        </div>
         <label className="checkbox" title={t('The shape of this layer clips the layers above it')}>
           <input type="checkbox" checked={nodes.every((n) => !!n.isMask)} onChange={(e) => ed.act(() => each((n) => ed.updateNode(n.id, { isMask: e.target.checked || undefined })))} />
           {t('Use as mask')}

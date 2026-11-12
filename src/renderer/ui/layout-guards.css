@@ -100,6 +100,41 @@
   min-width: 200px;
 }
 
+/* auto layout: 3 x 3 alignment grid */
+.al-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2px;
+  width: 78px;
+  padding: 3px;
+  background: var(--panel-2);
+  border-radius: var(--radius);
+}
+.al-grid button {
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 3px;
+}
+.al-grid button i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--text-3);
+}
+.al-grid button:hover i {
+  background: var(--text);
+}
+.al-grid button.on {
+  background: var(--panel);
+  box-shadow: 0 0 0 1px var(--border);
+}
+.al-grid button.on i {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--accent);
+}
 /* gradient editor */
 .gradient-body {
   margin: 2px 4px 6px 10px;

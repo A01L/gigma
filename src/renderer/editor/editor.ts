@@ -6,6 +6,7 @@ import { DEFAULT_PAGE_BG } from '@shared/types'
 import { backend } from '../backend'
 import { keyBetween, rectsIntersect, uid, unionRects, type Rect } from './util'
 import { DEFAULT_TEXT_STYLE, fitText } from './text'
+import { computeLayout, inFlow, isAutoLayout } from './autolayout'
 
 export type Tool =
   | 'move'
@@ -216,6 +217,60 @@ export class Editor {
     this.worldCache.set(id, r)
     return r
   }
+  /** the node and its ancestors that are rotated or mirrored, outermost first */
+  private transformChain(id: string): GNode[] {
+    const out: GNode[] = []
+    for (let n = this.nodes.get(id); n; n = n.parentId ? this.nodes.get(n.parentId) : undefined) if (n.rotation || n.flipX || n.flipY) out.unshift(n)
+    return out
+  }
+  /** point on the canvas -> the same point in the node's own unrotated space (where world() lives) */
+  toUnrotated(id: string, x: number, y: number): { x: number; y: number } {
+    for (const a of this.transformChain(id)) {
+      const r = this.world(a.id)
+      const cx = r.x + r.w / 2
+      const cy = r.y + r.h / 2
+      const t = ((a.rotation ?? 0) * Math.PI) / 180
+      const dx = x - cx
+      const dy = y - cy
+      x = cx + (dx * Math.cos(t) - dy * Math.sin(t)) * (a.flipX ? -1 : 1)
+      y = cy + (dx * Math.sin(t) + dy * Math.cos(t)) * (a.flipY ? -1 : 1)
+    }
+    return { x, y }
+  }
+  /** axis-aligned box of the node as it is drawn (rotation of the node and its ancestors applied) */
+  visualBounds(id: string): Rect {
+    const r = this.world(id)
+    const chain = this.transformChain(id)
+    if (!chain.length) return r
+    let pts = [
+      [r.x, r.y],
+      [r.x + r.w, r.y],
+      [r.x + r.w, r.y + r.h],
+      [r.x, r.y + r.h]
+    ]
+    for (const a of chain.reverse()) {
+      const w = this.world(a.id)
+      const cx = w.x + w.w / 2
+      const cy = w.y + w.h / 2
+      const t = (-(a.rotation ?? 0) * Math.PI) / 180
+      pts = pts.map(([px, py]) => {
+        const dx = (px - cx) * (a.flipX ? -1 : 1)
+        const dy = (py - cy) * (a.flipY ? -1 : 1)
+        return [cx + dx * Math.cos(t) - dy * Math.sin(t), cy + dx * Math.sin(t) + dy * Math.cos(t)]
+      })
+    }
+    const xs = pts.map((p) => p[0])
+    const ys = pts.map((p) => p[1])
+    const x = Math.min(...xs)
+    const y = Math.min(...ys)
+    return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y }
+  }
+  /** is the canvas point inside the node as drawn */
+  containsPoint(id: string, x: number, y: number, tol = 0): boolean {
+    const p = this.toUnrotated(id, x, y)
+    const r = this.world(id)
+    return p.x >= r.x - tol && p.y >= r.y - tol && p.x <= r.x + r.w + tol && p.y <= r.y + r.h + tol
+  }
   private invalidateGeometry(id: string): void {
     this.worldCache.delete(id)
     this.treeDirty.add(id)
@@ -232,7 +287,7 @@ export class Editor {
       const items: IndexItem[] = []
       for (const n of this.nodes.values()) {
         if (n.pageId !== this.currentPageId) continue
-        const r = this.world(n.id)
+        const r = this.visualBounds(n.id)
         const it = { minX: r.x, minY: r.y, maxX: r.x + r.w, maxY: r.y + r.h, id: n.id }
         items.push(it)
         this.treeItems.set(n.id, it)
@@ -251,7 +306,7 @@ export class Editor {
       }
       const n = this.nodes.get(id)
       if (!n || n.pageId !== this.currentPageId) continue
-      const r = this.world(id)
+      const r = this.visualBounds(id)
       const it = { minX: r.x, minY: r.y, maxX: r.x + r.w, maxY: r.y + r.h, id }
       this.tree.insert(it)
       this.treeItems.set(id, it)
@@ -343,6 +398,15 @@ export class Editor {
       this.tx = null
       this.txDepth--
     }
+    // keep auto layout frames arranged
+    this.txDepth++
+    this.tx = tx
+    try {
+      this.runAutoLayout(tx)
+    } finally {
+      this.tx = null
+      this.txDepth--
+    }
     for (const [id, e] of tx.nodes) e.after = this.nodes.has(id) ? clone(this.nodes.get(id)!) : null
     for (const [id, e] of tx.pages) e.after = this.pages.has(id) ? clone(this.pages.get(id)!) : null
     for (const [id, e] of tx.nodes) if (JSON.stringify(e.before) === JSON.stringify(e.after)) tx.nodes.delete(id)
@@ -358,6 +422,109 @@ export class Editor {
     }
     this.emit('doc')
   }
+  /** set by the canvas while a drag is committed: layers dropped into an auto layout frame land where they were dropped */
+  dropByPosition = false
+
+  private runAutoLayout(tx: HistoryEntry): void {
+    const frames = new Set<string>()
+    const moved = new Map<string, Set<string>>()
+    const addChain = (pid: string | null | undefined) => {
+      while (pid) {
+        const a = this.nodes.get(pid)
+        if (!a) break
+        if (isAutoLayout(a)) frames.add(a.id)
+        pid = a.parentId
+      }
+    }
+    for (const [id, e] of [...tx.nodes]) {
+      const n = this.nodes.get(id)
+      const b = e.before
+      addChain(id)
+      addChain(b?.parentId)
+      if (!n || !b) continue
+      const dw = Math.abs(n.width - b.width) > 0.01
+      const dh = Math.abs(n.height - b.height) > 0.01
+      const p = n.parentId ? this.nodes.get(n.parentId) : undefined
+      if (isAutoLayout(p) && inFlow(n)) {
+        const horiz = p.layoutMode === 'HORIZONTAL'
+        if (n.parentId === b.parentId) {
+          // resized by hand: the layer stops filling the frame on that axis
+          const patch: Partial<GNode> = {}
+          if ((horiz ? dw : dh) && n.layoutGrow && b.layoutGrow === n.layoutGrow) patch.layoutGrow = 0
+          if ((horiz ? dh : dw) && n.layoutAlign === 'STRETCH' && b.layoutAlign === 'STRETCH') patch.layoutAlign = 'INHERIT'
+          if (Object.keys(patch).length) this.updateNode(id, patch)
+          if (!dw && !dh && (n.x !== b.x || n.y !== b.y) && inFlow(b)) (moved.get(p.id) ?? moved.set(p.id, new Set()).get(p.id)!).add(id)
+        } else if (this.dropByPosition) (moved.get(p.id) ?? moved.set(p.id, new Set()).get(p.id)!).add(id)
+      }
+      // frame resized by hand: it stops hugging on that axis
+      if (isAutoLayout(n) && isAutoLayout(b) && n.layoutMode === b.layoutMode) {
+        const horiz = n.layoutMode === 'HORIZONTAL'
+        const patch: Partial<GNode> = {}
+        if ((horiz ? dw : dh) && n.primaryAxisSizingMode === 'AUTO' && b.primaryAxisSizingMode === 'AUTO') patch.primaryAxisSizingMode = 'FIXED'
+        if ((horiz ? dh : dw) && n.counterAxisSizingMode === 'AUTO' && b.counterAxisSizingMode === 'AUTO') patch.counterAxisSizingMode = 'FIXED'
+        if (Object.keys(patch).length) this.updateNode(id, patch)
+      }
+    }
+    if (!frames.size) return
+    const order = [...frames].filter((id) => this.nodes.has(id)).sort((a, b) => this.ancestors(b).length - this.ancestors(a).length)
+    // bottom-up for hugging, repeated because filling children are sized top-down
+    for (let pass = 0; pass < 3; pass++) {
+      let changed = false
+      for (const id of order) changed = this.layoutFrame(id, pass === 0 ? moved.get(id) : undefined) || changed
+      if (!changed) break
+    }
+  }
+
+  /** arrange one auto layout frame; returns true when something changed */
+  private layoutFrame(fid: string, moved?: Set<string>): boolean {
+    const f = this.nodes.get(fid)
+    if (!isAutoLayout(f)) return false
+    const horiz = f.layoutMode === 'HORIZONTAL'
+    let changed = false
+    if (moved?.size) {
+      // dragged layers take the slot they were dropped on
+      const flow = this.children(fid, f.pageId).map((id) => this.nodes.get(id)!).filter(inFlow)
+      const center = (k: GNode) => (horiz ? k.x + k.width / 2 : k.y + k.height / 2)
+      const sorted = [...flow].sort((a, b) => center(a) - center(b))
+      if (sorted.some((k, i) => k.id !== flow[i].id)) {
+        const keys = flow.map((k) => k.order)
+        sorted.forEach((k, i) => k.order !== keys[i] && this.updateNode(k.id, { order: keys[i] }))
+        changed = true
+      }
+    }
+    for (let pass = 0; pass < 2; pass++) {
+      const kids = this.children(fid, f.pageId).map((id) => this.nodes.get(id)!)
+      const r = computeLayout(f, kids)
+      let textResized = false
+      for (const [id, b] of r.children) {
+        const k = this.nodes.get(id)!
+        const patch: Partial<GNode> = {}
+        if (Math.abs(k.x - b.x) > 0.01) patch.x = b.x
+        if (Math.abs(k.y - b.y) > 0.01) patch.y = b.y
+        if (Math.abs(k.width - b.width) > 0.01) patch.width = b.width
+        if (Math.abs(k.height - b.height) > 0.01) patch.height = b.height
+        if (!Object.keys(patch).length) continue
+        if (k.type === 'TEXT' && ('width' in patch || 'height' in patch)) {
+          // text sized by the layout can no longer size itself on that axis
+          const mode = k.textAutoResize ?? 'WIDTH_AND_HEIGHT'
+          if ('height' in patch && (horiz ? k.layoutAlign === 'STRETCH' : (k.layoutGrow ?? 0) > 0)) patch.textAutoResize = 'NONE'
+          else if ('width' in patch && mode === 'WIDTH_AND_HEIGHT') patch.textAutoResize = 'HEIGHT'
+          else if ('height' in patch && !('width' in patch)) delete patch.height
+          textResized = true
+        }
+        if (!Object.keys(patch).length) continue
+        this.updateNode(id, patch)
+        changed = true
+      }
+      if (Math.abs(f.width - r.frame.width) > 0.01 || Math.abs(f.height - r.frame.height) > 0.01) {
+        this.updateNode(fid, { width: r.frame.width, height: r.frame.height })
+        changed = true
+      }
+      if (!textResized) break
+    }
+    return changed
+  }
+
   /** run fn inside a transaction */
   act<T>(fn: () => T): T {
     this.begin()
@@ -516,7 +683,8 @@ export class Editor {
     }
     if (reparent || reorder) this.linkChild(n)
     if (reparent && 'pageId' in patch) for (const d of this.descendants(id)) this.updateNode(d, { pageId: n.pageId })
-    if (reparent || 'x' in patch || 'y' in patch || 'width' in patch || 'height' in patch || n.type === 'TEXT') this.invalidateGeometry(id)
+    if (reparent || 'x' in patch || 'y' in patch || 'width' in patch || 'height' in patch || 'rotation' in patch || 'flipX' in patch || 'flipY' in patch || n.type === 'TEXT')
+      this.invalidateGeometry(id)
   }
 
   deleteNode(id: string): void {
@@ -844,8 +1012,7 @@ export class Editor {
     for (const a of this.ancestors(id)) {
       if (!a.visible) return false
       if (a.type === 'FRAME' && a.clipsContent !== false) {
-        const r = this.world(a.id)
-        if (x < r.x || y < r.y || x > r.x + r.w || y > r.y + r.h) return false
+        if (!this.containsPoint(a.id, x, y)) return false
       }
     }
     return true
@@ -861,7 +1028,7 @@ export class Editor {
     const cands = this.query({ x: x - tol, y: y - tol, w: tol * 2, h: tol * 2 })
       .map((id) => this.nodes.get(id)!)
       // slices are transparent export areas: select them from the layers panel, clicks go through
-      .filter((n) => n.type !== 'ANNOTATION' && n.type !== 'SLICE' && n.visible && !n.locked && this.isVisibleThroughClips(n.id, x, y) && !this.ancestors(n.id).some((a) => a.locked))
+      .filter((n) => n.type !== 'ANNOTATION' && n.type !== 'SLICE' && n.visible && !n.locked && this.containsPoint(n.id, x, y, tol) && this.isVisibleThroughClips(n.id, x, y) && !this.ancestors(n.id).some((a) => a.locked))
     if (!cands.length) return null
     cands.sort((a, b) => (this.paintOrderKey(a.id) < this.paintOrderKey(b.id) ? 1 : -1))
     // prefer non-container leaves on top; containers (frames, sections) only when nothing inside was hit

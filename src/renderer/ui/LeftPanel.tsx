@@ -5,6 +5,7 @@ import { Icons, TypeIcon } from './icons'
 import { exportCurrentPage, importPages, runAction } from './actions'
 import { useT } from './i18n'
 import { keyBetween } from '../editor/util'
+import { isAutoLayout } from '../editor/autolayout'
 
 const ROW_H = 28
 
@@ -151,7 +152,9 @@ function Layers() {
   const rows = useMemo(() => {
     const out: Row[] = []
     const walk = (parent: string | null, depth: number) => {
-      const kids = ed.children(parent)
+      // auto layout frames list their items in layout order (first item on top), as Figma does
+      const flow = isAutoLayout(parent ? ed.nodes.get(parent) : undefined)
+      const kids = flow ? [...ed.children(parent)].reverse() : ed.children(parent)
       for (let i = kids.length - 1; i >= 0; i--) {
         const id = kids[i]
         // annotations are notes, not layers (like Figma comments)
@@ -194,7 +197,11 @@ function Layers() {
     if (container && f > 0.25 && f < 0.75) return 'inside'
     return f < 0.5 ? 'above' : 'below'
   }
-  const drop = (targetId: string, zone: 'above' | 'below' | 'inside') => {
+  const drop = (targetId: string, shown: 'above' | 'below' | 'inside') => {
+    // inside an auto layout frame the list runs the other way (first item on top)
+    const tp = ed.nodes.get(targetId)?.parentId
+    const flip = isAutoLayout(tp ? ed.nodes.get(tp) : undefined)
+    const zone = flip && shown !== 'inside' ? (shown === 'above' ? 'below' : 'above') : shown
     const src = dragId.current
     dragId.current = null
     setDropAt(null)

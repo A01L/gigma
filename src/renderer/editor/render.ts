@@ -8,7 +8,7 @@
 // The renderer is isolated behind drawScene(), so a WebGL/Skia (CanvasKit) backend can be
 // swapped in later without touching the editor.
 import type { Effect, GNode, GradientPaint, Paint } from '@shared/types'
-import { rgbaToCss } from '@shared/types'
+import { blendCss, rgbaToCss } from '@shared/types'
 import { backend } from '../backend'
 import type { Editor } from './editor'
 import { cssFont, layoutText, DEFAULT_TEXT_STYLE, justifyWords, lineX, measureWord, textBaseline, verticalOffset } from './text'
@@ -367,6 +367,7 @@ function drawNodeInner(ctx: CanvasRenderingContext2D, ed: Editor, id: string, o:
 
   ctx.save()
   if (n.opacity < 1) ctx.globalAlpha *= n.opacity
+  if (n.blendMode && n.blendMode !== 'NORMAL') ctx.globalCompositeOperation = blendCss(n.blendMode) as GlobalCompositeOperation
   const layerBlur = effects.find((e) => e.type === 'LAYER_BLUR')
   if (layerBlur && layerBlur.radius > 0) ctx.filter = `blur(${(layerBlur.radius * deviceScale(ctx)) / 2}px)`
 

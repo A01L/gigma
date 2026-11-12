@@ -5,7 +5,8 @@
 // with kiwi-schema and map Figma nodeChanges to Gigma nodes.
 import { compileSchema, decodeBinarySchema, ByteBuffer } from 'kiwi-schema'
 import { decompress as zstd } from 'fzstd'
-import type { Effect, GNode, Paint, Stroke, RGBA } from '@shared/types'
+import type { BlendMode, Effect, GNode, Paint, Stroke, RGBA } from '@shared/types'
+import { BLEND_MODES } from '@shared/types'
 import { DEFAULT_TEXT_STYLE } from './text'
 import { base64ToBytes, keyBetween, uid } from './util'
 import { segsBounds, segsToD, transformSegs, type Seg } from './svgpath'
@@ -361,6 +362,27 @@ export async function decodeFigmaClipboard(html: string): Promise<GNode[] | null
       n.textAutoResize = f.textAutoResize === 'WIDTH_AND_HEIGHT' ? 'WIDTH_AND_HEIGHT' : f.textAutoResize === 'HEIGHT' ? 'HEIGHT' : 'NONE'
     }
     if (f.mask || f.isMask) n.isMask = true
+    // blend mode (PASS_THROUGH / NORMAL = default)
+    if (typeof f.blendMode === 'string' && (BLEND_MODES as readonly string[]).includes(f.blendMode) && f.blendMode !== 'NORMAL') n.blendMode = f.blendMode as BlendMode
+    // auto layout (Figma calls it "stack" internally)
+    if (type === 'FRAME' && (f.stackMode === 'HORIZONTAL' || f.stackMode === 'VERTICAL')) {
+      n.layoutMode = f.stackMode
+      n.itemSpacing = f.stackSpacing ?? 0
+      n.paddingLeft = f.stackHorizontalPadding ?? f.stackPadding ?? 0
+      n.paddingTop = f.stackVerticalPadding ?? f.stackPadding ?? 0
+      n.paddingRight = f.stackPaddingRight ?? n.paddingLeft
+      n.paddingBottom = f.stackPaddingBottom ?? n.paddingTop
+      const al = (v: unknown) => (v === 'CENTER' ? 'CENTER' : v === 'MAX' ? 'MAX' : 'MIN')
+      n.primaryAxisAlignItems = String(f.stackPrimaryAlignItems ?? f.stackJustify ?? '').startsWith('SPACE') ? 'SPACE_BETWEEN' : al(f.stackPrimaryAlignItems ?? f.stackJustify)
+      n.counterAxisAlignItems = al(f.stackCounterAlignItems ?? f.stackCounterAlign)
+      const hug = (v: unknown) => (typeof v === 'string' && v.startsWith('RESIZE_TO_FIT') ? 'AUTO' : 'FIXED')
+      // older files have no explicit sizing: hugging was the default
+      n.primaryAxisSizingMode = f.stackPrimarySizing === undefined ? 'AUTO' : hug(f.stackPrimarySizing)
+      n.counterAxisSizingMode = hug(f.stackCounterSizing)
+    }
+    if (f.stackChildPrimaryGrow) n.layoutGrow = 1
+    if (f.stackChildAlignSelf === 'STRETCH') n.layoutAlign = 'STRETCH'
+    if (f.stackPositioning === 'ABSOLUTE') n.layoutPositioning = 'ABSOLUTE'
     const fx = effectsOf(f.effects)
     if (fx.length) n.effects = fx
     if (type === 'VECTOR') {

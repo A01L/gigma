@@ -51,6 +51,19 @@ function solid(hex?: string): Paint[] {
   return hex ? [{ type: 'SOLID', color: hexToRgba(hex) }] : []
 }
 
+/** auto layout props of create_frame / update_node */
+function layoutPatch(a: Args): Partial<GNode> {
+  const out: Partial<GNode> = {}
+  if (a.layoutMode !== undefined) out.layoutMode = a.layoutMode === 'NONE' ? undefined : a.layoutMode
+  for (const k of ['itemSpacing', 'primaryAxisAlignItems', 'counterAxisAlignItems', 'primaryAxisSizingMode', 'counterAxisSizingMode'] as const)
+    if (a[k] !== undefined) (out as Args)[k] = a[k]
+  if (a.padding !== undefined) {
+    const [t, r, b, l] = Array.isArray(a.padding) ? a.padding : [a.padding, a.padding, a.padding, a.padding]
+    Object.assign(out, { paddingTop: t, paddingRight: r, paddingBottom: b, paddingLeft: l })
+  }
+  return out
+}
+
 function strokes(a: Args) {
   return a.stroke ? [{ color: hexToRgba(a.stroke), weight: a.strokeWeight ?? 1, align: 'INSIDE' as const }] : []
 }
@@ -166,7 +179,8 @@ const handlers: Record<CommandName, (a: Args) => unknown | Promise<unknown>> = {
           fills: solid(a.fill ?? '#FFFFFF'),
           cornerRadius: a.cornerRadius,
           clipsContent: true,
-          parentId: checkParent(a.parentId)
+          parentId: checkParent(a.parentId),
+          ...layoutPatch(a)
         })
       )
     ),
@@ -346,6 +360,11 @@ const handlers: Record<CommandName, (a: Args) => unknown | Promise<unknown>> = {
                 : { type: e.type, radius: e.radius ?? 4, visible: e.visible ?? true }
             )
           : undefined
+      Object.assign(patch, layoutPatch(a))
+      if (a.layoutGrow !== undefined) patch.layoutGrow = a.layoutGrow || undefined
+      if (a.layoutAlign !== undefined) patch.layoutAlign = a.layoutAlign === 'STRETCH' ? 'STRETCH' : undefined
+      if (a.layoutPositioning !== undefined) patch.layoutPositioning = a.layoutPositioning === 'ABSOLUTE' ? 'ABSOLUTE' : undefined
+      if (a.blendMode !== undefined) patch.blendMode = a.blendMode === 'NORMAL' ? undefined : a.blendMode
       ed.updateNode(n.id, patch)
       if (a.parentId !== undefined) ed.reparent(n.id, a.parentId ? checkParent(a.parentId) : null)
     })

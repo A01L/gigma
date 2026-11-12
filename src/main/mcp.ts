@@ -98,11 +98,25 @@ function buildServer(run: RunCommand): McpServer {
     name: z.string().optional(),
     type: z.enum(['FRAME', 'GROUP', 'RECTANGLE', 'ELLIPSE', 'TEXT', 'VECTOR', 'IMAGE']).optional()
   })
-  tool('create_frame', 'Create a frame (artboard). Use for screens, posts, cards. Frames clip their content.', {
+  // auto layout, same fields as the Figma plugin API
+  const layoutShape = {
+    layoutMode: z.enum(['NONE', 'HORIZONTAL', 'VERTICAL']).optional().describe('Auto layout: stack children in a row or a column (NONE turns it off)'),
+    itemSpacing: z.number().optional().describe('Auto layout: gap between children'),
+    padding: z
+      .union([z.number().min(0), z.array(z.number().min(0)).length(4)])
+      .optional()
+      .describe('Auto layout padding: one number or [top, right, bottom, left]'),
+    primaryAxisAlignItems: z.enum(['MIN', 'CENTER', 'MAX', 'SPACE_BETWEEN']).optional().describe('Auto layout: alignment along the layout direction'),
+    counterAxisAlignItems: z.enum(['MIN', 'CENTER', 'MAX']).optional().describe('Auto layout: alignment across the layout direction'),
+    primaryAxisSizingMode: z.enum(['FIXED', 'AUTO']).optional().describe('Auto layout: AUTO = hug contents along the layout direction'),
+    counterAxisSizingMode: z.enum(['FIXED', 'AUTO']).optional().describe('Auto layout: AUTO = hug contents across the layout direction')
+  }
+  tool('create_frame', 'Create a frame (artboard). Use for screens, posts, cards. Frames clip their content. Pass layoutMode to make it an auto layout frame: children are then arranged automatically and their x / y are ignored.', {
     name: z.string().default('Frame'),
     ...box,
     fill: color.default('#FFFFFF'),
     cornerRadius: z.number().min(0).optional(),
+    ...layoutShape,
     parentId: parent
   })
   tool('create_rectangle', 'Create a rectangle.', {
@@ -232,7 +246,15 @@ function buildServer(run: RunCommand): McpServer {
     constrainProportions: z.boolean().optional(),
     html: z.string().optional().describe('Code blocks: new HTML'),
     css: z.string().optional().describe('Code blocks: new CSS'),
-    arrowEnd: z.boolean().optional().describe('Lines/paths: arrowhead at the end')
+    arrowEnd: z.boolean().optional().describe('Lines/paths: arrowhead at the end'),
+    ...layoutShape,
+    layoutGrow: z.number().min(0).max(1).optional().describe('Child of an auto layout frame: 1 = fill the frame along the layout direction'),
+    layoutAlign: z.enum(['INHERIT', 'STRETCH']).optional().describe('Child of an auto layout frame: STRETCH = fill the frame across the layout direction'),
+    layoutPositioning: z.enum(['AUTO', 'ABSOLUTE']).optional().describe('Child of an auto layout frame: ABSOLUTE = keep own x / y'),
+    blendMode: z
+      .enum(['NORMAL', 'DARKEN', 'MULTIPLY', 'COLOR_BURN', 'LIGHTEN', 'SCREEN', 'COLOR_DODGE', 'OVERLAY', 'SOFT_LIGHT', 'HARD_LIGHT', 'DIFFERENCE', 'EXCLUSION', 'HUE', 'SATURATION', 'COLOR', 'LUMINOSITY'])
+      .optional()
+      .describe('How the layer mixes with the layers below it')
   })
   tool('delete_nodes', 'Delete nodes (and their children).', { ids: z.array(z.string()).min(1) })
   tool('group_nodes', 'Group sibling nodes.', { ids: z.array(z.string()).min(1), name: z.string().optional() })

@@ -122,6 +122,28 @@ export interface TextStyle {
   wrapStyle?: 'AUTO' | 'BALANCED'
 }
 
+export const BLEND_MODES = [
+  'NORMAL',
+  'DARKEN',
+  'MULTIPLY',
+  'COLOR_BURN',
+  'LIGHTEN',
+  'SCREEN',
+  'COLOR_DODGE',
+  'OVERLAY',
+  'SOFT_LIGHT',
+  'HARD_LIGHT',
+  'DIFFERENCE',
+  'EXCLUSION',
+  'HUE',
+  'SATURATION',
+  'COLOR',
+  'LUMINOSITY'
+] as const
+export type BlendMode = (typeof BLEND_MODES)[number]
+/** canvas globalCompositeOperation / CSS mix-blend-mode name */
+export const blendCss = (m: BlendMode | undefined): string => (!m || m === 'NORMAL' ? 'source-over' : m.toLowerCase().replace(/_/g, '-'))
+
 export interface BaseNode {
   id: string
   type: NodeType
@@ -150,6 +172,27 @@ export interface BaseNode {
   flipY?: boolean
   /** keep W/H ratio when editing dimensions in the inspector */
   constrainProportions?: boolean
+  /** how the layer mixes with what is below it (Figma blend modes); undefined = normal */
+  blendMode?: BlendMode
+  // ---- auto layout (frames), same fields and semantics as Figma ----
+  layoutMode?: 'NONE' | 'HORIZONTAL' | 'VERTICAL'
+  itemSpacing?: number
+  paddingLeft?: number
+  paddingRight?: number
+  paddingTop?: number
+  paddingBottom?: number
+  primaryAxisAlignItems?: 'MIN' | 'CENTER' | 'MAX' | 'SPACE_BETWEEN'
+  counterAxisAlignItems?: 'MIN' | 'CENTER' | 'MAX'
+  /** AUTO = hug contents along the layout direction */
+  primaryAxisSizingMode?: 'FIXED' | 'AUTO'
+  counterAxisSizingMode?: 'FIXED' | 'AUTO'
+  // ---- child of an auto layout frame ----
+  /** 1 = fill container along the layout direction */
+  layoutGrow?: number
+  /** STRETCH = fill container across the layout direction */
+  layoutAlign?: 'INHERIT' | 'STRETCH'
+  /** ABSOLUTE = ignore auto layout, keep own x / y */
+  layoutPositioning?: 'AUTO' | 'ABSOLUTE'
   clipsContent?: boolean // frames only
   /** like Figma "Use as mask": this layer's shape clips the siblings above it (and is not drawn) */
   isMask?: boolean

@@ -11,6 +11,17 @@ import { parsePath, segsBounds, segsToD, transformSegs, type Seg } from './svgpa
 import { DEFAULT_CODE, setCodeReadyCallback } from './code-render'
 
 const BLUE = '#0d99ff'
+/** cursor shown just outside the corners of the selection: drag to rotate */
+const ROTATE_CURSOR =
+  `url("data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><g stroke="#fff" stroke-width="4"><path d="M6 15a7 7 0 0 1 9-9"/><path d="M12 4l3.5 2-2 3.5M4 12l2 3.5 3.5-2"/></g><g stroke="#000" stroke-width="1.6"><path d="M6 15a7 7 0 0 1 9-9"/><path d="M12 4l3.5 2-2 3.5M4 12l2 3.5 3.5-2"/></g></svg>')}") 12 12, crosshair`
+
+/** rotate a point around c by deg (Figma direction: positive = counter-clockwise on screen) */
+function turn(x: number, y: number, c: { x: number; y: number }, deg: number): { x: number; y: number } {
+  const t = (-deg * Math.PI) / 180
+  const dx = x - c.x
+  const dy = y - c.y
+  return { x: c.x + dx * Math.cos(t) - dy * Math.sin(t), y: c.y + dx * Math.sin(t) + dy * Math.cos(t) }
+}
 const HANDLE = 7
 
 type Handle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w'
@@ -19,7 +30,8 @@ const CURSORS: Record<Handle, string> = { nw: 'nwse-resize', se: 'nwse-resize', 
 type Drag =
   | { kind: 'pan'; sx: number; sy: number }
   | { kind: 'move'; sx: number; sy: number; ids: string[]; orig: Map<string, Rect>; box: Rect; moved: boolean; dup: boolean }
-  | { kind: 'resize'; handle: Handle; box: Rect; ids: string[]; orig: Map<string, Rect>; snap?: Map<string, GNode> }
+  | { kind: 'resize'; handle: Handle; box: Rect; ids: string[]; orig: Map<string, Rect>; snap?: Map<string, GNode>; rot: number }
+  | { kind: 'rotate'; cx: number; cy: number; a0: number; orig: Map<string, { cx: number; cy: number; rot: number }> }
   | { kind: 'marquee'; sx: number; sy: number; x: number; y: number; base: string[]; scope: string | null }
   | { kind: 'create'; type: GNode['type']; wx: number; wy: number; id: string | null; parent: string | null; tool: string }
   | { kind: 'pencil'; pts: [number, number][]; parent: string | null }
@@ -286,10 +298,9 @@ export class CanvasController {
 
     // hover
     if (ed.hoverId && !ed.selection.includes(ed.hoverId) && ed.nodes.has(ed.hoverId) && !this.drag) {
-      const s = this.toScreen(ed.world(ed.hoverId))
       ctx.strokeStyle = BLUE
       ctx.lineWidth = 1.5
-      ctx.strokeRect(s.x, s.y, s.w, s.h)
+      this.outline(ed.hoverId)
     }
 
     // drop target while dragging layers between frames
@@ -306,10 +317,7 @@ export class CanvasController {
       ctx.strokeStyle = BLUE
       ctx.lineWidth = 1
       if (sel.length > 1)
-        for (const id of sel) {
-          const s = this.toScreen(ed.world(id))
-          ctx.strokeRect(Math.round(s.x) + 0.5, Math.round(s.y) + 0.5, Math.round(s.w), Math.round(s.h))
-        }
+        for (const id of sel) this.outline(id)
       const b = this.toScreen(ed.selectionBounds(sel)!)
       ctx.lineWidth = 1.5
       // a single rotated layer shows its outline rotated with it
@@ -379,6 +387,21 @@ export class CanvasController {
     }
   }
 
+  /** stroke the box of a layer, rotated with it */
+  private outline(id: string): void {
+    const ctx = this.ctx
+    const s = this.toScreen(ed.world(id))
+    const rot = ed.nodes.get(id)?.rotation
+    ctx.save()
+    if (rot) {
+      ctx.translate(s.x + s.w / 2, s.y + s.h / 2)
+      ctx.rotate((-rot * Math.PI) / 180)
+      ctx.translate(-(s.x + s.w / 2), -(s.y + s.h / 2))
+    }
+    ctx.strokeRect(Math.round(s.x) + 0.5, Math.round(s.y) + 0.5, Math.round(s.w), Math.round(s.h))
+    ctx.restore()
+  }
+
   private handles(b: Rect): [Handle, number, number][] {
     const { x, y, w, h } = b
     const list: [Handle, number, number][] = [
@@ -392,9 +415,36 @@ export class CanvasController {
     return list
   }
 
-  private handleAt(sx: number, sy: number): Handle | null {
+  /** rotation of the selection box: a single rotated layer shows its box rotated with it */
+  private boxRotation(): number {
+    return ed.selection.length === 1 ? (ed.nodes.get(ed.selection[0])?.rotation ?? 0) : 0
+  }
+  /** screen point -> the unrotated space of the selection box */
+  private intoBox(sx: number, sy: number, b: Rect): { x: number; y: number } {
+    const rot = this.boxRotation()
+    return rot ? turn(sx, sy, { x: b.x + b.w / 2, y: b.y + b.h / 2 }, -rot) : { x: sx, y: sy }
+  }
+  /** just outside a corner of the selection box: the rotate zone, as in Figma */
+  private rotateZoneAt(sx0: number, sy0: number): boolean {
+    if (!ed.selection.length || ed.tool !== 'move') return false
+    const b = this.toScreen(ed.selectionBounds()!)
+    const { x, y } = this.intoBox(sx0, sy0, b)
+    if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) return false
+    for (const [cx, cy] of [[b.x, b.y], [b.x + b.w, b.y], [b.x + b.w, b.y + b.h], [b.x, b.y + b.h]]) {
+      const dx = x - cx
+      const dy = y - cy
+      // outside the box on both axes relative to this corner
+      const outX = cx === b.x ? dx < 0 : dx > 0
+      const outY = cy === b.y ? dy < 0 : dy > 0
+      if (outX && outY && Math.hypot(dx, dy) > 6 && Math.hypot(dx, dy) < 22) return true
+    }
+    return false
+  }
+
+  private handleAt(sx0: number, sy0: number): Handle | null {
     if (!ed.selection.length) return null
     const b = this.toScreen(ed.selectionBounds()!)
+    const { x: sx, y: sy } = this.intoBox(sx0, sy0, b)
     for (const [h, hx, hy] of this.handles(b)) if (Math.abs(sx - hx) <= 6 && Math.abs(sy - hy) <= 6) return h
     // edges
     const tol = 4
@@ -423,6 +473,7 @@ export class CanvasController {
       const p = this.local(e)
       const h = this.handleAt(p.sx, p.sy)
       if (h) c = CURSORS[h]
+      else if (this.drag?.kind === 'rotate' || this.rotateZoneAt(p.sx, p.sy)) c = ROTATE_CURSOR
     }
     this.canvas.style.cursor = c
   }
@@ -503,7 +554,27 @@ export class CanvasController {
         box: ed.selectionBounds(ids)!,
         ids,
         orig: new Map(all.map((id) => [id, { ...ed.world(id) }])),
-        snap: ed.tool === 'scale' ? new Map(all.map((id) => [id, structuredClone(ed.nodes.get(id)!)])) : undefined
+        snap: ed.tool === 'scale' ? new Map(all.map((id) => [id, structuredClone(ed.nodes.get(id)!)])) : undefined,
+        rot: this.boxRotation()
+      }
+      ed.begin()
+      return
+    }
+    if (this.rotateZoneAt(p.sx, p.sy)) {
+      const box = ed.selectionBounds()!
+      const cx = box.x + box.w / 2
+      const cy = box.y + box.h / 2
+      this.drag = {
+        kind: 'rotate',
+        cx,
+        cy,
+        a0: Math.atan2(p.y - cy, p.x - cx),
+        orig: new Map(
+          ed.roots(ed.selection).map((id) => {
+            const w = ed.world(id)
+            return [id, { cx: w.x + w.w / 2, cy: w.y + w.h / 2, rot: ed.nodes.get(id)!.rotation ?? 0 }]
+          })
+        )
       }
       ed.begin()
       return
@@ -699,8 +770,30 @@ export class CanvasController {
         ed.emit('doc')
         break
       }
+      case 'rotate': {
+        // degrees turned since the drag started (screen clockwise = negative in Figma's convention)
+        let delta = (-(Math.atan2(p.y - d.cy, p.x - d.cx) - d.a0) * 180) / Math.PI
+        if (e.shiftKey) {
+          // snap the result to 15° steps
+          const first = d.orig.values().next().value!
+          delta = Math.round((first.rot + delta) / 15) * 15 - first.rot
+        }
+        for (const [id, o] of d.orig) {
+          const n = ed.nodes.get(id)
+          if (!n) continue
+          const c = turn(o.cx, o.cy, { x: d.cx, y: d.cy }, delta)
+          const pw = n.parentId ? ed.world(n.parentId) : { x: 0, y: 0 }
+          const rot = ((((o.rot + delta + 180) % 360) + 360) % 360) - 180
+          ed.updateNode(id, { x: round2(c.x - n.width / 2 - pw.x), y: round2(c.y - n.height / 2 - pw.y), rotation: Math.round(rot * 100) / 100 || undefined })
+        }
+        ed.emit('doc')
+        break
+      }
       case 'resize': {
         const b = d.box
+        // a rotated layer is resized in its own (unrotated) space
+        const c0 = { x: b.x + b.w / 2, y: b.y + b.h / 2 }
+        if (d.rot) Object.assign(p, turn(p.x, p.y, c0, -d.rot))
         let x1 = b.x, y1 = b.y, x2 = b.x + b.w, y2 = b.y + b.h
         if (d.handle.includes('w')) x1 = p.x
         if (d.handle.includes('e')) x2 = p.x
@@ -753,6 +846,12 @@ export class CanvasController {
           }
           ed.emit('doc')
           break
+        }
+        if (d.rot) {
+          // keep the opposite corner where it is on screen: the new center is the rotated image of the box center
+          const c = turn(nb.x + nb.w / 2, nb.y + nb.h / 2, c0, d.rot)
+          nb.x = c.x - nb.w / 2
+          nb.y = c.y - nb.h / 2
         }
         for (const id of d.ids) {
           const o = d.orig.get(id)!
@@ -962,13 +1061,16 @@ export class CanvasController {
       const p = this.local(e)
       if (!(e.ctrlKey || e.metaKey)) this.reparentDragged(d.ids, this.dropTargetAt(p.x, p.y, d.ids))
       this.dropTarget = null
+      // inside an auto layout frame the layer takes the slot it was dropped on
+      ed.dropByPosition = true
       ed.commit()
+      ed.dropByPosition = false
     } else if (d.kind === 'move' && !d.moved && !e.shiftKey && ed.selection.length > 1) {
       // click without drag on a multi-selection selects just the clicked node
       const p = this.local(e)
       const hit = this.pickAt(p.x, p.y, e.ctrlKey || e.metaKey)
       if (hit) ed.setSelection([hit])
-    } else if (d.kind === 'resize') ed.commit()
+    } else if (d.kind === 'resize' || d.kind === 'rotate') ed.commit()
     else if (d.kind === 'create') {
       if (!d.id) {
         // click without drag: default size like Figma (100x100, bigger for cards/sections)
