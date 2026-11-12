@@ -5,6 +5,7 @@ import { Icons } from './icons'
 import logoUrl from '../assets/logo.svg'
 import { greetingFor, setSettings, useSettings, useT } from './i18n'
 import { Select } from './Select'
+import { PluginsSection } from './PluginsSettings'
 
 interface Props {
   onOpen: (p: string) => void
@@ -390,6 +391,8 @@ function SettingsView() {
       </section>
 
       <FigmaSection />
+
+      <PluginsSection />
 
       <section>
         <h2>{t('Storage')}</h2>

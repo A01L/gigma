@@ -1,10 +1,29 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { GigmaApi } from '../shared/api'
 
 const tabArg = process.argv.find((a) => a.startsWith('--gigma-tab='))
 const tabId = tabArg ? tabArg.slice('--gigma-tab='.length) : null
 
 const api: GigmaApi = {
+  plugins: {
+    list: () => ipcRenderer.invoke('plugins:list'),
+    install: () => ipcRenderer.invoke('plugins:install'),
+    installFolder: () => ipcRenderer.invoke('plugins:installFolder'),
+    installPath: (file) => ipcRenderer.invoke('plugins:installPath', typeof file === 'string' ? file : webUtils.getPathForFile(file)),
+    remove: (id) => ipcRenderer.invoke('plugins:remove', id),
+    onChanged: (handler) => {
+      ipcRenderer.on('plugins:changed', () => handler())
+    },
+    openFolder: () => ipcRenderer.invoke('plugins:openFolder'),
+    saveDocs: () => ipcRenderer.invoke('plugins:saveDocs'),
+    saveTemplate: () => ipcRenderer.invoke('plugins:saveTemplate'),
+    docs: () => ipcRenderer.invoke('plugins:docs'),
+    command: (pluginId, name, args) => ipcRenderer.invoke('plugins:command', pluginId, name, args),
+    fetch: (pluginId, url, as) => ipcRenderer.invoke('plugins:fetch', pluginId, url, as),
+    capture: (pluginId, opts) => ipcRenderer.invoke('plugins:capture', pluginId, opts),
+    storageGet: (pluginId, key) => ipcRenderer.invoke('plugins:storageGet', pluginId, key),
+    storageSet: (pluginId, key, value) => ipcRenderer.invoke('plugins:storageSet', pluginId, key, value)
+  },
   platform: process.platform,
   tabId,
   library: {

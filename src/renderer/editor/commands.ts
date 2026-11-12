@@ -267,6 +267,7 @@ const handlers: Record<CommandName, (a: Args) => unknown | Promise<unknown>> = {
   create_image: async (a) => {
     const parentId = checkParent(a.parentId)
     const hash: string = a.imageHash
+    if (!hash) throw new Error('create_image needs source or imageHash')
     const size = await imageSize(hash)
     let w = a.width ?? size?.w ?? 200
     let h = a.height ?? size?.h ?? 200

@@ -1,0 +1,191 @@
+/* floating plugin window in the editor */
+.plugin-win {
+  position: absolute;
+  top: 56px;
+  right: 16px;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  max-width: calc(100% - 32px);
+  max-height: calc(100% - 140px);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+/* a plugin without a window still needs a live frame */
+.plugin-win.hidden {
+  width: 0;
+  height: 0;
+  border: none;
+  opacity: 0;
+  pointer-events: none;
+}
+.plugin-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 6px 0 12px;
+  flex: none;
+  cursor: grab;
+  border-bottom: 1px solid var(--border);
+  user-select: none;
+}
+.plugin-head img {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+}
+.plugin-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--accent);
+}
+.plugin-title {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.plugin-frame {
+  display: block;
+  border: none;
+  max-width: 100%;
+  min-height: 0;
+  flex: 0 1 auto;
+  background: transparent;
+}
+
+/* settings → plugins */
+.plugin-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+.plugin-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+}
+.plugin-icon {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--panel-2);
+  font-weight: 700;
+  overflow: hidden;
+}
+.plugin-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.plugin-meta {
+  flex: 1;
+  min-width: 0;
+}
+.plugin-name {
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.plugin-name .muted {
+  font-weight: 400;
+}
+.chip-tag {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--text-2);
+}
+.chip-tag.warn {
+  background: rgba(255, 170, 0, 0.16);
+  color: #e0a030;
+}
+
+/* documentation viewer */
+.docs-view {
+  margin-top: 12px;
+  padding: 4px 20px 16px;
+  max-height: 70vh;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  user-select: text;
+}
+.md h2 {
+  font-size: 20px;
+  margin: 22px 0 8px;
+}
+.md h3 {
+  font-size: 16px;
+  margin: 20px 0 6px;
+}
+.md h4,
+.md h5 {
+  font-size: 13px;
+  margin: 16px 0 4px;
+}
+.md p,
+.md li {
+  line-height: 1.6;
+  color: var(--text);
+}
+.md ul,
+.md ol {
+  padding-left: 22px;
+  margin: 6px 0 10px;
+}
+.md code {
+  font-family: Consolas, 'SF Mono', Menlo, monospace;
+  font-size: 12px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--panel-2);
+}
+.md pre {
+  font-family: Consolas, 'SF Mono', Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--bg);
+  overflow-x: auto;
+  white-space: pre;
+  user-select: text;
+}
+.md table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 8px 0 14px;
+  font-size: 12px;
+}
+.md th,
+.md td {
+  text-align: left;
+  vertical-align: top;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.md th {
+  color: var(--text-2);
+  font-weight: 600;
+}

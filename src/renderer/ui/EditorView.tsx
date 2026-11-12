@@ -14,6 +14,7 @@ import { ContextMenu } from './ContextMenu'
 import { useT } from './i18n'
 import { AnnotationEditor } from './AnnotationEditor'
 import { ActionsPalette } from './ActionsPalette'
+import { PluginHost } from './PluginHost'
 import { backend } from '../backend'
 import { imageFillOf, replaceImageFill } from '../editor/figma-images'
 import { offerFigmaImages } from './actions'
@@ -154,6 +155,7 @@ export function EditorView({ onHome }: { onHome: () => void }) {
         <ZoomChip />
         {annotationId && <AnnotationEditor id={annotationId} onClose={() => setAnnotationId(null)} />}
         {actionsOpen && <ActionsPalette onClose={() => setActionsOpen(false)} />}
+        <PluginHost />
         {ed.toast && (
           <div className="toast">
             <span>{ed.toast}</span>

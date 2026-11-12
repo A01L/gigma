@@ -6,6 +6,8 @@ import { Icons } from './icons'
 import { useT } from './i18n'
 import { TOOL_GROUPS } from './Toolbar'
 import { runAction, exportSelectionPng, exportSelectionSvg, placeImage } from './actions'
+import { runPlugin, usePlugins } from './plugins'
+import { backend } from '../backend'
 
 interface Action {
   id: string
@@ -13,6 +15,8 @@ interface Action {
   hint?: string
   section: string
   icon?: keyof typeof Icons
+  /** plugin icon */
+  img?: string
   run: () => void
 }
 
@@ -21,6 +25,7 @@ export function ActionsPalette({ onClose }: { onClose: () => void }) {
   const [q, setQ] = useState('')
   const [tab, setTab] = useState<'all' | 'layers'>('all')
   const [active, setActive] = useState(0)
+  const plugins = usePlugins()
   const input = useRef<HTMLInputElement>(null)
   useEffect(() => input.current?.focus(), [])
 
@@ -50,8 +55,10 @@ export function ActionsPalette({ onClose }: { onClose: () => void }) {
     cmd('svg', 'Export selection as SVG', '', () => void exportSelectionSvg())
     cmd('place-image', 'Place image', 'Ctrl+Shift+K', placeImage)
     cmd('add-page', 'Add page', '', () => ed.addPage())
+    for (const p of plugins) out.push({ id: 'plugin:' + p.id, label: p.name, hint: p.description ?? '', section: t('Plugins'), img: p.iconUrl ?? undefined, run: () => runPlugin(p.id) })
+    out.push({ id: 'plugin-manage', label: t('Manage plugins…'), hint: '', section: t('Plugins'), run: () => void backend.tabs.openSettings() })
     return out
-  }, [t])
+  }, [t, plugins])
 
   const layers = useMemo<Action[]>(
     () =>
@@ -124,7 +131,7 @@ export function ActionsPalette({ onClose }: { onClose: () => void }) {
               <div key={a.id}>
                 {header && <div className="palette-section">{header}</div>}
                 <button className={'palette-item' + (i === active ? ' active' : '')} onMouseEnter={() => setActive(i)} onClick={() => run(a)}>
-                  <span className="pi-icon">{a.icon ? Icons[a.icon] : null}</span>
+                  <span className="pi-icon">{a.img ? <img src={a.img} alt="" width={16} height={16} /> : a.icon ? Icons[a.icon] : null}</span>
                   <span className="pi-label">{a.label}</span>
                   <span className="pi-hint">{a.hint}</span>
                 </button>

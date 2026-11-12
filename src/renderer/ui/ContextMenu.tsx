@@ -8,6 +8,8 @@ import { useT } from './i18n'
 import { layerActions as A, copyProperties, pasteProperties } from './layerActions'
 import { exportSelectionPng, exportSelectionSvg } from './actions'
 import { TypeIcon } from './icons'
+import { runPlugin, usePlugins } from './plugins'
+import { backend } from '../backend'
 
 type Item = { label: string; key?: string; run?: () => void; disabled?: boolean; children?: Item[]; icon?: React.ReactNode; raw?: boolean } | 'sep'
 
@@ -101,6 +103,15 @@ export function ContextMenu({ x, y, onClose }: { x: number; y: number; onClose: 
       return { label: n.name, raw: true, icon: <TypeIcon type={n.isComponent ? 'COMPONENT' : n.componentId ? 'INSTANCE' : isBooleanGroup(n) ? n.booleanOperation! : n.type} />, run: () => ed.setSelection([id]) }
     })
   }
+  const plugins = usePlugins()
+  const pluginsItem: Item = {
+    label: 'Plugins',
+    children: [
+      ...plugins.map((p): Item => ({ label: p.name, raw: true, icon: p.iconUrl ? <img src={p.iconUrl} alt="" width={14} height={14} /> : undefined, run: () => runPlugin(p.id) })),
+      ...(plugins.length ? (['sep'] as Item[]) : []),
+      { label: 'Manage plugins…', run: () => void backend.tabs.openSettings() }
+    ]
+  }
   const pages = ed.sortedPages().filter((p) => p.id !== ed.currentPageId)
   const moveToPage: Item = { label: 'Move to page', disabled: !pages.length, children: pages.map((p) => ({ label: p.name, raw: true, run: () => A.moveToPage(p.id) })) }
   const copyPasteAs: Item = {
@@ -152,6 +163,7 @@ export function ContextMenu({ x, y, onClose }: { x: number; y: number; onClose: 
               { label: 'Detach instance', key: 'Ctrl+Alt+B', run: A.detachInstance }
             ] as Item[])
           : [{ label: 'Create component', key: 'Ctrl+Alt+K', run: A.createComponent, disabled: inComponent } as Item]),
+        pluginsItem,
         'sep',
         { label: 'Show/Hide', key: 'Ctrl+Shift+H', run: A.toggleVisible },
         { label: 'Lock/Unlock', key: 'Ctrl+Shift+L', run: A.toggleLock },
@@ -164,6 +176,7 @@ export function ContextMenu({ x, y, onClose }: { x: number; y: number; onClose: 
         'sep',
         selectLayer,
         { label: 'Select all', key: 'Ctrl+A', run: () => ed.setSelection([...ed.children(null)]) },
+        pluginsItem,
         'sep',
         { label: 'Zoom to fit', key: 'Shift+1', run: () => ed.zoomToFit() },
         { label: 'Zoom to 100%', key: 'Shift+0', run: () => ed.setZoom(1) },

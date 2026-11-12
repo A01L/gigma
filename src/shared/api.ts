@@ -49,8 +49,67 @@ export interface TabsState {
   tabs: TabInfo[]
 }
 
+/** manifest.json of a plugin package (.plug.gigma) */
+export interface PluginManifest {
+  /** unique id: lowercase latin letters, digits and dashes */
+  id: string
+  name: string
+  version: string
+  description?: string
+  author?: string
+  /** HTML page that is the plugin (default index.html) */
+  main?: string
+  /** image inside the package shown in menus (svg / png) */
+  icon?: string
+  /** size of the plugin window; false = no window (the plugin runs hidden and closes itself) */
+  ui?: { width?: number; height?: number } | false
+  /** "network": gigma.fetch and gigma.capturePage may reach the internet */
+  permissions?: string[]
+}
+
+export interface PluginInfo extends PluginManifest {
+  /** address of the plugin page for the sandboxed frame */
+  url: string
+  iconUrl: string | null
+  /** installed from a folder (developer mode): files are read from that folder on every run */
+  devPath?: string
+}
+
+export interface PageCapture {
+  /** PNG / JPEG bytes of the whole page */
+  bytes: Uint8Array
+  mime: string
+  /** size of the page in CSS pixels */
+  width: number
+  height: number
+  title: string
+}
+
 /** Bridge exposed by the preload script as window.gigma */
 export interface GigmaApi {
+  plugins: {
+    list(): Promise<PluginInfo[]>
+    /** pick a .plug.gigma file and install it; null = cancelled */
+    install(): Promise<PluginInfo | null>
+    /** developer mode: use a folder with manifest.json as a plugin */
+    installFolder(): Promise<PluginInfo | null>
+    /** install a package given as a dropped File or as a path */
+    installPath(file: File | string): Promise<PluginInfo>
+    remove(id: string): Promise<void>
+    onChanged(handler: () => void): void
+    openFolder(): Promise<void>
+    /** save the plugin documentation (Markdown) / a starter plugin; false = cancelled */
+    saveDocs(): Promise<boolean>
+    saveTemplate(): Promise<boolean>
+    /** full text of the documentation, for the in-app viewer */
+    docs(): Promise<string>
+    // ---- used by the plugin host of a project tab ----
+    command(pluginId: string, name: string, args: unknown): Promise<unknown>
+    fetch(pluginId: string, url: string, as: 'text' | 'json' | 'dataURL'): Promise<unknown>
+    capture(pluginId: string, opts: { url: string; width: number; mobile?: boolean; maxHeight?: number }): Promise<PageCapture>
+    storageGet(pluginId: string, key: string): Promise<unknown>
+    storageSet(pluginId: string, key: string, value: unknown): Promise<void>
+  }
   platform: string
   /** id of the project tab this renderer belongs to (null in the shell / web mode) */
   tabId: string | null

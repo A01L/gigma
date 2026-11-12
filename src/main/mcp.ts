@@ -37,6 +37,54 @@ const box = {
   height: z.number().positive()
 }
 
+/** Every command with its argument schema: shared by MCP and by plugins (same names, same arguments). */
+const TOOLS = new Map<CommandName, { description: string; shape: z.ZodRawShape; map: (a: Record<string, unknown>) => Record<string, unknown> }>()
+function tools(): typeof TOOLS {
+  if (!TOOLS.size) buildServer(async () => null)
+  return TOOLS
+}
+
+/** commands that act on the application, not on a document: MCP only */
+const APP_COMMANDS = new Set<string>(['list_projects', 'create_project', 'open_project', 'list_tabs', 'switch_tab'])
+
+/** Check the arguments of a command sent by a plugin and fill in the defaults, exactly as for MCP calls. */
+export function prepareCommand(name: string, args: unknown): { name: CommandName; args: Record<string, unknown> } {
+  const def = tools().get(name as CommandName)
+  if (!def || APP_COMMANDS.has(name)) throw new Error(`Unknown command "${name}"`)
+  const parsed = z.object(def.shape).safeParse(args ?? {})
+  if (!parsed.success) throw new Error(`${name}: ` + parsed.error.issues.map((i) => `${i.path.join('.') || 'arguments'}: ${i.message}`).join('; '))
+  return { name: name as CommandName, args: def.map(parsed.data as Record<string, unknown>) }
+}
+
+/** Markdown reference of the document commands (for the plugin documentation). */
+export function commandReference(): string {
+  let out = ''
+  for (const [name, def] of tools()) {
+    if (APP_COMMANDS.has(name)) continue
+    out += `### \`${name}\`\n\n${def.description}\n\n`
+    const schema = z.toJSONSchema(z.object(def.shape), { io: 'input' }) as { properties?: Record<string, Record<string, unknown>>; required?: string[] }
+    const props = Object.entries(schema.properties ?? {})
+    if (!props.length) {
+      out += '_No arguments._\n\n'
+      continue
+    }
+    const typeOf = (p: Record<string, unknown>): string => {
+      if (Array.isArray(p.enum)) return p.enum.map((v) => JSON.stringify(v)).join(' \\| ')
+      if (Array.isArray(p.anyOf)) return (p.anyOf as Record<string, unknown>[]).map(typeOf).join(' \\| ')
+      if (p.type === 'array') return `array of ${p.items ? typeOf(p.items as Record<string, unknown>) : 'any'}`
+      if (p.type === 'object') return 'object {' + Object.keys((p.properties as object) ?? {}).join(', ') + '}'
+      return String(p.type ?? 'any')
+    }
+    out += '| Argument | Type | Required | Description |\n|---|---|---|---|\n'
+    for (const [k, p] of props) {
+      const req = schema.required?.includes(k) ? 'yes' : p.default !== undefined ? `default ${JSON.stringify(p.default)}` : ''
+      out += `| \`${k}\` | ${typeOf(p)} | ${req} | ${String(p.description ?? '').replace(/\|/g, '\\|')} |\n`
+    }
+    out += '\n'
+  }
+  return out
+}
+
 function buildServer(run: RunCommand): McpServer {
   const server = new McpServer(
     { name: 'gigma', version: '0.1.0' },
@@ -60,6 +108,7 @@ function buildServer(run: RunCommand): McpServer {
     shape: z.ZodRawShape,
     map: (a: Record<string, unknown>) => Record<string, unknown> = (a) => a
   ) => {
+    TOOLS.set(name, { description, shape, map })
     server.registerTool(name, { description, inputSchema: shape }, async (args: Record<string, unknown>) => {
       try {
         const result = await run(name, map(args))
@@ -166,7 +215,8 @@ function buildServer(run: RunCommand): McpServer {
     }
   )
   tool('create_image', 'Insert a raster image from base64 data, a data: URL or a local file path.', {
-    source: z.string().describe('base64 string, data:image/...;base64,..., or absolute local file path'),
+    source: z.string().optional().describe('base64 string, data:image/...;base64,..., or absolute local file path'),
+    imageHash: z.string().optional().describe('Instead of source: an image already in the project (plugins get one from gigma.createImage)'),
     x: z.number().default(0),
     y: z.number().default(0),
     width: z.number().positive().optional(),

@@ -5,6 +5,7 @@ import './ui/home-figma.css'
 import './ui/select.css'
 import './ui/colorpicker.css'
 import './ui/layout-guards.css'
+import './ui/plugins.css'
 
 // Desktop: the window shell (tab bar + Home) and every project tab load this same bundle,
 // distinguished by the URL hash. Web mode (`npm run web`) runs a single in-memory editor.

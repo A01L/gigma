@@ -17,6 +17,7 @@ import {
 } from './library'
 import { getSettings, setSettings } from './settings'
 import { startMcpServer, type McpHandle } from './mcp'
+import { handlePluginRequest, installPackage, isPluginFile, registerPlugins } from './plugins'
 import type { CommandName, CommandResponse } from '../shared/commands'
 import type { DocChanges } from '../shared/types'
 import type { AppSettings, McpStatus, TabInfo, TabsState } from '../shared/api'
@@ -27,7 +28,9 @@ const isMac = process.platform === 'darwin'
 
 protocol.registerSchemesAsPrivileged([
   // corsEnabled: renderers (served from http://localhost in dev, file:// in prod) fetch() image bytes
-  { scheme: 'gigma-blob', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }
+  { scheme: 'gigma-blob', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } },
+  // files of installed plugins, shown in sandboxed frames inside the editor
+  { scheme: 'gigma-plugin', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } }
 ])
 
 let win: BrowserWindow | null = null
@@ -612,6 +615,12 @@ function createWindow(): void {
   })
 }
 
+/** tell the shell and every project tab that something changed */
+function broadcast(channel: string): void {
+  if (win && !win.isDestroyed()) win.webContents.send(channel)
+  for (const t of tabs) if (!t.view.webContents.isDestroyed()) t.view.webContents.send(channel)
+}
+
 // ---------- double-clicked .gigma files: import into the library and open ----------
 const pendingFiles: string[] = process.argv.slice(1).filter((a) => a.toLowerCase().endsWith('.gigma'))
 let shellReady = false
@@ -619,6 +628,27 @@ let shellReady = false
 async function openExternalFile(file: string): Promise<void> {
   if (!shellReady || !win) {
     pendingFiles.push(file)
+    return
+  }
+  // a double-clicked .plug.gigma is a plugin package: ask, then install
+  if (isPluginFile(file)) {
+    try {
+      const ru = effectiveLang(getSettings()) === 'ru'
+      const r = await dialog.showMessageBox(win, {
+        type: 'question',
+        buttons: ru ? ['Установить', 'Отмена'] : ['Install', 'Cancel'],
+        defaultId: 0,
+        cancelId: 1,
+        message: ru ? 'Установить плагин Gigma?' : 'Install this Gigma plugin?',
+        detail: file
+      })
+      if (r.response !== 0) return
+      const info = installPackage(file)
+      broadcast('plugins:changed')
+      await dialog.showMessageBox(win, { type: 'info', message: (ru ? 'Плагин установлен: ' : 'Plugin installed: ') + info.name })
+    } catch (e) {
+      dialog.showErrorBox('Gigma', `Could not install ${file}:\n${(e as Error).message}`)
+    }
     return
   }
   try {
@@ -659,6 +689,22 @@ app.whenReady().then(async () => {
     const cors = { 'access-control-allow-origin': '*' }
     if (!b) return new Response('not found', { status: 404, headers: cors })
     return new Response(Buffer.from(b.bytes), { headers: { ...cors, 'content-type': b.mime, 'cache-control': 'max-age=31536000, immutable' } })
+  })
+  protocol.handle('gigma-plugin', (req) => {
+    try {
+      return handlePluginRequest(req)
+    } catch (e) {
+      return new Response(String((e as Error).message), { status: 500 })
+    }
+  })
+  registerPlugins({
+    window: () => win,
+    broadcast,
+    runInTab: (wc, name, args) => {
+      const tab = tabOf(wc)
+      if (!tab) throw new Error('plugins run inside an open project')
+      return runCommand(name, { ...args, tabId: tab.id })
+    }
   })
   buildMenu()
   createWindow()

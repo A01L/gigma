@@ -29,6 +29,24 @@ function memoryBackend(): GigmaApi {
   return {
     platform: 'web',
     tabId: null,
+    // plugins need the desktop app (packages live on disk, pages are served by the main process)
+    plugins: {
+      list: async () => [],
+      install: async () => null,
+      installFolder: async () => null,
+      installPath: async () => Promise.reject(new Error('plugins need the desktop app')),
+      remove: async () => {},
+      onChanged: () => {},
+      openFolder: async () => {},
+      saveDocs: async () => false,
+      saveTemplate: async () => false,
+      docs: async () => '',
+      command: async () => Promise.reject(new Error('plugins need the desktop app')),
+      fetch: async () => Promise.reject(new Error('plugins need the desktop app')),
+      capture: async () => Promise.reject(new Error('plugins need the desktop app')),
+      storageGet: async () => null,
+      storageSet: async () => {}
+    },
     tabs: {
       state: async () => ({ activeId: null, tabs: [] }),
       open: async () => {},
