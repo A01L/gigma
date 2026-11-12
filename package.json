@@ -4,6 +4,12 @@
   "version": "0.1.0",
   "description": "Offline, open-source desktop design tool with a built-in MCP server.",
   "license": "MIT",
+  "author": "A01L",
+  "homepage": "https://github.com/A01L/gigma",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/A01L/gigma.git"
+  },
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
@@ -12,6 +18,7 @@
     "web": "vite --config vite.web.config.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "icons": "electron scripts/make-icons.cjs",
+    "installer-art": "electron scripts/make-installer-art.cjs",
     "smoke": "node scripts/mcp-smoke.mjs",
     "dist:win": "electron-vite build && electron-builder --win",
     "dist:mac": "electron-vite build && electron-builder --mac"
@@ -56,9 +63,41 @@
     ],
     "win": {
       "target": [
-        "nsis"
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "Gigma-Setup-${version}.${ext}",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "installerSidebar": "build/installer-sidebar.bmp",
+      "uninstallerSidebar": "build/installer-sidebar.bmp",
+      "installerHeader": "build/installer-header.bmp",
+      "include": "build/installer.nsh",
+      "license": "LICENSE",
+      "installerLanguages": [
+        "ru_RU",
+        "en_US"
+      ],
+      "multiLanguageInstaller": true,
+      "displayLanguageSelector": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Gigma",
+      "uninstallDisplayName": "Gigma ${version}",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false
     },
     "mac": {
       "target": [
