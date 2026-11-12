@@ -6,7 +6,7 @@ import { editor as ed } from '../editor/editor'
 import { isBooleanGroup } from '../editor/boolean'
 import { useT } from './i18n'
 import { layerActions as A, copyProperties, pasteProperties } from './layerActions'
-import { exportSelectionPng, exportSelectionSvg } from './actions'
+import { exportFramesPdf, exportPdf, exportSelectionPng, exportSelectionSvg } from './actions'
 import { TypeIcon } from './icons'
 import { runPlugin, usePlugins } from './plugins'
 import { backend } from '../backend'
@@ -124,7 +124,8 @@ export function ContextMenu({ x, y, onClose }: { x: number; y: number; onClose: 
       { label: 'Paste properties', key: 'Ctrl+Alt+V', run: pasteProperties },
       'sep',
       { label: 'Export selection as PNG', run: () => void exportSelectionPng() },
-      { label: 'Export selection as SVG', run: () => void exportSelectionSvg() }
+      { label: 'Export selection as SVG', run: () => void exportSelectionSvg() },
+      { label: 'Export selection as PDF', run: () => void exportPdf() }
     ]
   }
 
@@ -178,6 +179,7 @@ export function ContextMenu({ x, y, onClose }: { x: number; y: number; onClose: 
         'sep',
         selectLayer,
         { label: 'Select all', key: 'Ctrl+A', run: () => ed.setSelection([...ed.children(null)]) },
+        { label: 'Export frames to PDF', run: () => void exportFramesPdf() },
         pluginsItem,
         'sep',
         { label: 'Zoom to fit', key: 'Shift+1', run: () => ed.zoomToFit() },

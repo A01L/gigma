@@ -156,6 +156,10 @@ export interface GigmaApi {
     put(bytes: Uint8Array, mime: string): Promise<string>
     url(hash: string): string
   }
+  pdf: {
+    /** one PDF page per entry: the SVG of a layer on a page of width × height points */
+    render(pages: { svg: string; width: number; height: number; background?: string }[]): Promise<Uint8Array>
+  }
   code: {
     /** render HTML + CSS to PNG bytes (desktop: sandboxed offscreen window) */
     render(html: string, css: string, w: number, h: number, scale: number): Promise<Uint8Array> | null

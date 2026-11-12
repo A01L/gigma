@@ -459,6 +459,15 @@ function buildServer(run: RunCommand): McpServer {
   })
   tool('resolve_annotation', 'Mark an annotation as resolved after acting on it.', { id: z.string() })
   tool('export_svg', 'Export a node as SVG markup.', { id: z.string() })
+  tool(
+    'export_pdf',
+    'Export layers to a PDF file like Figma: one page per layer, each page as large as its layer (1 px = 1 pt), vector shapes and selectable text. Without ids every top-level frame of the current page is exported, ordered by rows from the top left. Returns the path of the saved file.',
+    {
+      ids: z.array(z.string()).optional().describe('Layers to export, one page each, in this order. Default: all top-level frames of the page'),
+      path: z.string().optional().describe('Absolute path of the PDF to write. Default: the Downloads folder, named after the project'),
+      name: z.string().optional().describe('File name (without extension) when no path is given')
+    }
+  )
   tool('zoom_to', 'Scroll and zoom the user viewport to fit given nodes.', { ids: z.array(z.string()).min(1) })
 
   return server

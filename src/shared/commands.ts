@@ -54,6 +54,7 @@ export type CommandName =
   | 'update_page'
   | 'delete_page'
   | 'export_svg'
+  | 'export_pdf'
   | 'zoom_to'
 
 export interface CommandRequest {

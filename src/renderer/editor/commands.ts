@@ -7,6 +7,7 @@ import { editor as ed, parseVariant } from './editor'
 import { DEFAULT_TEXT_STYLE } from './text'
 import { exportPng, imageSize } from './render'
 import { nodesToSvg, svgToNodes } from './svg'
+import { framesInReadingOrder, pdfPages } from './pdf'
 import { polygonPath, starPath } from './shapes'
 import { codeBitmapAsync } from './code-render'
 
@@ -691,6 +692,12 @@ const handlers: Record<CommandName, (a: Args) => unknown | Promise<unknown>> = {
     return { pngBase64: url.slice(url.indexOf(',') + 1), width: c.width, height: c.height }
   },
   export_svg: async (a) => nodesToSvg(ed, [requireNode(a.id).id], false),
+  // describes the pages; the main process turns them into the PDF file and returns its path
+  export_pdf: async (a) => {
+    const ids: string[] = Array.isArray(a.ids) && a.ids.length ? a.ids.map((id: string) => requireNode(id).id) : framesInReadingOrder(ed)
+    if (!ids.length) throw new Error('nothing to export: the page has no frames (pass ids)')
+    return { pages: await pdfPages(ed, ids), name: a.name ?? (ids.length === 1 ? ed.nodes.get(ids[0])!.name : `${ed.meta.name} – ${ed.page.name}`) }
+  },
   zoom_to: (a) => {
     ed.setSelection(a.ids)
     ed.zoomToRect(ed.selectionBounds(), 4)

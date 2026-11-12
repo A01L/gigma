@@ -2,6 +2,7 @@ import { backend, isDesktop } from '../backend'
 import { editor as ed } from '../editor/editor'
 import { renderToCanvas } from '../editor/render'
 import { nodesToSvg, svgToNodes } from '../editor/svg'
+import { framesInReadingOrder, pdfPages } from '../editor/pdf'
 import { copyAsPng, insertImageBytes } from '../editor/clipboard'
 import { isTyping } from '../editor/canvas'
 import { unionRects } from '../editor/util'
@@ -73,6 +74,27 @@ export async function exportSelectionSvg(): Promise<void> {
   if (!ed.selection.length) return ed.showToast('Select layers to export')
   const svg = await nodesToSvg(ed, ed.selection, false)
   download(new Blob([svg], { type: 'image/svg+xml' }), `${fileName()}.svg`)
+}
+
+/** PDF of the given layers, one page each (default: the selection in layer order) */
+export async function exportPdf(ids?: string[], name?: string): Promise<void> {
+  const list = ids ?? ed.roots(ed.selection).sort((a, b) => (ed.paintOrderKey(a) < ed.paintOrderKey(b) ? -1 : 1))
+  if (!list.length) return ed.showToast(t('Select layers to export'))
+  try {
+    ed.showToast(t('Preparing PDF…'))
+    const bytes = await backend.pdf.render(await pdfPages(ed, list))
+    download(new Blob([bytes as BlobPart], { type: 'application/pdf' }), `${name ?? fileName()}.pdf`)
+    ed.hideToast()
+  } catch (e) {
+    ed.showToast(t('PDF export failed') + ': ' + String((e as Error).message ?? e).replace(/^Error invoking remote method '[^']*': (Error: )?/, ''))
+  }
+}
+
+/** Figma's "Export frames to PDF": every top-level frame of the page, one page each */
+export async function exportFramesPdf(): Promise<void> {
+  const frames = framesInReadingOrder(ed)
+  if (!frames.length) return ed.showToast(t('There are no frames on this page'))
+  await exportPdf(frames, `${ed.meta.name} – ${ed.page.name}`.replace(/[\\/:*?"<>|]/g, '_'))
 }
 
 export function placeImage(): void {
@@ -152,6 +174,10 @@ export function runAction(action: string): void {
       return void exportSelectionPng()
     case 'export-svg':
       return void exportSelectionSvg()
+    case 'export-pdf':
+      return void exportPdf()
+    case 'export-frames-pdf':
+      return void exportFramesPdf()
   }
 }
 

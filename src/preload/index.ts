@@ -75,6 +75,9 @@ const api: GigmaApi = {
     put: (bytes, mime) => ipcRenderer.invoke('blob:put', bytes, mime),
     url: (hash) => `gigma-blob://t${tabId}/${hash}`
   },
+  pdf: {
+    render: (pages) => ipcRenderer.invoke('pdf:render', pages)
+  },
   code: {
     render: (html, css, w, h, scale) => ipcRenderer.invoke('code:render', html, css, w, h, scale)
   },

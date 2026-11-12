@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, protocol, clipboard, session, shell, WebContentsView, type WebContents } from 'electron'
 import { join, extname } from 'node:path'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { GigmaFile } from './storage'
 import {
@@ -18,6 +18,7 @@ import {
 import { getSettings, setSettings } from './settings'
 import { startMcpServer, type McpHandle } from './mcp'
 import { handlePluginRequest, installPackage, isPluginFile, registerPlugins } from './plugins'
+import { renderPdf, type PdfPage } from './pdf'
 import type { CommandName, CommandResponse } from '../shared/commands'
 import type { DocChanges } from '../shared/types'
 import type { AppSettings, McpStatus, TabInfo, TabsState } from '../shared/api'
@@ -257,7 +258,7 @@ async function runCommand(name: CommandName, args: Record<string, unknown>): Pro
       )
     }
   const id = randomUUID()
-  return new Promise((resolve, reject) => {
+  const result = await new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       pending.delete(id)
       reject(new Error('Gigma editor did not respond in time'))
@@ -265,6 +266,22 @@ async function runCommand(name: CommandName, args: Record<string, unknown>): Pro
     pending.set(id, { resolve, reject, timer })
     tab.view.webContents.send('cmd:request', { id, name, args })
   })
+  // export_pdf: the editor describes the pages, the PDF itself is made and saved here
+  if (name === 'export_pdf') {
+    const r = result as { pages: PdfPage[]; name: string }
+    const bytes = await renderPdf(r.pages)
+    let path = typeof args.path === 'string' && args.path.trim() ? args.path.trim() : ''
+    if (path && !/\.pdf$/i.test(path)) path += '.pdf'
+    if (!path) {
+      // a free name in Downloads
+      const base = join(app.getPath('downloads'), r.name.replace(/[\\/:*?"<>|]/g, '_') || 'Gigma')
+      path = base + '.pdf'
+      for (let i = 2; existsSync(path); i++) path = `${base} (${i}).pdf`
+    }
+    writeFileSync(path, bytes)
+    return { path, pages: r.pages.map((p) => ({ width: p.width, height: p.height })), bytes: bytes.length }
+  }
+  return result
 }
 
 // =====================================================================
@@ -424,6 +441,8 @@ ipcMain.handle('code:render', (_e, html: string, css: string, w: number, h: numb
   return job
 })
 
+ipcMain.handle('pdf:render', (_e, pages: PdfPage[]) => renderPdf(pages))
+
 // Fetch originals of images referenced by layers pasted from Figma.
 // Figma's clipboard has only image hashes; the Figma REST API maps hash -> download URL.
 // This is the only network access in Gigma and runs only when the user asks for it.
@@ -525,6 +544,8 @@ function buildMenu(): void {
         { label: L('Export Current Page as .gigma...', 'Экспорт текущей страницы в .gigma...'), click: toTab('export-page') },
         { label: L('Export Selection as PNG...', 'Экспорт выделения в PNG...'), click: toTab('export-png') },
         { label: L('Export Selection as SVG...', 'Экспорт выделения в SVG...'), click: toTab('export-svg') },
+        { label: L('Export Selection as PDF...', 'Экспорт выделения в PDF...'), click: toTab('export-pdf') },
+        { label: L('Export Frames to PDF...', 'Экспорт фреймов в PDF...'), click: toTab('export-frames-pdf') },
         { type: 'separator' },
         { label: L('Place Image...', 'Вставить изображение...'), accelerator: 'CmdOrCtrl+Shift+K', click: toTab('place-image') },
         { type: 'separator' },

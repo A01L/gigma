@@ -8,7 +8,7 @@ import { isBooleanGroup } from '../editor/boolean'
 import { editor as ed, parseVariant, variantName } from '../editor/editor'
 import { useEditor } from './hooks'
 import { BoolIcons, Icons } from './icons'
-import { exportSelectionPng, exportSelectionSvg, restoreFigmaImages, runAction } from './actions'
+import { exportFramesPdf, exportPdf, exportSelectionPng, exportSelectionSvg, restoreFigmaImages, runAction } from './actions'
 import { replaceImageFill } from '../editor/figma-images'
 import { isImageMissing } from '../editor/render'
 import { round2 } from '../editor/util'
@@ -216,9 +216,18 @@ export function RightPanel() {
 function PageInspector() {
   const p = ed.page
   return (
-    <Section title={t('Page')}>
-      <ColorField color={p.background} apply={(c) => ed.updatePage(p.id, { background: c })} />
-    </Section>
+    <>
+      <Section title={t('Page')}>
+        <ColorField color={p.background} apply={(c) => ed.updatePage(p.id, { background: c })} />
+      </Section>
+      <Section title={t('Export')}>
+        <div className="row">
+          <button className="btn" style={{ flex: 1 }} title={t('Every frame of this page becomes a page of one PDF file')} onClick={() => void exportFramesPdf()}>
+            {t('Export frames to PDF')}
+          </button>
+        </div>
+      </Section>
+    </>
   )
 }
 
@@ -1338,11 +1347,14 @@ function NodeInspector({ nodes }: { nodes: GNode[] }) {
           <div className="field" style={{ width: 64 }}>
             <Select value={scale} onChange={setScale} options={[0.5, 1, 2, 3, 4].map((s) => ({ value: s, label: `${s}x` }))} />
           </div>
-          <button className="btn" style={{ flex: 1 }} onClick={() => exportSelectionPng(scale)}>
+          <button className="btn" style={{ flex: 1, padding: '0 4px' }} onClick={() => exportSelectionPng(scale)}>
             PNG
           </button>
-          <button className="btn" style={{ flex: 1 }} onClick={() => exportSelectionSvg()}>
+          <button className="btn" style={{ flex: 1, padding: '0 4px' }} onClick={() => exportSelectionSvg()}>
             SVG
+          </button>
+          <button className="btn" style={{ flex: 1, padding: '0 4px' }} title={t('One page per selected layer, vector, with selectable text')} onClick={() => void exportPdf()}>
+            PDF
           </button>
         </div>
         <div className="row muted hint">{t('Ctrl+C copies as SVG — paste straight into Figma.')}</div>

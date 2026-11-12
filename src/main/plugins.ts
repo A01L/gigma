@@ -376,6 +376,8 @@ export function registerPlugins(host: {
   ipcMain.handle('plugins:command', (e, id: string, name: string, args: unknown) => {
     known(id)
     const cmd = prepareCommand(name, args)
+    // plugins cannot choose where files are written: exports always go to Downloads
+    if (cmd.name === 'export_pdf') delete cmd.args.path
     return host.runInTab(e.sender, cmd.name, cmd.args)
   })
   ipcMain.handle('plugins:fetch', (_e, id: string, url: string, as: 'text' | 'json' | 'dataURL') => {

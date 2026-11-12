@@ -29,6 +29,7 @@ function memoryBackend(): GigmaApi {
   return {
     platform: 'web',
     tabId: null,
+    pdf: { render: async () => Promise.reject(new Error('PDF export needs the desktop app')) },
     // plugins need the desktop app (packages live on disk, pages are served by the main process)
     plugins: {
       list: async () => [],
