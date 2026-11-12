@@ -1,0 +1,301 @@
+/* Home refinements to match the Figma Desktop file browser */
+
+.home-side {
+  width: 260px;
+  padding: 12px 8px;
+}
+.side-item {
+  height: 34px;
+  border-radius: 8px;
+}
+.side-brand {
+  padding: 6px 10px 12px;
+  font-size: 16px;
+  letter-spacing: -0.01em;
+}
+.brand-year {
+  font-weight: 900;
+  font-style: italic;
+  padding-right: 3px; /* keep the italic tail inside the gradient clip */
+  background: linear-gradient(100deg, #ff7a59 0%, #ff4fa3 40%, #9b5cff 72%, #3fa9ff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.home-side {
+  min-height: 0;
+  overflow: hidden;
+}
+.side-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.side-settings {
+  flex: none;
+}
+.chip-icon.red {
+  background: #f24822;
+}
+.card.trashed {
+  cursor: default;
+}
+.card.trashed .thumb img {
+  filter: grayscale(0.6);
+  opacity: 0.8;
+}
+.trash-actions {
+  display: flex;
+  gap: 8px;
+  padding: 0 16px 14px;
+}
+.pill-btn {
+  flex: 1;
+  height: 32px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  font-weight: 600;
+}
+.pill-btn:hover {
+  background: var(--hover);
+}
+.pill-btn.danger {
+  color: var(--danger);
+}
+.pill-btn.danger:hover {
+  background: rgba(242, 72, 34, 0.12);
+}
+.set-input {
+  flex: 1;
+  min-width: 160px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  outline: none;
+}
+.set-input:focus {
+  border-color: var(--accent);
+}
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.toast-action {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.toast-close {
+  color: #aaa;
+  font-size: 16px;
+  width: 20px;
+}
+.row.hint {
+  min-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  font-size: 11px;
+}
+.side-item.small {
+  height: 32px;
+  font-size: 12px;
+}
+.side-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.side-group {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.side-group-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 6px;
+  font-weight: 600;
+  color: var(--text);
+  text-align: left;
+}
+.chev-mini {
+  display: inline-block;
+  font-size: 9px;
+  color: var(--text-3);
+  transition: transform 0.12s;
+}
+.chev-mini.open {
+  transform: rotate(90deg);
+}
+.side-settings {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 52px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+}
+.side-settings:hover,
+.side-settings.active {
+  background: var(--hover);
+}
+.side-settings-chev {
+  margin-left: auto;
+  color: var(--text-3);
+  font-size: 16px;
+}
+
+/* top row: greeting + rounded chips */
+.home-head {
+  padding: 22px 32px 6px;
+  gap: 8px;
+}
+.home-head h1 {
+  font-size: 24px;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 16px 0 8px;
+  border-radius: 999px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.chip:hover {
+  background: var(--hover);
+}
+.chip-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+}
+.chip-icon svg {
+  width: 14px;
+  height: 14px;
+}
+.chip-icon.blue {
+  background: #0d99ff;
+}
+.chip-icon.purple {
+  background: #9747ff;
+}
+.chip-icon.green {
+  background: #14ae5c;
+}
+
+/* second row: text tabs + sort + view */
+.home-toolbar {
+  padding: 16px 32px 4px;
+}
+.text-tabs {
+  display: flex;
+  gap: 4px;
+}
+.text-tabs button {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 8px;
+  color: var(--text-2);
+  font-weight: 500;
+}
+.text-tabs button:hover {
+  color: var(--text);
+}
+.text-tabs button.on {
+  background: var(--panel-2);
+  color: var(--text);
+  font-weight: 600;
+}
+.pill-select {
+  height: 30px;
+  border-radius: 8px;
+  padding: 0 4px 0 10px;
+}
+.pill-seg {
+  border-radius: 8px;
+  padding: 2px;
+}
+.pill-seg button {
+  height: 24px;
+  min-width: 28px;
+  border-radius: 6px;
+  padding: 0 6px;
+}
+.pill-seg.wide button {
+  height: 30px;
+  padding: 0 16px;
+}
+
+/* cards */
+.home-grid {
+  padding: 12px 32px 32px;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 24px;
+}
+.card {
+  border-radius: 10px;
+  background: var(--panel);
+}
+.card .thumb {
+  aspect-ratio: 16 / 9;
+  background: #1e1e1e;
+  position: relative;
+  overflow: hidden;
+}
+:root[data-theme='light'] .card .thumb {
+  background: #f0f0f0;
+}
+.card .thumb img {
+  position: absolute;
+  inset: 12px;
+  width: calc(100% - 24px);
+  height: calc(100% - 24px);
+  object-fit: contain;
+  display: block;
+}
+.card .meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+}
+.meta-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.file-badge {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  display: grid;
+  place-items: center;
+}
+.file-badge img {
+  border-radius: 6px;
+}

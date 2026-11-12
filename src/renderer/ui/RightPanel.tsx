@@ -1,0 +1,1274 @@
+import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import type { Effect, EffectType, GNode, GradientPaint, Paint, RGBA } from '@shared/types'
+import { defaultEffect, hexToRgba, rgbaToCss, rgbaToHex } from '@shared/types'
+import { editor as ed } from '../editor/editor'
+import { useEditor } from './hooks'
+import { Icons } from './icons'
+import { exportSelectionPng, exportSelectionSvg, restoreFigmaImages, runAction } from './actions'
+import { replaceImageFill } from '../editor/figma-images'
+import { isImageMissing } from '../editor/render'
+import { round2 } from '../editor/util'
+import { DEFAULT_TEXT_STYLE } from '../editor/text'
+import { backend } from '../backend'
+import { t, useT } from './i18n'
+import { Select } from './Select'
+import { ColorPicker } from './ColorPicker'
+import { TypeSettings } from './TypeSettings'
+
+type Mixed = number | 'mixed'
+
+const same = <T,>(vals: T[]): T | 'mixed' => (vals.every((v) => v === vals[0]) ? vals[0] : 'mixed')
+
+/** Number input with Figma-like label scrubbing. `apply` runs inside a transaction. */
+function NumberField({ label, value, apply, min, step = 1, suffix }: { label: React.ReactNode; value: Mixed; apply: (v: number) => void; min?: number; step?: number; suffix?: string }) {
+  const [text, setText] = useState('')
+  const [focus, setFocus] = useState(false)
+  const shown = value === 'mixed' ? t('Mixed') : String(round2(value)) + (suffix ?? '')
+  const commit = (raw: string) => {
+    let v: number
+    try {
+      // allow simple math like Figma: 100+20, 50*2
+      v = Function(`"use strict";return (${raw.replace(/[^-+*/().\d\s]/g, '')})`)() as number
+    } catch {
+      return
+    }
+    if (!Number.isFinite(v)) return
+    if (min !== undefined) v = Math.max(min, v)
+    ed.act(() => apply(v))
+  }
+  const scrub = useRef<{ x: number; v: number } | null>(null)
+  return (
+    <label className="field">
+      <span
+        className="lbl"
+        onPointerDown={(e) => {
+          if (value === 'mixed') return
+          ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+          scrub.current = { x: e.clientX, v: value }
+          ed.begin()
+        }}
+        onPointerMove={(e) => {
+          if (!scrub.current) return
+          let v = scrub.current.v + Math.round((e.clientX - scrub.current.x) / 2) * step * (e.shiftKey ? 10 : 1)
+          if (min !== undefined) v = Math.max(min, v)
+          apply(v)
+          ed.emit('doc')
+        }}
+        onPointerUp={() => {
+          if (!scrub.current) return
+          scrub.current = null
+          ed.commit()
+        }}
+      >
+        {label}
+      </span>
+      <input
+        value={focus ? text : shown}
+        onFocus={(e) => {
+          setFocus(true)
+          setText(value === 'mixed' ? '' : String(round2(value)))
+          requestAnimationFrame(() => e.target.select())
+        }}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={() => {
+          setFocus(false)
+          if (text.trim() && text !== String(value)) commit(text)
+        }}
+        onKeyDown={(e) => {
+          e.stopPropagation()
+          if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+          if (e.key === 'Escape') {
+            setText(String(value))
+            ;(e.target as HTMLInputElement).blur()
+          }
+          if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && value !== 'mixed') {
+            e.preventDefault()
+            const v = (focus ? parseFloat(text) || 0 : value) + (e.key === 'ArrowUp' ? 1 : -1) * step * (e.shiftKey ? 10 : 1)
+            setText(String(round2(v)))
+            ed.act(() => apply(min !== undefined ? Math.max(min, v) : v))
+          }
+        }}
+      />
+    </label>
+  )
+}
+
+function ColorField({ color, apply, onRemove, visible, onToggleVisible, onType }: { onType?: (t: 'GRADIENT_LINEAR' | 'GRADIENT_RADIAL') => void; color: RGBA | 'mixed'; apply: (c: RGBA) => void; onRemove?: () => void; visible?: boolean; onToggleVisible?: () => void }) {
+  const [text, setText] = useState<string | null>(null)
+  const hex = color === 'mixed' ? 'Mixed' : rgbaToHex(color).slice(1).toUpperCase()
+  const alpha = color === 'mixed' ? 1 : color.a
+  const swatchRef = useRef<HTMLButtonElement>(null)
+  const [picking, setPicking] = useState(false)
+  return (
+    <div className={'row tight' + (visible === false ? ' dimmed' : '')}>
+      <div className="field" style={{ flex: 1 }}>
+        <button
+          ref={swatchRef}
+          type="button"
+          className="swatch"
+          onClick={() => {
+            if (picking) return
+            ed.begin() // the whole picking session is one undo step
+            setPicking(true)
+          }}
+        >
+          <div style={{ background: color === 'mixed' ? '#888' : rgbaToCss(color) }} />
+        </button>
+        {picking && swatchRef.current && (
+          <ColorPicker
+            color={color === 'mixed' ? { r: 0.5, g: 0.5, b: 0.5, a: 1 } : color}
+            anchor={swatchRef.current}
+            onType={
+              onType &&
+              ((tp) => {
+                onType(tp)
+                setPicking(false)
+                ed.commit()
+              })
+            }
+            onChange={(c) => {
+              apply(c)
+              ed.emit('doc')
+            }}
+            onClose={() => {
+              setPicking(false)
+              ed.commit()
+            }}
+          />
+        )}
+        <input
+          value={text ?? hex}
+          onFocus={(e) => {
+            setText(hex === 'Mixed' ? '' : hex)
+            requestAnimationFrame(() => e.target.select())
+          }}
+          onChange={(e) => setText(e.target.value)}
+          onBlur={() => {
+            if (text && /^#?[0-9a-f]{3,8}$/i.test(text.trim())) ed.act(() => apply({ ...hexToRgba(text.trim()), a: alpha }))
+            setText(null)
+          }}
+          onKeyDown={(e) => {
+            e.stopPropagation()
+            if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+          }}
+        />
+      </div>
+      <div style={{ width: 58, flex: 'none' }}>
+        <NumberField label="" value={Math.round(alpha * 100)} min={0} suffix="%" apply={(v) => color !== 'mixed' && apply({ ...color, a: Math.min(100, v) / 100 })} />
+      </div>
+      {onToggleVisible && (
+        <button className="icon-btn" title={visible === false ? t('Show') : t('Hide')} onClick={onToggleVisible}>
+          {visible === false ? Icons.eyeOff : Icons.eye}
+        </button>
+      )}
+      {onRemove && (
+        <button className="icon-btn" title={t('Remove')} onClick={onRemove}>
+          <svg width="12" height="12" viewBox="0 0 12 12" stroke="currentColor">
+            <path d="M2 6h8" />
+          </svg>
+        </button>
+      )}
+    </div>
+  )
+}
+
+function Section({ title, action, children }: { title: string; action?: React.ReactNode; children?: React.ReactNode }) {
+  return (
+    <div className="section">
+      <div className="section-title">
+        {title}
+        {action}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+export function RightPanel() {
+  useEditor('doc', 'selection', 'pages')
+  useT()
+  const nodes = ed.selection.map((id) => ed.nodes.get(id)).filter(Boolean) as GNode[]
+  return (
+    <div className="panel right">
+      <div className="p-head">
+        <div className="title">{nodes.length === 0 ? t('Design') : nodes.length === 1 ? t(nodes[0].type.charAt(0) + nodes[0].type.slice(1).toLowerCase()) : `${nodes.length} ${t('layers')}`}</div>
+        <button className="icon-btn" title="Hide panel (Ctrl+Alt+\)" onClick={() => runAction('toggle-right')}>
+          {Icons.sidebarR}
+        </button>
+      </div>
+      {nodes.length === 0 ? (
+        <PageInspector />
+      ) : nodes.length === 1 && ['SPEC', 'CODE', 'ANNOTATION', 'SLICE'].includes(nodes[0].type) ? (
+        <SpecialInspector node={nodes[0]} />
+      ) : (
+        <NodeInspector nodes={nodes} />
+      )}
+    </div>
+  )
+}
+
+function PageInspector() {
+  const p = ed.page
+  return (
+    <Section title={t('Page')}>
+      <ColorField color={p.background} apply={(c) => ed.updatePage(p.id, { background: c })} />
+    </Section>
+  )
+}
+
+function align(kind: 'l' | 'ch' | 'r' | 't' | 'cv' | 'b') {
+  const ids = ed.roots(ed.selection)
+  let box
+  if (ids.length === 1) {
+    const n = ed.nodes.get(ids[0])!
+    if (!n.parentId) return
+    box = ed.world(n.parentId)
+  } else box = ed.selectionBounds(ids)!
+  ed.act(() => {
+    for (const id of ids) {
+      const w = ed.world(id)
+      let dx = 0, dy = 0
+      if (kind === 'l') dx = box.x - w.x
+      if (kind === 'ch') dx = box.x + box.w / 2 - (w.x + w.w / 2)
+      if (kind === 'r') dx = box.x + box.w - (w.x + w.w)
+      if (kind === 't') dy = box.y - w.y
+      if (kind === 'cv') dy = box.y + box.h / 2 - (w.y + w.h / 2)
+      if (kind === 'b') dy = box.y + box.h - (w.y + w.h)
+      ed.moveBy(id, round2(dx), round2(dy))
+    }
+  })
+}
+
+const SubLabel = ({ children }: { children: React.ReactNode }) => <div className="sub-label">{children}</div>
+
+const EyeBtn = ({ on, onClick }: { on: boolean; onClick: () => void }) => (
+  <button className="icon-btn" title={on ? t('Hide') : t('Show')} onClick={onClick}>
+    {on ? Icons.eye : Icons.eyeOff}
+  </button>
+)
+const MinusBtn = ({ onClick }: { onClick: () => void }) => (
+  <button className="icon-btn" title={t('Remove')} onClick={onClick}>
+    <svg width="12" height="12" viewBox="0 0 12 12" stroke="currentColor">
+      <path d="M2 6h8" />
+    </svg>
+  </button>
+)
+
+const colorKey = (c: RGBA) => rgbaToHex(c) + Math.round(c.a * 100)
+
+/** Saved color styles of the document (Figma's four-dots button). */
+function StylesButton({ current, onApply }: { current: RGBA | null; onApply: (c: RGBA) => void }) {
+  const [open, setOpen] = useState(false)
+  const [name, setName] = useState('')
+  const btn = useRef<HTMLButtonElement>(null)
+  const pop = useRef<HTMLDivElement>(null)
+  const styles = ed.meta.colorStyles ?? []
+  useEffect(() => {
+    if (!open) return
+    const down = (e: MouseEvent) => {
+      if (!pop.current?.contains(e.target as Node) && !btn.current?.contains(e.target as Node)) setOpen(false)
+    }
+    window.addEventListener('mousedown', down, true)
+    return () => window.removeEventListener('mousedown', down, true)
+  }, [open])
+  const r = btn.current?.getBoundingClientRect()
+  const panelLeft = (btn.current?.closest('.panel') as HTMLElement | null)?.getBoundingClientRect().left ?? 0
+  return (
+    <>
+      <button ref={btn} className={'icon-btn' + (open ? ' active-soft' : '')} title={t('Styles')} onClick={() => setOpen(!open)}>
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.2">
+          <circle cx="4" cy="4" r="1.6" />
+          <circle cx="10" cy="4" r="1.6" />
+          <circle cx="4" cy="10" r="1.6" />
+          <circle cx="10" cy="10" r="1.6" />
+        </svg>
+      </button>
+      {open &&
+        r &&
+        createPortal(
+          <div ref={pop} className="tset" style={{ left: Math.max(8, panelLeft - 288), top: Math.max(8, Math.min(window.innerHeight - 360, r.top - 20)) }} onKeyDown={(e) => e.stopPropagation()}>
+            <div className="tset-head">
+              <b>{t('Styles')}</b>
+            </div>
+            <div className="styles-list">
+              {styles.length === 0 && <div className="muted" style={{ padding: '6px 2px' }}>{t('No saved styles yet')}</div>}
+              {styles.map((s) => (
+                <div key={s.id} className="style-row" onClick={() => (ed.act(() => onApply(s.color)), setOpen(false))}>
+                  <span className="swatch" style={{ margin: 0 }}>
+                    <div style={{ background: rgbaToCss(s.color) }} />
+                  </span>
+                  <span className="style-name">{s.name}</span>
+                  <span className="muted">{rgbaToHex(s.color).slice(1).toUpperCase()}</span>
+                  <button
+                    className="icon-btn small"
+                    title={t('Delete')}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      ed.setColorStyles(styles.filter((x) => x.id !== s.id))
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+            {current && (
+              <div className="style-save">
+                <span className="swatch" style={{ margin: 0 }}>
+                  <div style={{ background: rgbaToCss(current) }} />
+                </span>
+                <input className="tset-num" style={{ flex: 1, width: 'auto' }} placeholder={t('Style name')} value={name} onChange={(e) => setName(e.target.value)} />
+                <button
+                  className="btn primary"
+                  disabled={!name.trim()}
+                  onClick={() => {
+                    ed.setColorStyles([...styles, { id: crypto.randomUUID(), name: name.trim(), color: current }])
+                    setName('')
+                  }}
+                >
+                  {t('Save')}
+                </button>
+              </div>
+            )}
+          </div>,
+          document.body
+        )}
+    </>
+  )
+}
+
+/** Gradient fill editor: type, angle and colour stops. `set` runs inside the caller's transaction. */
+function GradientField({ paint, set, onRemove }: { paint: GradientPaint; set: (p: Paint) => void; onRemove: () => void }) {
+  const css = `${paint.type === 'GRADIENT_RADIAL' ? 'radial-gradient(circle' : `linear-gradient(${paint.angle ?? 180}deg`}, ${[...paint.stops]
+    .sort((a, b) => a.position - b.position)
+    .map((s) => `${rgbaToCss(s.color)} ${Math.round(s.position * 100)}%`)
+    .join(', ')})`
+  const setStop = (i: number, patch: Partial<GradientPaint['stops'][number]>) => set({ ...paint, stops: paint.stops.map((s, k) => (k === i ? { ...s, ...patch } : s)) })
+  return (
+    <div className="gradient">
+      <div className={'row tight' + (paint.visible === false ? ' dimmed' : '')}>
+        <div className="field" style={{ flex: 1 }}>
+          <span className="swatch">
+            <div style={{ background: css }} />
+          </span>
+          <Select
+            value={paint.type as string}
+            onChange={(v) =>
+              ed.act(() => {
+                if (v === 'SOLID') set({ type: 'SOLID', color: paint.stops[0]?.color ?? { r: 0.85, g: 0.85, b: 0.85, a: 1 }, visible: paint.visible })
+                else set({ ...paint, type: v as GradientPaint['type'] })
+              })
+            }
+            options={[
+              { value: 'SOLID', label: t('Solid') },
+              { value: 'GRADIENT_LINEAR', label: t('Linear') },
+              { value: 'GRADIENT_RADIAL', label: t('Radial') }
+            ]}
+          />
+        </div>
+        <EyeBtn on={paint.visible !== false} onClick={() => ed.act(() => set({ ...paint, visible: paint.visible === false ? undefined : false }))} />
+        <MinusBtn onClick={onRemove} />
+      </div>
+      <div className="gradient-body">
+        {paint.type === 'GRADIENT_LINEAR' && (
+          <div className="grid2">
+            <div title={t('Angle')}>
+              <NumberField
+                label={
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor">
+                    <path d="M2 2v8h8M2 6a4 4 0 014 4" />
+                  </svg>
+                }
+                suffix="°"
+                value={paint.angle ?? 180}
+                apply={(v) => set({ ...paint, angle: ((v % 360) + 360) % 360 })}
+              />
+            </div>
+            <button
+              className="btn"
+              title={t('Add stop')}
+              onClick={() =>
+                ed.act(() => {
+                  const last = paint.stops[paint.stops.length - 1]
+                  const prev = paint.stops[paint.stops.length - 2] ?? last
+                  set({ ...paint, stops: [...paint.stops.slice(0, -1), { position: (prev.position + last.position) / 2, color: last.color }, last] })
+                })
+              }
+            >
+              + {t('Add stop')}
+            </button>
+          </div>
+        )}
+        {paint.stops.map((s, i) => (
+          <div key={i} className="stop-row">
+            <div style={{ width: 42, flex: 'none' }}>
+              <NumberField label="" min={0} suffix="%" value={Math.round(s.position * 100)} apply={(v) => setStop(i, { position: Math.min(100, v) / 100 })} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <ColorField color={s.color} apply={(c) => setStop(i, { color: c })} onRemove={paint.stops.length > 2 ? () => ed.act(() => set({ ...paint, stops: paint.stops.filter((_, k) => k !== i) })) : undefined} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/** Every distinct colour used inside the selection; editing one recolours all its uses (like Figma). */
+function SelectionColors({ nodes }: { nodes: GNode[] }) {
+  const [all, setAll] = useState(false)
+  const set: GNode[] = []
+  for (const n of nodes) {
+    set.push(n)
+    for (const d of ed.descendants(n.id)) {
+      if (set.length > 3000) break
+      set.push(ed.nodes.get(d)!)
+    }
+  }
+  const colors = new Map<string, RGBA>()
+  for (const n of set) {
+    for (const f of n.fills) if (f.type === 'SOLID' && f.visible !== false) colors.set(colorKey(f.color), f.color)
+    for (const s of n.strokes) if (s.visible !== false) colors.set(colorKey(s.color), s.color)
+  }
+  if (colors.size < 2 && set.length === nodes.length) return null
+  if (!colors.size) return null
+  const list = [...colors.entries()]
+  const replace = (key: string, c: RGBA) => {
+    for (const n of set) {
+      const hitF = n.fills.some((f) => f.type === 'SOLID' && colorKey(f.color) === key)
+      const hitS = n.strokes.some((s) => colorKey(s.color) === key)
+      if (!hitF && !hitS) continue
+      ed.updateNode(n.id, {
+        fills: hitF ? n.fills.map((f) => (f.type === 'SOLID' && colorKey(f.color) === key ? { ...f, color: c } : f)) : n.fills,
+        strokes: hitS ? n.strokes.map((s) => (colorKey(s.color) === key ? { ...s, color: c } : s)) : n.strokes
+      })
+    }
+  }
+  const shown = all ? list : list.slice(0, 5)
+  return (
+    <Section title={t('Selection colors')}>
+      {shown.map(([key, c], i) => (
+        <ColorField key={i} color={c} apply={(nc) => replace(key, nc)} />
+      ))}
+      {list.length > shown.length && (
+        <div className="row">
+          <button className="btn" style={{ flex: 1 }} onClick={() => setAll(true)}>
+            {t('See all {n} colors', { n: String(list.length) })}
+          </button>
+        </div>
+      )}
+    </Section>
+  )
+}
+
+function NodeInspector({ nodes }: { nodes: GNode[] }) {
+  const each = (fn: (n: GNode) => void) => nodes.forEach(fn)
+  const worlds = nodes.map((n) => ed.world(n.id))
+  const allText = nodes.every((n) => n.type === 'TEXT')
+  const hasRadius = nodes.every((n) => n.type === 'RECTANGLE' || n.type === 'FRAME' || n.type === 'IMAGE' || n.type === 'SECTION')
+  const frames = nodes.filter((n) => n.type === 'FRAME')
+  const [scale, setScale] = useState(2)
+  const [cornersOpen, setCornersOpen] = useState(false)
+  const showCorners = hasRadius && (cornersOpen || nodes.some((n) => n.cornerRadii))
+  const locked = nodes.every((n) => n.constrainProportions)
+  const visible = nodes.every((n) => n.visible)
+
+  // dimensions honour "constrain proportions"
+  const setDim = (axis: 'w' | 'h', v: number) =>
+    each((n) => {
+      const w = ed.world(n.id)
+      const next = { ...w, [axis]: v }
+      if (n.constrainProportions && w.w > 0 && w.h > 0) {
+        if (axis === 'w') next.h = round2((w.h * v) / w.w)
+        else next.w = round2((w.w * v) / w.h)
+      }
+      ed.setWorldRect(n.id, next)
+    })
+
+  // fills: the first selected layer is the source of truth, edits apply to the whole selection
+  const fills = nodes[0].fills
+  const fillsMixed = nodes.some((n) => JSON.stringify(n.fills) !== JSON.stringify(fills))
+  const setFills = (next: Paint[]) => each((n) => ed.updateNode(n.id, { fills: next }))
+  const topSolid = [...fills].reverse().find((f) => f.type === 'SOLID') as Extract<Paint, { type: 'SOLID' }> | undefined
+  const strokes = nodes[0].strokes
+  const strokesMixed = nodes.some((n) => JSON.stringify(n.strokes) !== JSON.stringify(strokes))
+  const setStrokes = (next: GNode['strokes']) => each((n) => ed.updateNode(n.id, { strokes: next }))
+  const radii = (n: GNode): [number, number, number, number] => n.cornerRadii ?? [n.cornerRadius ?? 0, n.cornerRadius ?? 0, n.cornerRadius ?? 0, n.cornerRadius ?? 0]
+  const setCorner = (i: number, v: number) =>
+    each((n) => {
+      const r = [...radii(n)] as [number, number, number, number]
+      r[i] = v
+      ed.updateNode(n.id, { cornerRadii: r, cornerRadius: undefined })
+    })
+  const cornerIcon = (rot: number) => (
+    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" style={{ transform: `rotate(${rot}deg)` }}>
+      <path d="M1 9V5a4 4 0 014-4h4" />
+    </svg>
+  )
+
+  return (
+    <>
+      <Section title={t('Position')}>
+        <SubLabel>{t('Alignment')}</SubLabel>
+        <div className="row split">
+          <div className="seg">
+            <button title={t('Align left')} onClick={() => align('l')}>{Icons.alignL}</button>
+            <button title={t('Align horizontal centers')} onClick={() => align('ch')}>{Icons.alignCH}</button>
+            <button title={t('Align right')} onClick={() => align('r')}>{Icons.alignR}</button>
+          </div>
+          <div className="seg">
+            <button title={t('Align top')} onClick={() => align('t')}>{Icons.alignT}</button>
+            <button title={t('Align vertical centers')} onClick={() => align('cv')}>{Icons.alignCV}</button>
+            <button title={t('Align bottom')} onClick={() => align('b')}>{Icons.alignB}</button>
+          </div>
+        </div>
+        <SubLabel>{t('Position')}</SubLabel>
+        <div className="grid2">
+          <NumberField label="X" value={same(nodes.map((n) => n.x))} apply={(v) => each((n) => ed.updateNode(n.id, { x: v }))} />
+          <NumberField label="Y" value={same(nodes.map((n) => n.y))} apply={(v) => each((n) => ed.updateNode(n.id, { y: v }))} />
+        </div>
+        <SubLabel>{t('Rotation')}</SubLabel>
+        <div className="grid2">
+          <NumberField
+            label={
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor">
+                <path d="M2 2v8h8M2 6a4 4 0 014 4" />
+              </svg>
+            }
+            suffix="°"
+            value={same(nodes.map((n) => n.rotation ?? 0))}
+            apply={(v) => each((n) => ed.updateNode(n.id, { rotation: ((((v + 180) % 360) + 360) % 360) - 180 || undefined }))}
+          />
+          <div className="seg" style={{ justifySelf: 'start' }}>
+            <button title={t('Rotate 90° right')} onClick={() => ed.act(() => each((n) => ed.updateNode(n.id, { rotation: ((((((n.rotation ?? 0) - 90 + 180) % 360) + 360) % 360) - 180) || undefined })))}>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor">
+                <path d="M3 8a4 4 0 104-4h3M8.5 2L10.5 4l-2 2" />
+              </svg>
+            </button>
+            <button title={t('Flip horizontal')} className={nodes.every((n) => n.flipX) ? 'on' : ''} onClick={() => ed.act(() => each((n) => ed.updateNode(n.id, { flipX: !n.flipX || undefined })))}>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor">
+                <path d="M7 1.5v11M5 4L1.5 7 5 10zM9 4l3.5 3L9 10z" />
+              </svg>
+            </button>
+            <button title={t('Flip vertical')} className={nodes.every((n) => n.flipY) ? 'on' : ''} onClick={() => ed.act(() => each((n) => ed.updateNode(n.id, { flipY: !n.flipY || undefined })))}>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor">
+                <path d="M1.5 7h11M4 5l3-3.5L10 5zM4 9l3 3.5L10 9z" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </Section>
+
+      <Section title={t('Layout')}>
+        <SubLabel>{t('Dimensions')}</SubLabel>
+        <div className="row tight">
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <NumberField label="W" min={1} value={same(worlds.map((w) => w.w))} apply={(v) => setDim('w', v)} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <NumberField label="H" min={1} value={same(worlds.map((w) => w.h))} apply={(v) => setDim('h', v)} />
+          </div>
+          <button className={'icon-btn' + (locked ? ' active-soft' : '')} title={t('Constrain proportions')} onClick={() => ed.act(() => each((n) => ed.updateNode(n.id, { constrainProportions: !locked || undefined })))}>
+            {locked ? Icons.lock : Icons.unlock}
+          </button>
+        </div>
+        {frames.length > 0 && (
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={frames.every((f) => f.clipsContent !== false)}
+              onChange={(e) => ed.act(() => frames.forEach((f) => ed.updateNode(f.id, { clipsContent: e.target.checked })))}
+            />
+            {t('Clip content')}
+          </label>
+        )}
+      </Section>
+
+      <Section title={t('Appearance')} action={<EyeBtn on={visible} onClick={() => ed.act(() => each((n) => ed.updateNode(n.id, { visible: !visible })))} />}>
+        <div className="row tight" style={{ alignItems: 'flex-end' }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <SubLabel>{t('Opacity')}</SubLabel>
+            <NumberField
+              label={
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor">
+                  <rect x="1.5" y="1.5" width="9" height="9" rx="2" />
+                  <path d="M4 4h.01M6 6h.01M8 8h.01M8 4h.01M4 8h.01" strokeLinecap="round" />
+                </svg>
+              }
+              min={0}
+              suffix="%"
+              value={same(nodes.map((n) => Math.round(n.opacity * 100)))}
+              apply={(v) => each((n) => ed.updateNode(n.id, { opacity: Math.min(100, v) / 100 }))}
+            />
+          </div>
+          {hasRadius && (
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <SubLabel>{t('Corner radius')}</SubLabel>
+              <NumberField
+                label={
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor">
+                    <path d="M1.5 4.5v-1a2 2 0 012-2h1M7.5 1.5h1a2 2 0 012 2v1M10.5 7.5v1a2 2 0 01-2 2h-1M4.5 10.5h-1a2 2 0 01-2-2v-1" />
+                  </svg>
+                }
+                min={0}
+                value={same(nodes.map((n) => (n.cornerRadii ? (new Set(n.cornerRadii).size === 1 ? n.cornerRadii[0] : -1) : (n.cornerRadius ?? 0)))) === -1 ? 'mixed' : same(nodes.map((n) => (n.cornerRadii ? n.cornerRadii[0] : (n.cornerRadius ?? 0))))}
+                apply={(v) => each((n) => ed.updateNode(n.id, { cornerRadius: v, cornerRadii: undefined }))}
+              />
+            </div>
+          )}
+          {hasRadius && (
+            <button className={'icon-btn' + (showCorners ? ' active-soft' : '')} title={t('Individual corners')} onClick={() => setCornersOpen(!showCorners)}>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor">
+                <path d="M1.5 5V3.5a2 2 0 012-2H5M9 1.5h1.5a2 2 0 012 2V5M12.5 9v1.5a2 2 0 01-2 2H9M5 12.5H3.5a2 2 0 01-2-2V9" />
+              </svg>
+            </button>
+          )}
+        </div>
+        {showCorners && (
+          <div className="grid2">
+            {(
+              [
+                [0, 0, 'Top left'],
+                [1, 90, 'Top right'],
+                [3, 270, 'Bottom left'],
+                [2, 180, 'Bottom right']
+              ] as const
+            ).map(([i, rot, label]) => (
+              <div key={i} title={t(label)}>
+                <NumberField label={cornerIcon(rot)} min={0} value={same(nodes.map((n) => radii(n)[i]))} apply={(v) => setCorner(i, v)} />
+              </div>
+            ))}
+          </div>
+        )}
+        <label className="checkbox" title={t('The shape of this layer clips the layers above it')}>
+          <input type="checkbox" checked={nodes.every((n) => !!n.isMask)} onChange={(e) => ed.act(() => each((n) => ed.updateNode(n.id, { isMask: e.target.checked || undefined })))} />
+          {t('Use as mask')}
+        </label>
+      </Section>
+
+      {allText && <TextSection nodes={nodes} />}
+
+      <Section
+        title={t('Fill')}
+        action={
+          <span style={{ display: 'flex' }}>
+            <StylesButton current={topSolid?.color ?? null} onApply={(c) => setFills(topSolid ? fills.map((f) => (f === topSolid ? { ...f, color: c } : f)) : [...fills, { type: 'SOLID', color: c }])} />
+            <button className="icon-btn" title={t('Add fill')} onClick={() => ed.act(() => setFills([...(fillsMixed ? [] : fills), { type: 'SOLID', color: { r: 0.85, g: 0.85, b: 0.85, a: 1 } }]))}>
+              {Icons.plus}
+            </button>
+          </span>
+        }
+      >
+        {fillsMixed ? (
+          <div className="row muted hint">{t('Click + to replace mixed content')}</div>
+        ) : (
+          fills
+            .map((f, i) => ({ f, i }))
+            .reverse()
+            .map(({ f, i }) =>
+              f.type === 'SOLID' ? (
+                <ColorField
+                  key={i}
+                  color={f.color}
+                  visible={f.visible !== false}
+                  onToggleVisible={() => ed.act(() => setFills(fills.map((x, k) => (k === i ? { ...x, visible: x.visible === false ? undefined : false } : x))))}
+                  apply={(c) => setFills(fills.map((x, k) => (k === i ? { ...x, color: c } : x)))}
+                  onRemove={() => ed.act(() => setFills(fills.filter((_, k) => k !== i)))}
+                  onType={(type) =>
+                    // solid -> gradient: from this colour to the same colour fully transparent
+                    setFills(fills.map((x, k) => (k === i ? { type, angle: 180, stops: [{ position: 0, color: f.color }, { position: 1, color: { ...f.color, a: 0 } }], visible: x.visible } : x)))
+                  }
+                />
+              ) : 'stops' in f ? (
+                <GradientField
+                  key={i}
+                  paint={f}
+                  set={(p) => setFills(fills.map((x, k) => (k === i ? (p as Paint) : x)))}
+                  onRemove={() => ed.act(() => setFills(fills.filter((_, k) => k !== i)))}
+                />
+              ) : (
+                <div key={i}>
+                  <div className="row tight">
+                    <div className="field" style={{ flex: 1 }}>
+                      <span className="swatch">
+                        <div style={{ background: `center/cover url(${backend.blob.url(f.imageHash)})` }} />
+                      </span>
+                      <Select
+                        value={f.scaleMode}
+                        onChange={(v) => ed.act(() => setFills(fills.map((x, k) => (k === i && x.type === 'IMAGE' ? { ...x, scaleMode: v } : x))))}
+                        options={[
+                          { value: 'FILL', label: t('Fill mode') },
+                          { value: 'FIT', label: t('Fit') },
+                          { value: 'STRETCH', label: t('Stretch') }
+                        ]}
+                      />
+                    </div>
+                    <EyeBtn on={f.visible !== false} onClick={() => ed.act(() => setFills(fills.map((x, k) => (k === i ? { ...x, visible: x.visible === false ? undefined : false } : x))))} />
+                    <MinusBtn onClick={() => ed.act(() => setFills(fills.filter((_, k) => k !== i)))} />
+                  </div>
+                  {nodes.length === 1 && <ImageFillActions nodeId={nodes[0].id} hash={f.imageHash} fromFigma={!!f.figmaFileKey} />}
+                </div>
+              )
+            )
+        )}
+      </Section>
+
+      <Section
+        title={t('Stroke')}
+        action={
+          <span style={{ display: 'flex' }}>
+            <StylesButton current={strokes[0]?.color ?? null} onApply={(c) => setStrokes(strokes.length ? strokes.map((s, k) => (k === 0 ? { ...s, color: c } : s)) : [{ color: c, weight: 1, align: 'INSIDE' }])} />
+            <button className="icon-btn" title={t('Add stroke')} onClick={() => ed.act(() => setStrokes([...(strokesMixed ? [] : strokes), { color: { r: 0, g: 0, b: 0, a: 1 }, weight: 1, align: 'INSIDE' }]))}>
+              {Icons.plus}
+            </button>
+          </span>
+        }
+      >
+        {strokesMixed ? (
+          <div className="row muted hint">{t('Click + to replace mixed content')}</div>
+        ) : (
+          strokes.length > 0 && (
+            <>
+              {strokes
+                .map((s, i) => ({ s, i }))
+                .reverse()
+                .map(({ s, i }) => (
+                  <ColorField
+                    key={i}
+                    color={s.color}
+                    visible={s.visible !== false}
+                    onToggleVisible={() => ed.act(() => setStrokes(strokes.map((x, k) => (k === i ? { ...x, visible: x.visible === false ? undefined : false } : x))))}
+                    apply={(c) => setStrokes(strokes.map((x, k) => (k === i ? { ...x, color: c } : x)))}
+                    onRemove={() => ed.act(() => setStrokes(strokes.filter((_, k) => k !== i)))}
+                  />
+                ))}
+              <div className="grid2">
+                <div>
+                  <SubLabel>{t('Position')}</SubLabel>
+                  <div className="field">
+                    <Select
+                      value={strokes[0].align ?? 'CENTER'}
+                      onChange={(v) => ed.act(() => setStrokes(strokes.map((s) => ({ ...s, align: v }))))}
+                      options={[
+                        { value: 'INSIDE', label: t('Inside') },
+                        { value: 'CENTER', label: t('Center') },
+                        { value: 'OUTSIDE', label: t('Outside') }
+                      ]}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <SubLabel>{t('Weight')}</SubLabel>
+                  <NumberField
+                    label={
+                      <svg width="12" height="12" viewBox="0 0 12 12" stroke="currentColor">
+                        <path d="M1 3h10M1 6.5h10" strokeWidth="1" />
+                        <path d="M1 10h10" strokeWidth="2" />
+                      </svg>
+                    }
+                    min={0}
+                    value={strokes[0].weight}
+                    apply={(v) => setStrokes(strokes.map((s) => ({ ...s, weight: v })))}
+                  />
+                </div>
+              </div>
+            </>
+          )
+        )}
+      </Section>
+
+      <EffectsSection nodes={nodes} />
+
+      <SelectionColors nodes={nodes} />
+
+      <Section title={t('Export')}>
+        <div className="row tight">
+          <div className="field" style={{ width: 64 }}>
+            <Select value={scale} onChange={setScale} options={[0.5, 1, 2, 3, 4].map((s) => ({ value: s, label: `${s}x` }))} />
+          </div>
+          <button className="btn" style={{ flex: 1 }} onClick={() => exportSelectionPng(scale)}>
+            PNG
+          </button>
+          <button className="btn" style={{ flex: 1 }} onClick={() => exportSelectionSvg()}>
+            SVG
+          </button>
+        </div>
+        <div className="row muted hint">{t('Ctrl+C copies as SVG — paste straight into Figma.')}</div>
+      </Section>
+    </>
+  )
+}
+
+/** Text area that edits a field and commits as one undo step when focus leaves. */
+function AreaField({ value, onCommit, className, rows = 6, placeholder }: { value: string; onCommit: (v: string) => void; className?: string; rows?: number; placeholder?: string }) {
+  const [text, setText] = useState<string | null>(null)
+  return (
+    <textarea
+      className={'code-area' + (className ? ' ' + className : '')}
+      rows={rows}
+      spellCheck={false}
+      placeholder={placeholder}
+      value={text ?? value}
+      onFocus={() => setText(value)}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => {
+        if (text !== null && text !== value) ed.act(() => onCommit(text))
+        setText(null)
+      }}
+      onKeyDown={(e) => {
+        e.stopPropagation()
+        // Tab inserts two spaces in code
+        if (e.key === 'Tab') {
+          e.preventDefault()
+          const ta = e.currentTarget
+          const s = ta.selectionStart
+          const v = ta.value.slice(0, s) + '  ' + ta.value.slice(ta.selectionEnd)
+          setText(v)
+          requestAnimationFrame(() => ta.setSelectionRange(s + 2, s + 2))
+        }
+      }}
+    />
+  )
+}
+
+/** Inspector for Spec / Code / Annotation / Slice nodes. */
+function SpecialInspector({ node: n }: { node: GNode }) {
+  const w = ed.world(n.id)
+  const layout = (
+    <Section title={t('Layout')}>
+      <div className="grid2">
+        <NumberField label="X" value={n.x} apply={(v) => ed.updateNode(n.id, { x: v })} />
+        <NumberField label="Y" value={n.y} apply={(v) => ed.updateNode(n.id, { y: v })} />
+        {n.type !== 'ANNOTATION' && <NumberField label="W" min={1} value={w.w} apply={(v) => ed.setWorldRect(n.id, { ...ed.world(n.id), w: v })} />}
+        {n.type !== 'ANNOTATION' && <NumberField label="H" min={1} value={w.h} apply={(v) => ed.setWorldRect(n.id, { ...ed.world(n.id), h: v })} />}
+      </div>
+    </Section>
+  )
+  if (n.type === 'SPEC') {
+    const sp = n.spec ?? { title: '', body: '', status: 'TODO' as const }
+    const set = (patch: Partial<typeof sp>) => ed.updateNode(n.id, { spec: { ...sp, ...patch } })
+    return (
+      <>
+        {layout}
+        <Section title={t('Task')}>
+          <div className="row muted hint">{t('Spec cards are tasks for AI: MCP clients find them with list_specs and mark them done.')}</div>
+          <div className="field-label">{t('Status')}</div>
+          <div className="row">
+            <div className="seg">
+              {(
+                [
+                  ['TODO', t('To do')],
+                  ['IN_PROGRESS', t('In progress')],
+                  ['DONE', t('Done')]
+                ] as const
+              ).map(([v, label]) => (
+                <button key={v} className={sp.status === v ? 'on' : ''} onClick={() => ed.act(() => set({ status: v }))}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="field-label">{t('Title')}</div>
+          <AreaField className="prose" rows={2} value={sp.title} onCommit={(v) => set({ title: v, ...(v ? {} : {}) })} />
+          <div className="field-label">{t('Description')}</div>
+          <AreaField className="prose" rows={8} value={sp.body} onCommit={(v) => set({ body: v })} />
+          {sp.result && (
+            <>
+              <div className="field-label">{t('Result')}</div>
+              <AreaField className="prose" rows={4} value={sp.result} onCommit={(v) => set({ result: v })} />
+            </>
+          )}
+        </Section>
+      </>
+    )
+  }
+  if (n.type === 'CODE') {
+    const code = n.code ?? { html: '', css: '' }
+    return (
+      <>
+        {layout}
+        <Section title={t('Code')}>
+          <div className="row muted hint">{t('HTML + CSS rendered as design. Scripts never run; only local content is shown.')}</div>
+          <div className="field-label">HTML</div>
+          <AreaField rows={10} value={code.html} onCommit={(v) => ed.updateNode(n.id, { code: { ...code, html: v } })} />
+          <div className="field-label">CSS</div>
+          <AreaField rows={10} value={code.css} onCommit={(v) => ed.updateNode(n.id, { code: { ...code, css: v } })} />
+        </Section>
+        <Section title={t('Export')}>
+          <div className="row">
+            <button className="btn" style={{ flex: 1 }} onClick={() => exportSelectionPng(2)}>
+              PNG
+            </button>
+            <button className="btn" style={{ flex: 1 }} onClick={() => exportSelectionSvg()}>
+              SVG
+            </button>
+          </div>
+        </Section>
+      </>
+    )
+  }
+  if (n.type === 'SLICE')
+    return (
+      <>
+        {layout}
+        <Section title={t('Export')}>
+          <div className="row muted hint">{t('Slices export everything inside their area.')}</div>
+          <div className="row">
+            <button className="btn" style={{ flex: 1 }} onClick={() => exportSelectionPng(1)}>
+              PNG 1x
+            </button>
+            <button className="btn" style={{ flex: 1 }} onClick={() => exportSelectionPng(2)}>
+              PNG 2x
+            </button>
+          </div>
+        </Section>
+      </>
+    )
+  // ANNOTATION
+  return (
+    <>
+      {layout}
+      <Section title={t('Note')}>
+        <AreaField className="prose" rows={6} value={n.characters ?? ''} onCommit={(v) => ed.updateNode(n.id, { characters: v, name: v.split('\n')[0].slice(0, 40) || 'Annotation' })} />
+        <label className="checkbox">
+          <input type="checkbox" checked={!!n.resolved} onChange={(e) => ed.act(() => ed.updateNode(n.id, { resolved: e.target.checked || undefined }))} />
+          {t('Resolved')}
+        </label>
+      </Section>
+    </>
+  )
+}
+
+const BlurIcon = (
+  <span title="Blur">
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeDasharray="1.5 1.5">
+      <circle cx="6" cy="6" r="4.5" />
+    </svg>
+  </span>
+)
+const SpreadIcon = (
+  <span title="Spread">
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor">
+      <rect x="3.5" y="3.5" width="5" height="5" />
+      <rect x="1" y="1" width="10" height="10" strokeOpacity="0.5" />
+    </svg>
+  </span>
+)
+
+const EFFECT_LABEL: Record<EffectType, string> = {
+  DROP_SHADOW: 'Drop shadow',
+  INNER_SHADOW: 'Inner shadow',
+  LAYER_BLUR: 'Layer blur',
+  BACKGROUND_BLUR: 'Background blur'
+}
+
+/** Figma-style effects list. Edits apply to the first selected layer's effects (copied to all selected). */
+function EffectsSection({ nodes }: { nodes: GNode[] }) {
+  const effects = nodes[0].effects ?? []
+  const [open, setOpen] = useState<number | null>(null)
+  const setAll = (fx: Effect[]) => nodes.forEach((n) => ed.updateNode(n.id, { effects: fx.length ? fx : undefined }))
+  const update = (i: number, patch: Partial<Effect>) => setAll(effects.map((e, k) => (k === i ? ({ ...e, ...patch } as Effect) : e)))
+  return (
+    <Section
+      title={t('Effects')}
+      action={
+        <button
+          className="icon-btn"
+          title={t('Add effect')}
+          onClick={() => {
+            ed.act(() => setAll([...effects, defaultEffect('DROP_SHADOW')]))
+            setOpen(effects.length)
+          }}
+        >
+          {Icons.plus}
+        </button>
+      }
+    >
+      {effects.map((e, i) => (
+        <div key={i} className="effect">
+          <div className="row">
+            <button className={'icon-btn effect-toggle' + (open === i ? ' on' : '')} title={t('Effect settings')} onClick={() => setOpen(open === i ? null : i)}>
+              <EffectGlyph type={e.type} />
+            </button>
+            <div className="field" style={{ flex: 1 }}>
+              <Select
+                value={e.type}
+                onChange={(v) =>
+                  ed.act(() => {
+                    const d = defaultEffect(v)
+                    // keep radius when switching, keep shadow params between the two shadow kinds
+                    const next = 'offset' in d && 'offset' in e ? { ...e, type: v } : { ...d, radius: e.radius, visible: e.visible }
+                    setAll(effects.map((x, k) => (k === i ? (next as Effect) : x)))
+                  })
+                }
+                options={(Object.keys(EFFECT_LABEL) as EffectType[]).map((k) => ({ value: k, label: t(EFFECT_LABEL[k]) }))}
+              />
+            </div>
+            <button className="icon-btn" title={e.visible === false ? t('Show') : t('Hide')} onClick={() => ed.act(() => update(i, { visible: e.visible === false }))}>
+              {e.visible === false ? Icons.eyeOff : Icons.eye}
+            </button>
+            <button className="icon-btn" title={t('Remove')} onClick={() => ed.act(() => setAll(effects.filter((_, k) => k !== i)))}>
+              <svg width="12" height="12" viewBox="0 0 12 12" stroke="currentColor">
+                <path d="M2 6h8" />
+              </svg>
+            </button>
+          </div>
+          {open === i && (
+            <div className="effect-body">
+              {'offset' in e ? (
+                <>
+                  <div className="grid2">
+                    <NumberField label="X" value={e.offset.x} apply={(v) => update(i, { offset: { ...e.offset, x: v } } as Partial<Effect>)} />
+                    <NumberField label="Y" value={e.offset.y} apply={(v) => update(i, { offset: { ...e.offset, y: v } } as Partial<Effect>)} />
+                    <NumberField label={BlurIcon} min={0} value={e.radius} apply={(v) => update(i, { radius: v })} />
+                    <NumberField label={SpreadIcon} value={e.spread} apply={(v) => update(i, { spread: v } as Partial<Effect>)} />
+                  </div>
+                  <ColorField color={e.color} apply={(c) => update(i, { color: c } as Partial<Effect>)} />
+                </>
+              ) : (
+                <div className="grid2">
+                  <NumberField label={BlurIcon} min={0} value={e.radius} apply={(v) => update(i, { radius: v })} />
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      ))}
+    </Section>
+  )
+}
+
+function EffectGlyph({ type }: { type: EffectType }) {
+  if (type === 'DROP_SHADOW')
+    return (
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor">
+        <rect x="2" y="2" width="8" height="8" rx="1.5" />
+        <path d="M12 5v6a1 1 0 01-1 1H5" strokeOpacity="0.5" />
+      </svg>
+    )
+  if (type === 'INNER_SHADOW')
+    return (
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor">
+        <rect x="2" y="2" width="10" height="10" rx="1.5" />
+        <path d="M4 10V5a1 1 0 011-1h5" strokeOpacity="0.5" />
+      </svg>
+    )
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeDasharray={type === 'LAYER_BLUR' ? '1.5 1.5' : undefined}>
+      <circle cx="7" cy="7" r="5" />
+      {type === 'BACKGROUND_BLUR' && <path d="M3 9h8M4 5h6" strokeOpacity="0.5" />}
+    </svg>
+  )
+}
+
+/** Replace / restore buttons for an image fill (shows a hint when the image bytes are missing). */
+function ImageFillActions({ nodeId, hash, fromFigma }: { nodeId: string; hash: string; fromFigma: boolean }) {
+  const [missing, setMissing] = useState(false)
+  useEffect(() => {
+    let alive = true
+    isImageMissing(hash).then((m) => alive && setMissing(m))
+    return () => {
+      alive = false
+    }
+  }, [hash, ed.version('doc')]) // eslint-disable-line react-hooks/exhaustive-deps
+  const replace = () => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'image/png,image/jpeg,image/webp,image/gif,image/avif'
+    input.onchange = async () => {
+      const f = input.files?.[0]
+      if (!f) return
+      replaceImageFill(nodeId, await backend.blob.put(new Uint8Array(await f.arrayBuffer()), f.type))
+    }
+    input.click()
+  }
+  return (
+    <>
+      {missing && <div className="row muted hint">{fromFigma ? t('Image was not copied by Figma.') : t('Image file is missing.')}</div>}
+      <div className="btn-stack">
+        {missing && fromFigma && (
+          <button className="btn primary" onClick={() => void restoreFigmaImages()}>
+            {t('Load from Figma')}
+          </button>
+        )}
+        <button className="btn" onClick={replace}>
+          {t('Replace image…')}
+        </button>
+      </div>
+    </>
+  )
+}
+
+/** Text input with a unit (Auto / px / %), commits on Enter or blur. */
+function UnitField({ label, title, value, onCommit }: { label: React.ReactNode; title: string; value: string | 'mixed'; onCommit: (raw: string) => void }) {
+  const [text, setText] = useState<string | null>(null)
+  const shown = value === 'mixed' ? t('Mixed') : value
+  return (
+    <label className="field" title={title}>
+      <span className="lbl">{label}</span>
+      <input
+        value={text ?? shown}
+        onFocus={(e) => {
+          setText(value === 'mixed' ? '' : value)
+          requestAnimationFrame(() => e.target.select())
+        }}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={() => {
+          if (text !== null && text !== shown) ed.act(() => onCommit(text))
+          setText(null)
+        }}
+        onKeyDown={(e) => {
+          e.stopPropagation()
+          if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+          if (e.key === 'Escape') {
+            setText(null)
+            ;(e.target as HTMLInputElement).blur()
+          }
+        }}
+      />
+    </label>
+  )
+}
+
+const FONTS = ['Inter', 'Roboto', 'Arial', 'Helvetica', 'Segoe UI', 'Georgia', 'Times New Roman', 'Courier New', 'Verdana', 'Montserrat', 'Open Sans']
+
+function TextSection({ nodes }: { nodes: GNode[] }) {
+  const st = nodes.map((n) => n.textStyle ?? DEFAULT_TEXT_STYLE)
+  const setStyle = (patch: Partial<typeof DEFAULT_TEXT_STYLE>) => nodes.forEach((n) => ed.updateNode(n.id, { textStyle: { ...(n.textStyle ?? DEFAULT_TEXT_STYLE), ...patch } }))
+  const family = same(st.map((s) => s.fontFamily))
+  const [fonts, setFonts] = useState(FONTS)
+  useEffect(() => {
+    // Local font access (offline): list installed families when the platform allows it.
+    const q = (window as unknown as { queryLocalFonts?: () => Promise<{ family: string }[]> }).queryLocalFonts
+    q?.()
+      .then((list) => setFonts([...new Set([...FONTS, ...list.map((f) => f.family)])].sort()))
+      .catch(() => {})
+  }, [])
+  const tsBtn = useRef<HTMLButtonElement>(null)
+  const [tsOpen, setTsOpen] = useState(false)
+  const weightVal = (() => {
+    const w = same(st.map((s) => s.fontWeight * 10 + (s.italic ? 1 : 0)))
+    return w === 'mixed' ? null : w
+  })()
+  return (
+    <Section
+      title={t('Typography')}
+      action={
+        <button ref={tsBtn} className={'icon-btn' + (tsOpen ? ' active-soft' : '')} title={t('Type settings')} onClick={() => setTsOpen(!tsOpen)}>
+          {Icons.typeSettings}
+        </button>
+      }
+    >
+      {tsOpen && tsBtn.current && <TypeSettings nodes={nodes} anchor={tsBtn.current} onClose={() => setTsOpen(false)} />}
+      <div className="row">
+        <div className="field" style={{ flex: 1 }}>
+          <Select
+            searchable
+            minWidth={220}
+            value={family === 'mixed' ? null : family}
+            placeholder={t('Mixed')}
+            onChange={(v) => ed.act(() => setStyle({ fontFamily: v }))}
+            options={(fonts.includes(family as string) || family === 'mixed' ? fonts : [family as string, ...fonts]).map((f) => ({
+              value: f,
+              label: f,
+              style: { fontFamily: `"${f}", system-ui` }
+            }))}
+          />
+        </div>
+      </div>
+      <div className="grid2">
+        <div className="field">
+          <Select
+            minWidth={170}
+            value={weightVal}
+            placeholder={t('Mixed')}
+            onChange={(v) => ed.act(() => setStyle({ fontWeight: Math.floor(v / 10), italic: v % 10 === 1 || undefined }))}
+            options={[100, 200, 300, 400, 500, 600, 700, 800, 900].flatMap((w) => {
+              const name = { 100: 'Thin', 200: 'Extra Light', 300: 'Light', 400: 'Regular', 500: 'Medium', 600: 'Semi Bold', 700: 'Bold', 800: 'Extra Bold', 900: 'Black' }[w]!
+              return [
+                { value: w * 10, label: name, style: { fontWeight: w } },
+                { value: w * 10 + 1, label: (w === 400 ? '' : name + ' ') + 'Italic', style: { fontWeight: w, fontStyle: 'italic' } }
+              ]
+            })}
+          />
+        </div>
+        <NumberField label="Aa" min={1} value={same(st.map((s) => s.fontSize))} apply={(v) => setStyle({ fontSize: v })} />
+        <UnitField
+          label={Icons.lineHeight}
+          title={t('Line height')}
+          value={same(st.map((s) => (s.lineHeightPercent !== undefined ? `${round2(s.lineHeightPercent)}%` : s.lineHeight !== undefined ? String(round2(s.lineHeight)) : t('Auto'))))}
+          onCommit={(raw) => {
+            const v = raw.trim().toLowerCase()
+            if (!v || v === 'auto' || v === t('Auto').toLowerCase()) return setStyle({ lineHeight: undefined, lineHeightPercent: undefined })
+            const num = parseFloat(v)
+            if (!Number.isFinite(num) || num < 0) return
+            if (v.endsWith('%')) setStyle({ lineHeightPercent: num, lineHeight: undefined })
+            else setStyle({ lineHeight: num, lineHeightPercent: undefined })
+          }}
+        />
+        <UnitField
+          label={Icons.letterSpacing}
+          title={t('Letter spacing')}
+          value={same(st.map((s) => (s.letterSpacingPercent !== undefined || !s.letterSpacing ? `${round2(s.letterSpacingPercent ?? 0)}%` : `${round2(s.letterSpacing)}px`)))}
+          onCommit={(raw) => {
+            const v = raw.trim().toLowerCase()
+            const num = parseFloat(v)
+            if (!Number.isFinite(num)) return
+            if (v.endsWith('px')) setStyle({ letterSpacing: num, letterSpacingPercent: undefined })
+            else setStyle({ letterSpacingPercent: num, letterSpacing: undefined })
+          }}
+        />
+      </div>
+      <div className="row split">
+        <div className="seg">
+          {(['LEFT', 'CENTER', 'RIGHT'] as const).map((a) => (
+            <button
+              key={a}
+              title={t(a === 'LEFT' ? 'Align left' : a === 'CENTER' ? 'Align center' : 'Align right')}
+              className={same(st.map((s) => s.align)) === a ? 'on' : ''}
+              onClick={() => ed.act(() => setStyle({ align: a }))}
+            >
+              {a === 'LEFT' ? Icons.tAlignL : a === 'CENTER' ? Icons.tAlignC : Icons.tAlignR}
+            </button>
+          ))}
+        </div>
+        <div className="seg">
+          {(
+            [
+              ['TOP', t('Top'), Icons.vAlignTop],
+              ['CENTER', t('Middle'), Icons.vAlignMid],
+              ['BOTTOM', t('Bottom'), Icons.vAlignBottom]
+            ] as const
+          ).map(([v, label, icon]) => (
+            <button key={v} title={label} className={same(st.map((s) => s.verticalAlign ?? 'TOP')) === v ? 'on' : ''} onClick={() => ed.act(() => setStyle({ verticalAlign: v }))}>
+              {icon}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="row split">
+        <span className="muted">{t('Resizing')}</span>
+        {/* icons + tooltips like Figma, so the control always fits the panel */}
+        <div className="seg">
+          {(
+            [
+              ['WIDTH_AND_HEIGHT', t('Auto width'), Icons.autoW],
+              ['HEIGHT', t('Auto height'), Icons.autoH],
+              ['NONE', t('Fixed size'), Icons.fixedSize]
+            ] as const
+          ).map(([m, label, icon]) => (
+            <button
+              key={m}
+              title={label}
+              className={same(nodes.map((n) => n.textAutoResize ?? 'WIDTH_AND_HEIGHT')) === m ? 'on' : ''}
+              onClick={() => ed.act(() => nodes.forEach((n) => ed.updateNode(n.id, { textAutoResize: m })))}
+            >
+              {icon}
+            </button>
+          ))}
+        </div>
+      </div>
+    </Section>
+  )
+}

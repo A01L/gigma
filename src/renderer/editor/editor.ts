@@ -1,0 +1,925 @@
+// Editor core: in-memory document, selection, camera, undo/redo, spatial index,
+// and batched incremental persistence to the .gigma file.
+import RBush from 'rbush'
+import type { DocMeta, DocSnapshot, GNode, Page, Paint, RGBA } from '@shared/types'
+import { DEFAULT_PAGE_BG } from '@shared/types'
+import { backend } from '../backend'
+import { keyBetween, rectsIntersect, uid, unionRects, type Rect } from './util'
+import { DEFAULT_TEXT_STYLE, fitText } from './text'
+
+export type Tool =
+  | 'move'
+  | 'hand'
+  | 'scale'
+  | 'frame'
+  | 'section'
+  | 'slice'
+  | 'rect'
+  | 'line'
+  | 'arrow'
+  | 'ellipse'
+  | 'polygon'
+  | 'star'
+  | 'pen'
+  | 'pencil'
+  | 'text'
+  | 'spec'
+  | 'code'
+  | 'annotation'
+export type Topic = 'doc' | 'selection' | 'camera' | 'ui' | 'pages'
+
+interface IndexItem {
+  minX: number
+  minY: number
+  maxX: number
+  maxY: number
+  id: string
+}
+
+interface HistoryEntry {
+  nodes: Map<string, { before: GNode | null; after: GNode | null }>
+  pages: Map<string, { before: Page | null; after: Page | null }>
+  selBefore: string[]
+  selAfter: string[]
+  pageBefore: string
+  pageAfter: string
+}
+
+const clone = <T>(v: T): T => structuredClone(v)
+
+export class Editor {
+  meta!: DocMeta
+  pages = new Map<string, Page>()
+  nodes = new Map<string, GNode>()
+  currentPageId = ''
+  selection: string[] = []
+  tool: Tool = 'move'
+  camera = { x: 0, y: 0, zoom: 1 } // screen = world * zoom + (x, y)
+  viewport = { w: 1, h: 1 }
+  hoverId: string | null = null
+  editingTextId: string | null = null
+  leftOpen = true
+  rightOpen = true
+  toast: string | null = null
+  toastAction: { label: string; run: () => void } | null = null
+
+  private childrenOf = new Map<string, string[]>()
+  private dirtyChildren = new Set<string>()
+  private worldCache = new Map<string, Rect>()
+  private tree = new RBush<IndexItem>()
+  private treeItems = new Map<string, IndexItem>()
+  private treeDirty = new Set<string>()
+  private treeFull = true
+  private listeners = new Map<Topic, Set<() => void>>()
+  private versions: Record<Topic, number> = { doc: 0, selection: 0, camera: 0, ui: 0, pages: 0 }
+
+  private tx: HistoryEntry | null = null
+  private txDepth = 0
+  private undoStack: HistoryEntry[] = []
+  private redoStack: HistoryEntry[] = []
+
+  private pendingNodes = new Set<string>()
+  private pendingPages = new Set<string>()
+  private pendingMeta: Partial<DocMeta> | null = null
+  private flushTimer: number | null = null
+
+  // ---------------- lifecycle ----------------
+  load(snap: DocSnapshot): void {
+    this.meta = snap.meta
+    this.pages = new Map(snap.pages.map((p) => [p.id, p]))
+    this.nodes = new Map(snap.nodes.map((n) => [n.id, n]))
+    this.childrenOf.clear()
+    for (const n of this.nodes.values()) this.linkChild(n)
+    this.dirtyChildren = new Set(this.childrenOf.keys())
+    this.currentPageId = this.sortedPages()[0]?.id ?? ''
+    this.selection = []
+    this.undoStack = []
+    this.redoStack = []
+    this.invalidateAllGeometry()
+    this.emit('doc', 'pages', 'selection', 'ui')
+  }
+
+  // ---------------- subscriptions ----------------
+  subscribe(topic: Topic, fn: () => void): () => void {
+    let s = this.listeners.get(topic)
+    if (!s) this.listeners.set(topic, (s = new Set()))
+    s.add(fn)
+    return () => s!.delete(fn)
+  }
+  version(topic: Topic): number {
+    return this.versions[topic]
+  }
+  emit(...topics: Topic[]): void {
+    for (const t of topics) {
+      this.versions[t]++
+      this.listeners.get(t)?.forEach((f) => f())
+    }
+  }
+  showToast(msg: string, action?: { label: string; run: () => void }): void {
+    this.toast = msg
+    this.toastAction = action ?? null
+    this.emit('ui')
+    setTimeout(
+      () => {
+        if (this.toast === msg) {
+          this.toast = null
+          this.toastAction = null
+          this.emit('ui')
+        }
+      },
+      action ? 12000 : 3500
+    )
+  }
+  hideToast(): void {
+    this.toast = null
+    this.toastAction = null
+    this.emit('ui')
+  }
+
+  // ---------------- tree helpers ----------------
+  private parentKey(n: { parentId: string | null; pageId: string }): string {
+    return n.parentId ?? 'page:' + n.pageId
+  }
+  private linkChild(n: GNode): void {
+    const k = this.parentKey(n)
+    let arr = this.childrenOf.get(k)
+    if (!arr) this.childrenOf.set(k, (arr = []))
+    arr.push(n.id)
+    this.dirtyChildren.add(k)
+  }
+  private unlinkChild(n: GNode): void {
+    const k = this.parentKey(n)
+    const arr = this.childrenOf.get(k)
+    if (!arr) return
+    const i = arr.indexOf(n.id)
+    if (i >= 0) arr.splice(i, 1)
+  }
+  /** children ids in z-order (bottom first) */
+  children(parentId: string | null, pageId = this.currentPageId): string[] {
+    const k = parentId ?? 'page:' + pageId
+    const arr = this.childrenOf.get(k)
+    if (!arr) return []
+    if (this.dirtyChildren.has(k)) {
+      arr.sort((a, b) => {
+        const oa = this.nodes.get(a)!.order
+        const ob = this.nodes.get(b)!.order
+        return oa < ob ? -1 : oa > ob ? 1 : 0
+      })
+      this.dirtyChildren.delete(k)
+    }
+    return arr
+  }
+  sortedPages(): Page[] {
+    return [...this.pages.values()].sort((a, b) => (a.order < b.order ? -1 : 1))
+  }
+  get page(): Page {
+    return this.pages.get(this.currentPageId)!
+  }
+  ancestors(id: string): GNode[] {
+    const out: GNode[] = []
+    let n = this.nodes.get(id)
+    while (n?.parentId) {
+      n = this.nodes.get(n.parentId)
+      if (n) out.push(n)
+    }
+    return out
+  }
+  isAncestor(ancestorId: string, id: string): boolean {
+    return this.ancestors(id).some((a) => a.id === ancestorId)
+  }
+  descendants(id: string, out: string[] = []): string[] {
+    for (const c of this.children(id)) {
+      out.push(c)
+      this.descendants(c, out)
+    }
+    return out
+  }
+  orderKeyAtTop(parentId: string | null, pageId = this.currentPageId): string {
+    const ch = this.children(parentId, pageId)
+    const last = ch.length ? this.nodes.get(ch[ch.length - 1])!.order : null
+    return keyBetween(last, null)
+  }
+
+  // ---------------- geometry ----------------
+  world(id: string): Rect {
+    const c = this.worldCache.get(id)
+    if (c) return c
+    const n = this.nodes.get(id)!
+    let x = n.x
+    let y = n.y
+    if (n.parentId) {
+      const p = this.world(n.parentId)
+      x += p.x
+      y += p.y
+    }
+    const r = { x, y, w: n.width, h: n.height }
+    this.worldCache.set(id, r)
+    return r
+  }
+  private invalidateGeometry(id: string): void {
+    this.worldCache.delete(id)
+    this.treeDirty.add(id)
+    for (const c of this.childrenOf.get(id) ?? []) this.invalidateGeometry(c)
+  }
+  private invalidateAllGeometry(): void {
+    this.worldCache.clear()
+    this.treeFull = true
+  }
+  private syncIndex(): void {
+    if (this.treeFull) {
+      this.tree.clear()
+      this.treeItems.clear()
+      const items: IndexItem[] = []
+      for (const n of this.nodes.values()) {
+        if (n.pageId !== this.currentPageId) continue
+        const r = this.world(n.id)
+        const it = { minX: r.x, minY: r.y, maxX: r.x + r.w, maxY: r.y + r.h, id: n.id }
+        items.push(it)
+        this.treeItems.set(n.id, it)
+      }
+      this.tree.load(items)
+      this.treeFull = false
+      this.treeDirty.clear()
+      return
+    }
+    if (!this.treeDirty.size) return
+    for (const id of this.treeDirty) {
+      const old = this.treeItems.get(id)
+      if (old) {
+        this.tree.remove(old)
+        this.treeItems.delete(id)
+      }
+      const n = this.nodes.get(id)
+      if (!n || n.pageId !== this.currentPageId) continue
+      const r = this.world(id)
+      const it = { minX: r.x, minY: r.y, maxX: r.x + r.w, maxY: r.y + r.h, id }
+      this.tree.insert(it)
+      this.treeItems.set(id, it)
+    }
+    this.treeDirty.clear()
+  }
+  /** ids whose world bounds intersect r (any depth) */
+  query(r: Rect): string[] {
+    this.syncIndex()
+    return this.tree.search({ minX: r.x, minY: r.y, maxX: r.x + r.w, maxY: r.y + r.h }).map((i) => i.id)
+  }
+  selectionBounds(ids = this.selection): Rect | null {
+    return unionRects(ids.filter((id) => this.nodes.has(id)).map((id) => this.world(id)))
+  }
+
+  // ---------------- camera ----------------
+  screenToWorld(sx: number, sy: number): { x: number; y: number } {
+    return { x: (sx - this.camera.x) / this.camera.zoom, y: (sy - this.camera.y) / this.camera.zoom }
+  }
+  visibleWorldRect(): Rect {
+    const a = this.screenToWorld(0, 0)
+    return { x: a.x, y: a.y, w: this.viewport.w / this.camera.zoom, h: this.viewport.h / this.camera.zoom }
+  }
+  setZoom(zoom: number, sx = this.viewport.w / 2, sy = this.viewport.h / 2): void {
+    zoom = Math.min(256, Math.max(0.01, zoom))
+    const w = this.screenToWorld(sx, sy)
+    this.camera.zoom = zoom
+    this.camera.x = sx - w.x * zoom
+    this.camera.y = sy - w.y * zoom
+    this.emit('camera')
+  }
+  panBy(dx: number, dy: number): void {
+    this.camera.x += dx
+    this.camera.y += dy
+    this.emit('camera')
+  }
+  zoomToRect(r: Rect | null, maxZoom = 1): void {
+    if (!r) {
+      this.camera = { x: this.viewport.w / 2, y: this.viewport.h / 2, zoom: 1 }
+      this.emit('camera')
+      return
+    }
+    const pad = 80
+    const zoom = Math.min(maxZoom, (this.viewport.w - pad * 2) / Math.max(r.w, 1), (this.viewport.h - pad * 2) / Math.max(r.h, 1))
+    this.camera.zoom = Math.max(0.01, zoom)
+    this.camera.x = this.viewport.w / 2 - (r.x + r.w / 2) * this.camera.zoom
+    this.camera.y = this.viewport.h / 2 - (r.y + r.h / 2) * this.camera.zoom
+    this.emit('camera')
+  }
+  zoomToFit(): void {
+    const top = this.children(null)
+    this.zoomToRect(unionRects(top.map((id) => this.world(id))), 1)
+  }
+
+  // ---------------- transactions / undo ----------------
+  begin(): void {
+    if (this.txDepth++ === 0) {
+      this.tx = {
+        nodes: new Map(),
+        pages: new Map(),
+        selBefore: [...this.selection],
+        selAfter: [],
+        pageBefore: this.currentPageId,
+        pageAfter: ''
+      }
+    }
+  }
+  commit(): void {
+    if (--this.txDepth > 0) return
+    const tx = this.tx!
+    this.tx = null
+    // keep groups fitted to their children
+    const groups = new Set<string>()
+    for (const [id, e] of tx.nodes) {
+      const parents = [this.nodes.get(id)?.parentId, e.before?.parentId]
+      for (let pid of parents) {
+        while (pid) {
+          const a = this.nodes.get(pid)
+          if (!a) break
+          if (a.type === 'GROUP') groups.add(a.id)
+          pid = a.parentId
+        }
+      }
+    }
+    if (groups.size) {
+      this.txDepth++
+      this.tx = tx
+      for (const g of [...groups].sort((a, b) => this.ancestors(b).length - this.ancestors(a).length)) this.fitGroup(g)
+      this.tx = null
+      this.txDepth--
+    }
+    for (const [id, e] of tx.nodes) e.after = this.nodes.has(id) ? clone(this.nodes.get(id)!) : null
+    for (const [id, e] of tx.pages) e.after = this.pages.has(id) ? clone(this.pages.get(id)!) : null
+    for (const [id, e] of tx.nodes) if (JSON.stringify(e.before) === JSON.stringify(e.after)) tx.nodes.delete(id)
+    tx.selAfter = [...this.selection]
+    tx.pageAfter = this.currentPageId
+    if (tx.nodes.size || tx.pages.size) {
+      this.undoStack.push(tx)
+      if (this.undoStack.length > 300) this.undoStack.shift()
+      this.redoStack = []
+      for (const id of tx.nodes.keys()) this.pendingNodes.add(id)
+      for (const id of tx.pages.keys()) this.pendingPages.add(id)
+      this.scheduleFlush()
+    }
+    this.emit('doc')
+  }
+  /** run fn inside a transaction */
+  act<T>(fn: () => T): T {
+    this.begin()
+    try {
+      return fn()
+    } finally {
+      this.commit()
+    }
+  }
+  private touch(id: string): void {
+    if (!this.tx) throw new Error('mutation outside transaction')
+    if (!this.tx.nodes.has(id)) {
+      const n = this.nodes.get(id)
+      this.tx.nodes.set(id, { before: n ? clone(n) : null, after: null })
+    }
+  }
+  private touchPage(id: string): void {
+    if (!this.tx) throw new Error('mutation outside transaction')
+    if (!this.tx.pages.has(id)) {
+      const p = this.pages.get(id)
+      this.tx.pages.set(id, { before: p ? clone(p) : null, after: null })
+    }
+  }
+  undo(): void {
+    const e = this.undoStack.pop()
+    if (!e) return
+    this.applyHistory(e, 'before')
+    this.redoStack.push(e)
+  }
+  redo(): void {
+    const e = this.redoStack.pop()
+    if (!e) return
+    this.applyHistory(e, 'after')
+    this.undoStack.push(e)
+  }
+  private applyHistory(e: HistoryEntry, side: 'before' | 'after'): void {
+    for (const [id, v] of e.pages) {
+      const p = v[side]
+      if (p) this.pages.set(id, clone(p))
+      else this.pages.delete(id)
+      this.pendingPages.add(id)
+    }
+    for (const [id, v] of e.nodes) {
+      const old = this.nodes.get(id)
+      if (old) this.unlinkChild(old)
+      const n = v[side]
+      if (n) {
+        this.nodes.set(id, clone(n))
+        this.linkChild(this.nodes.get(id)!)
+      } else this.nodes.delete(id)
+      this.pendingNodes.add(id)
+    }
+    this.invalidateAllGeometry()
+    const page = side === 'before' ? e.pageBefore : e.pageAfter
+    if (this.pages.has(page)) this.currentPageId = page
+    else if (!this.pages.has(this.currentPageId)) this.currentPageId = this.sortedPages()[0].id
+    this.selection = (side === 'before' ? e.selBefore : e.selAfter).filter((id) => this.nodes.has(id))
+    this.scheduleFlush()
+    this.emit('doc', 'pages', 'selection')
+  }
+
+  // ---------------- persistence ----------------
+  private scheduleFlush(): void {
+    if (this.flushTimer !== null) return
+    this.flushTimer = window.setTimeout(() => this.flush(), 250)
+  }
+  async flush(): Promise<void> {
+    if (this.flushTimer !== null) clearTimeout(this.flushTimer)
+    this.flushTimer = null
+    if (!this.pendingNodes.size && !this.pendingPages.size && !this.pendingMeta) return
+    const upsertNodes: GNode[] = []
+    const deleteNodes: string[] = []
+    for (const id of this.pendingNodes) {
+      const n = this.nodes.get(id)
+      if (n) upsertNodes.push(n)
+      else deleteNodes.push(id)
+    }
+    const upsertPages: Page[] = []
+    const deletePages: string[] = []
+    for (const id of this.pendingPages) {
+      const p = this.pages.get(id)
+      if (p) upsertPages.push(p)
+      else deletePages.push(id)
+    }
+    const meta = this.pendingMeta ?? undefined
+    this.pendingNodes.clear()
+    this.pendingPages.clear()
+    this.pendingMeta = null
+    try {
+      await backend.doc.apply({ upsertNodes, deleteNodes, upsertPages, deletePages, meta })
+    } catch (err) {
+      this.showToast('Save failed: ' + (err as Error).message)
+    }
+  }
+  rename(name: string): void {
+    this.meta = { ...this.meta, name }
+    this.pendingMeta = { ...(this.pendingMeta ?? {}), name }
+    this.scheduleFlush()
+    this.emit('pages')
+  }
+  /** Saved color styles live in the document file. */
+  setColorStyles(colorStyles: NonNullable<DocMeta['colorStyles']>): void {
+    this.meta = { ...this.meta, colorStyles }
+    this.pendingMeta = { ...(this.pendingMeta ?? {}), colorStyles }
+    this.scheduleFlush()
+    this.emit('doc')
+  }
+
+  // ---------------- mutations (call inside act/begin) ----------------
+  addNode(partial: Partial<GNode> & { type: GNode['type'] }): GNode {
+    const pageId = partial.pageId ?? this.currentPageId
+    const parentId = partial.parentId ?? null
+    const n: GNode = {
+      id: uid(),
+      name: partial.name ?? defaultName(partial.type),
+      parentId,
+      pageId,
+      order: partial.order ?? this.orderKeyAtTop(parentId, pageId),
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 100,
+      opacity: 1,
+      visible: true,
+      locked: false,
+      fills: [],
+      strokes: [],
+      ...partial
+    } as GNode
+    if (n.type === 'TEXT') {
+      n.textStyle = { ...DEFAULT_TEXT_STYLE, ...(n.textStyle ?? {}) }
+      n.characters ??= ''
+      const s = fitText(n)
+      n.width = s.width
+      n.height = s.height
+    }
+    this.touch(n.id)
+    this.nodes.set(n.id, n)
+    this.linkChild(n)
+    this.invalidateGeometry(n.id)
+    return n
+  }
+
+  updateNode(id: string, patch: Partial<GNode>): void {
+    const n = this.nodes.get(id)
+    if (!n) return
+    this.touch(id)
+    const reparent = ('parentId' in patch && patch.parentId !== n.parentId) || ('pageId' in patch && patch.pageId !== n.pageId)
+    const reorder = 'order' in patch && patch.order !== n.order
+    if (reparent || reorder) this.unlinkChild(n)
+    Object.assign(n, patch)
+    if (n.type === 'TEXT' && ('characters' in patch || 'textStyle' in patch || 'width' in patch || 'textAutoResize' in patch)) {
+      const s = fitText(n)
+      n.width = s.width
+      n.height = s.height
+    }
+    if (reparent || reorder) this.linkChild(n)
+    if (reparent && 'pageId' in patch) for (const d of this.descendants(id)) this.updateNode(d, { pageId: n.pageId })
+    if (reparent || 'x' in patch || 'y' in patch || 'width' in patch || 'height' in patch || n.type === 'TEXT') this.invalidateGeometry(id)
+  }
+
+  deleteNode(id: string): void {
+    const n = this.nodes.get(id)
+    if (!n) return
+    for (const c of [...this.children(id, n.pageId)]) this.deleteNode(c)
+    this.touch(id)
+    this.unlinkChild(n)
+    this.nodes.delete(id)
+    const it = this.treeItems.get(id)
+    if (it) {
+      this.tree.remove(it)
+      this.treeItems.delete(id)
+    }
+    this.worldCache.delete(id)
+  }
+
+  /** Move node to a new parent keeping its world position. */
+  reparent(id: string, parentId: string | null, order?: string): void {
+    const n = this.nodes.get(id)!
+    const w = this.world(id)
+    const pw = parentId ? this.world(parentId) : { x: 0, y: 0 }
+    this.updateNode(id, { parentId, x: w.x - pw.x, y: w.y - pw.y, order: order ?? this.orderKeyAtTop(parentId, n.pageId) })
+  }
+
+  /** Move a node by a world-space delta. */
+  moveBy(id: string, dx: number, dy: number): void {
+    const n = this.nodes.get(id)!
+    this.updateNode(id, { x: n.x + dx, y: n.y + dy })
+  }
+
+  /** Set world rect (handles group scaling of children). */
+  setWorldRect(id: string, r: Rect): void {
+    const n = this.nodes.get(id)!
+    const old = this.world(id)
+    const pw = n.parentId ? this.world(n.parentId) : { x: 0, y: 0 }
+    const w = Math.max(r.w, 0.01)
+    const h = Math.max(r.h, 0.01)
+    if (n.type === 'GROUP' && old.w > 0 && old.h > 0) {
+      const sx = w / old.w
+      const sy = h / old.h
+      for (const c of this.children(id, n.pageId)) {
+        const cw = this.world(c)
+        this.setWorldRect(c, { x: r.x + (cw.x - old.x) * sx, y: r.y + (cw.y - old.y) * sy, w: cw.w * sx, h: cw.h * sy })
+      }
+    }
+    const patch: Partial<GNode> = { x: r.x - pw.x, y: r.y - pw.y, width: w, height: h }
+    if (n.type === 'TEXT' && (n.textAutoResize ?? 'WIDTH_AND_HEIGHT') === 'WIDTH_AND_HEIGHT' && Math.abs(w - old.w) > 0.5) patch.textAutoResize = 'HEIGHT'
+    this.updateNode(id, patch)
+  }
+
+  fitGroup(id: string): void {
+    const g = this.nodes.get(id)
+    if (!g || g.type !== 'GROUP') return
+    const kids = this.children(id, g.pageId)
+    if (!kids.length) {
+      this.deleteNode(id)
+      return
+    }
+    const ub = unionRects(kids.map((c) => {
+      const k = this.nodes.get(c)!
+      return { x: k.x, y: k.y, w: k.width, h: k.height }
+    }))!
+    if (Math.abs(ub.x) < 1e-6 && Math.abs(ub.y) < 1e-6 && ub.w === g.width && ub.h === g.height) return
+    for (const c of kids) {
+      const k = this.nodes.get(c)!
+      this.updateNode(c, { x: k.x - ub.x, y: k.y - ub.y })
+    }
+    this.updateNode(id, { x: g.x + ub.x, y: g.y + ub.y, width: ub.w, height: ub.h })
+  }
+
+  // ---------------- higher-level operations ----------------
+  setSelection(ids: string[]): void {
+    this.selection = ids.filter((id) => this.nodes.has(id))
+    this.emit('selection')
+  }
+  setTool(t: Tool): void {
+    this.tool = t
+    this.emit('ui')
+  }
+  setCurrentPage(id: string): void {
+    if (!this.pages.has(id) || id === this.currentPageId) return
+    this.currentPageId = id
+    this.selection = []
+    this.invalidateAllGeometry()
+    this.zoomToFit()
+    this.emit('pages', 'doc', 'selection')
+  }
+  addPage(name?: string): Page {
+    return this.act(() => {
+      const pages = this.sortedPages()
+      const p: Page = {
+        id: uid(),
+        name: name ?? `Page ${pages.length + 1}`,
+        order: keyBetween(pages.length ? pages[pages.length - 1].order : null, null),
+        background: { ...DEFAULT_PAGE_BG }
+      }
+      this.touchPage(p.id)
+      this.pages.set(p.id, p)
+      this.currentPageId = p.id
+      this.selection = []
+      this.invalidateAllGeometry()
+      this.emit('pages')
+      return p
+    })
+  }
+  updatePage(id: string, patch: Partial<Page>): void {
+    this.act(() => {
+      this.touchPage(id)
+      Object.assign(this.pages.get(id)!, patch)
+    })
+    this.emit('pages')
+  }
+  deletePage(id: string): void {
+    if (this.pages.size <= 1) return
+    this.act(() => {
+      for (const n of [...this.nodes.values()]) if (n.pageId === id && !n.parentId) this.deleteNode(n.id)
+      this.touchPage(id)
+      this.pages.delete(id)
+      if (this.currentPageId === id) this.currentPageId = this.sortedPages()[0].id
+      this.selection = []
+      this.invalidateAllGeometry()
+    })
+    this.emit('pages', 'selection')
+  }
+  /** Add pages + nodes (e.g. imported from another .gigma) */
+  importPages(pages: Page[], nodes: GNode[]): void {
+    this.act(() => {
+      let last = this.sortedPages().at(-1)?.order ?? null
+      for (const p of pages.sort((a, b) => (a.order < b.order ? -1 : 1))) {
+        last = keyBetween(last, null)
+        this.touchPage(p.id)
+        this.pages.set(p.id, { ...p, order: last })
+      }
+      for (const n of nodes) {
+        this.touch(n.id)
+        this.nodes.set(n.id, n)
+        this.linkChild(n)
+      }
+      this.invalidateAllGeometry()
+      if (pages[0]) this.currentPageId = pages[0].id
+    })
+    this.emit('pages', 'doc')
+    this.zoomToFit()
+  }
+
+  deleteSelection(): void {
+    if (!this.selection.length) return
+    this.act(() => {
+      for (const id of this.selection) this.deleteNode(id)
+      this.selection = []
+    })
+    this.emit('selection')
+  }
+
+  /** Top-most selectable roots among ids (drops ids whose ancestor is also present). */
+  roots(ids: string[]): string[] {
+    const set = new Set(ids)
+    return ids.filter((id) => !this.ancestors(id).some((a) => set.has(a.id)))
+  }
+
+  group(ids = this.selection, name = 'Group'): string | null {
+    const roots = this.roots(ids).filter((id) => this.nodes.has(id))
+    if (!roots.length) return null
+    const first = this.nodes.get(roots[0])!
+    const parentId = first.parentId
+    const sameParent = roots.every((id) => this.nodes.get(id)!.parentId === parentId)
+    const target = sameParent ? parentId : null
+    const b = this.selectionBounds(roots)!
+    const pw = target ? this.world(target) : { x: 0, y: 0 }
+    const sorted = [...roots].sort((a, c) => (this.paintOrderKey(a) < this.paintOrderKey(c) ? -1 : 1))
+    let gid = ''
+    this.act(() => {
+      const topId = sorted[sorted.length - 1]
+      const sib = this.children(target, first.pageId)
+      const ti = sib.indexOf(topId)
+      const order = sameParent
+        ? keyBetween(this.nodes.get(topId)!.order, ti + 1 < sib.length ? this.nodes.get(sib[ti + 1])!.order : null)
+        : undefined
+      const g = this.addNode({ type: 'GROUP', name, parentId: target, x: b.x - pw.x, y: b.y - pw.y, width: b.w, height: b.h, order })
+      gid = g.id
+      let prev: string | null = null
+      for (const id of sorted) {
+        prev = keyBetween(prev, null)
+        this.reparent(id, g.id, prev)
+      }
+      this.selection = [g.id]
+    })
+    this.emit('selection')
+    return gid
+  }
+
+  ungroup(): void {
+    const groups = this.selection.map((id) => this.nodes.get(id)!).filter((n) => n && (n.type === 'GROUP' || n.type === 'FRAME' || n.type === 'SECTION'))
+    if (!groups.length) return
+    const newSel: string[] = []
+    this.act(() => {
+      for (const g of groups) {
+        const kids = [...this.children(g.id, g.pageId)]
+        const siblings = this.children(g.parentId, g.pageId)
+        const idx = siblings.indexOf(g.id)
+        let lo = g.order
+        const hi = idx + 1 < siblings.length ? this.nodes.get(siblings[idx + 1])!.order : null
+        for (const k of kids) {
+          lo = keyBetween(lo, hi)
+          this.reparent(k, g.parentId, lo)
+          newSel.push(k)
+        }
+        this.deleteNode(g.id)
+      }
+      this.selection = newSel
+    })
+    this.emit('selection')
+  }
+
+  /** z-order: bring forward (+1) / send backward (-1) / front (+Inf) / back (-Inf) */
+  reorder(dir: number): void {
+    this.act(() => {
+      for (const id of this.selection) {
+        const n = this.nodes.get(id)!
+        const sib = this.children(n.parentId, n.pageId)
+        const i = sib.indexOf(id)
+        const order = (k: number) => (k >= 0 && k < sib.length ? this.nodes.get(sib[k])!.order : null)
+        let key: string | null = null
+        if (dir === Infinity && i < sib.length - 1) key = keyBetween(order(sib.length - 1), null)
+        else if (dir === -Infinity && i > 0) key = keyBetween(null, order(0))
+        else if (dir === 1 && i < sib.length - 1) key = keyBetween(order(i + 1), order(i + 2))
+        else if (dir === -1 && i > 0) key = keyBetween(order(i - 2), order(i - 1))
+        if (key) this.updateNode(id, { order: key })
+      }
+    })
+  }
+
+  /** Global paint-order key for sorting arbitrary nodes on a page. */
+  paintOrderKey(id: string): string {
+    const chain = [this.nodes.get(id)!, ...this.ancestors(id)].reverse()
+    return chain.map((n) => n.order.padEnd(24, '0')).join('/')
+  }
+
+  duplicate(ids = this.selection, offset = 0): string[] {
+    const out: string[] = []
+    this.act(() => {
+      for (const id of this.roots(ids)) {
+        const n = this.nodes.get(id)!
+        const copy = this.cloneSubtree(id, n.parentId, n.pageId)
+        if (offset) this.moveBy(copy, offset, offset)
+        out.push(copy)
+      }
+      this.selection = out
+    })
+    this.emit('selection')
+    return out
+  }
+
+  cloneSubtree(id: string, parentId: string | null, pageId: string, order?: string): string {
+    const src = this.nodes.get(id)!
+    const n = this.addNode({ ...clone(src), id: uid(), parentId, pageId, order: order ?? this.orderKeyAtTop(parentId, pageId) })
+    let prev: string | null = null
+    for (const c of this.children(id, src.pageId)) {
+      prev = keyBetween(prev, null)
+      this.cloneSubtree(c, n.id, pageId, prev)
+    }
+    return n.id
+  }
+
+  /** Serializable subtree for clipboard / export (world coords for roots). */
+  serialize(ids: string[]): GNode[] {
+    const out: GNode[] = []
+    for (const id of this.roots(ids)) {
+      const w = this.world(id)
+      out.push({ ...clone(this.nodes.get(id)!), x: w.x, y: w.y, parentId: null })
+      for (const d of this.descendants(id)) out.push(clone(this.nodes.get(d)!))
+    }
+    return out
+  }
+
+  /** Paste serialized nodes; returns new root ids. */
+  pasteNodes(nodes: GNode[], parentId: string | null, at?: { x: number; y: number }): string[] {
+    const idMap = new Map<string, string>()
+    for (const n of nodes) idMap.set(n.id, uid())
+    const roots = nodes.filter((n) => !n.parentId || !idMap.has(n.parentId))
+    const rb = unionRects(roots.map((n) => ({ x: n.x, y: n.y, w: n.width, h: n.height })))!
+    const pw = parentId ? this.world(parentId) : { x: 0, y: 0 }
+    const dx = at ? at.x - (rb.x + rb.w / 2) : 0
+    const dy = at ? at.y - (rb.y + rb.h / 2) : 0
+    const out: string[] = []
+    this.act(() => {
+      for (const n of nodes) {
+        const isRoot = !n.parentId || !idMap.has(n.parentId)
+        const copy: GNode = {
+          ...clone(n),
+          id: idMap.get(n.id)!,
+          pageId: this.currentPageId,
+          parentId: isRoot ? parentId : idMap.get(n.parentId!)!,
+          order: isRoot ? this.orderKeyAtTop(parentId) : n.order
+        }
+        if (isRoot) {
+          copy.x = n.x + dx - pw.x
+          copy.y = n.y + dy - pw.y
+          out.push(copy.id)
+        }
+        this.touch(copy.id)
+        this.nodes.set(copy.id, copy)
+        this.linkChild(copy)
+        this.invalidateGeometry(copy.id)
+      }
+      this.selection = out
+    })
+    this.emit('selection')
+    return out
+  }
+
+  /** Topmost frame at world point (for dropping / creating inside frames). */
+  frameAt(x: number, y: number, exclude: Set<string> = new Set()): string | null {
+    const cands = this.query({ x, y, w: 0.001, h: 0.001 })
+      .map((id) => this.nodes.get(id)!)
+      .filter((n) => (n.type === 'FRAME' || n.type === 'SECTION') && n.visible && !exclude.has(n.id) && ![...exclude].some((e) => this.isAncestor(e, n.id)))
+      .filter((n) => this.isVisibleThroughClips(n.id, x, y))
+    if (!cands.length) return null
+    cands.sort((a, b) => (this.paintOrderKey(a.id) < this.paintOrderKey(b.id) ? 1 : -1))
+    return cands[0].id
+  }
+
+  isVisibleThroughClips(id: string, x: number, y: number): boolean {
+    for (const a of this.ancestors(id)) {
+      if (!a.visible) return false
+      if (a.type === 'FRAME' && a.clipsContent !== false) {
+        const r = this.world(a.id)
+        if (x < r.x || y < r.y || x > r.x + r.w || y > r.y + r.h) return false
+      }
+    }
+    return true
+  }
+
+  /**
+   * Hit test like Figma: returns the node to select at a world point.
+   * Groups are selected as a whole; frames let you click straight to their children.
+   * With deep=true (Ctrl/Cmd+click) returns the deepest leaf.
+   */
+  hitTest(x: number, y: number, deep = false): string | null {
+    const tol = 2 / this.camera.zoom
+    const cands = this.query({ x: x - tol, y: y - tol, w: tol * 2, h: tol * 2 })
+      .map((id) => this.nodes.get(id)!)
+      // slices are transparent export areas: select them from the layers panel, clicks go through
+      .filter((n) => n.type !== 'ANNOTATION' && n.type !== 'SLICE' && n.visible && !n.locked && this.isVisibleThroughClips(n.id, x, y) && !this.ancestors(n.id).some((a) => a.locked))
+    if (!cands.length) return null
+    cands.sort((a, b) => (this.paintOrderKey(a.id) < this.paintOrderKey(b.id) ? 1 : -1))
+    // prefer non-container leaves on top; containers (frames, sections) only when nothing inside was hit
+    const leaf = cands.find((n) => n.type !== 'FRAME' && n.type !== 'GROUP' && n.type !== 'SECTION') ?? cands[0]
+    if (deep) return leaf.id
+    // climb out of groups (select the outermost group below a frame/page)
+    let pick = leaf
+    for (const a of this.ancestors(leaf.id)) {
+      if (a.type === 'GROUP') pick = a
+      else break
+    }
+    // if the user already has something inside this group selected, allow selecting siblings
+    if (pick.id !== leaf.id && this.selection.some((s) => this.isAncestor(pick.id, s))) {
+      const sel = this.nodes.get(this.selection[0])!
+      const level = this.ancestors(leaf.id).find((a) => a.id === sel.parentId)
+      if (level) {
+        let n: GNode = leaf
+        while (n.parentId !== level.id) n = this.nodes.get(n.parentId!)!
+        return n.id
+      }
+    }
+    return pick.id
+  }
+
+  visibleIds(r: Rect): Set<string> {
+    return new Set(this.query(r))
+  }
+
+  intersectsRect(id: string, r: Rect): boolean {
+    return rectsIntersect(this.world(id), r)
+  }
+
+  // ---------------- convenience setters used by UI & commands ----------------
+  setFill(id: string, color: RGBA | null): void {
+    const n = this.nodes.get(id)!
+    const others = n.fills.filter((f) => f.type !== 'SOLID')
+    const fills: Paint[] = color ? [...others, { type: 'SOLID', color }] : others
+    this.updateNode(id, { fills })
+  }
+}
+
+export function defaultName(t: GNode['type']): string {
+  const names: Record<GNode['type'], string> = {
+    FRAME: 'Frame',
+    GROUP: 'Group',
+    RECTANGLE: 'Rectangle',
+    ELLIPSE: 'Ellipse',
+    TEXT: 'Text',
+    VECTOR: 'Vector',
+    IMAGE: 'Image',
+    SECTION: 'Section',
+    SLICE: 'Slice',
+    SPEC: 'Spec',
+    CODE: 'Code',
+    ANNOTATION: 'Annotation'
+  }
+  return names[t]
+}
+
+export const editor = new Editor()
+;(window as unknown as { editor: Editor }).editor = editor

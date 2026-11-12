@@ -1,0 +1,238 @@
+// Gigma document model.
+// Deliberately mirrors Figma's node model (FRAME / GROUP / RECTANGLE / ELLIPSE /
+// TEXT / VECTOR / IMAGE, relative x/y inside parent, fills & strokes arrays)
+// so that conversion to and from Figma clipboard data stays lossless.
+
+export type NodeType =
+  | 'FRAME'
+  | 'GROUP'
+  | 'RECTANGLE'
+  | 'ELLIPSE'
+  | 'TEXT'
+  | 'VECTOR'
+  | 'IMAGE'
+  /** Figma-like section: big container for organizing frames on the canvas */
+  | 'SECTION'
+  /** export region: invisible, exports whatever is underneath */
+  | 'SLICE'
+  /** task card that AI clients find and execute via MCP */
+  | 'SPEC'
+  /** live HTML + CSS block rendered as design */
+  | 'CODE'
+  /** canvas note (Figma comments, but local) */
+  | 'ANNOTATION'
+
+export const CONTAINER_TYPES: NodeType[] = ['FRAME', 'GROUP', 'SECTION']
+export const isContainerType = (t: NodeType) => t === 'FRAME' || t === 'GROUP' || t === 'SECTION'
+
+export interface SpecData {
+  title: string
+  body: string // markdown-ish task description
+  status: 'TODO' | 'IN_PROGRESS' | 'DONE'
+  /** what the AI (or a person) did, filled when completing */
+  result?: string
+}
+
+export interface CodeData {
+  html: string
+  css: string
+}
+
+export interface RGBA {
+  r: number // 0..1
+  g: number
+  b: number
+  a: number
+}
+
+export interface GradientStop {
+  position: number // 0..1
+  color: RGBA
+}
+
+export type GradientPaint = {
+  type: 'GRADIENT_LINEAR' | 'GRADIENT_RADIAL'
+  stops: GradientStop[]
+  /** linear only, CSS convention: 180 = top to bottom, 90 = left to right */
+  angle?: number
+  visible?: boolean
+}
+
+export type Paint =
+  | { type: 'SOLID'; color: RGBA; visible?: boolean }
+  | GradientPaint
+  | {
+      type: 'IMAGE'
+      imageHash: string // SHA-1 hex of the image bytes (same scheme as Figma's image hash)
+      scaleMode: 'FILL' | 'FIT' | 'STRETCH'
+      visible?: boolean
+      /** set when pasted from Figma: lets Gigma fetch missing image bytes via the Figma API */
+      figmaFileKey?: string
+    }
+
+export interface Stroke {
+  color: RGBA
+  weight: number
+  align?: 'INSIDE' | 'CENTER' | 'OUTSIDE'
+  visible?: boolean
+}
+
+/** Layer effects, same set and semantics as Figma */
+export type Effect =
+  | {
+      type: 'DROP_SHADOW' | 'INNER_SHADOW'
+      color: RGBA
+      offset: { x: number; y: number }
+      radius: number // blur
+      spread: number
+      visible?: boolean
+    }
+  | { type: 'LAYER_BLUR' | 'BACKGROUND_BLUR'; radius: number; visible?: boolean }
+
+export type EffectType = Effect['type']
+
+export function defaultEffect(type: EffectType): Effect {
+  if (type === 'DROP_SHADOW' || type === 'INNER_SHADOW')
+    return { type, color: { r: 0, g: 0, b: 0, a: 0.25 }, offset: { x: 0, y: 4 }, radius: 4, spread: 0, visible: true }
+  return { type, radius: 4, visible: true }
+}
+
+export interface TextStyle {
+  fontFamily: string
+  fontSize: number
+  fontWeight: number
+  italic?: boolean
+  /** line height: percent wins over px; neither = Auto */
+  lineHeight?: number // px
+  lineHeightPercent?: number
+  /** letter spacing: percent of font size wins over px (Figma shows %) */
+  letterSpacing?: number // px
+  letterSpacingPercent?: number
+  align: 'LEFT' | 'CENTER' | 'RIGHT' | 'JUSTIFIED'
+  verticalAlign?: 'TOP' | 'CENTER' | 'BOTTOM'
+  decoration?: 'NONE' | 'UNDERLINE' | 'STRIKETHROUGH'
+  textCase?: 'ORIGINAL' | 'UPPER' | 'LOWER' | 'TITLE'
+  paragraphSpacing?: number
+  listStyle?: 'NONE' | 'BULLET' | 'NUMBER'
+  /** fixed-size text: cut overflowing lines and end with "…" */
+  truncate?: boolean
+  /** Figma "Vertical trim": STANDARD line boxes or tight cap-height-to-baseline box */
+  verticalTrim?: 'STANDARD' | 'CAP_HEIGHT'
+  /** Figma "Wrap style": AUTO (greedy) or BALANCED (even line lengths) */
+  wrapStyle?: 'AUTO' | 'BALANCED'
+}
+
+export interface BaseNode {
+  id: string
+  type: NodeType
+  name: string
+  parentId: string | null // null = top level on the page
+  pageId: string
+  /** fractional index string for stable ordering among siblings (lexicographic) */
+  order: string
+  x: number // relative to parent
+  y: number
+  width: number
+  height: number
+  /** degrees around the node's center, Figma convention (counter-clockwise positive) */
+  rotation?: number
+  opacity: number
+  visible: boolean
+  locked: boolean
+  fills: Paint[]
+  strokes: Stroke[]
+  effects?: Effect[]
+  cornerRadius?: number
+  /** independent corners [top-left, top-right, bottom-right, bottom-left]; overrides cornerRadius */
+  cornerRadii?: [number, number, number, number]
+  /** mirror around the node's center */
+  flipX?: boolean
+  flipY?: boolean
+  /** keep W/H ratio when editing dimensions in the inspector */
+  constrainProportions?: boolean
+  clipsContent?: boolean // frames only
+  /** like Figma "Use as mask": this layer's shape clips the siblings above it (and is not drawn) */
+  isMask?: boolean
+  /** VECTOR lines/paths: arrowhead at the end point (Arrow tool) */
+  arrowEnd?: boolean
+  strokeCap?: 'NONE' | 'ROUND' | 'SQUARE'
+  /** SPEC node payload */
+  spec?: SpecData
+  /** CODE node payload */
+  code?: CodeData
+  /** ANNOTATION: resolved notes are hidden from the canvas */
+  resolved?: boolean
+  // TEXT
+  characters?: string
+  textStyle?: TextStyle
+  /** like Figma: WIDTH_AND_HEIGHT = auto width, HEIGHT = fixed width / auto height */
+  textAutoResize?: 'WIDTH_AND_HEIGHT' | 'HEIGHT' | 'NONE'
+  // VECTOR: SVG path data in node-local coordinates, plus original viewBox size
+  path?: string
+  pathBox?: { w: number; h: number }
+  fillRule?: 'nonzero' | 'evenodd'
+}
+
+export type GNode = BaseNode
+
+export interface Page {
+  id: string
+  name: string
+  order: string
+  background: RGBA
+}
+
+export interface DocMeta {
+  id: string
+  name: string
+  createdAt: number
+  updatedAt: number
+  formatVersion: number
+  /** saved color styles of this document (the "styles" button in Fill / Stroke) */
+  colorStyles?: ColorStyle[]
+}
+
+export interface ColorStyle {
+  id: string
+  name: string
+  color: RGBA
+}
+
+export interface DocSnapshot {
+  meta: DocMeta
+  pages: Page[]
+  nodes: GNode[]
+}
+
+/** Incremental change set sent from the editor to storage. */
+export interface DocChanges {
+  upsertNodes?: GNode[]
+  deleteNodes?: string[]
+  upsertPages?: Page[]
+  deletePages?: string[]
+  meta?: Partial<DocMeta>
+}
+
+export const FORMAT_VERSION = 1
+
+/** Default canvas (page) background: #404040 */
+export const DEFAULT_PAGE_BG: RGBA = { r: 64 / 255, g: 64 / 255, b: 64 / 255, a: 1 }
+
+export const rgba = (r: number, g: number, b: number, a = 1): RGBA => ({ r, g, b, a })
+
+export function hexToRgba(hex: string): RGBA {
+  let h = hex.replace('#', '').trim()
+  if (h.length === 3) h = h.split('').map((c) => c + c).join('')
+  const n = parseInt(h.slice(0, 6), 16)
+  const a = h.length >= 8 ? parseInt(h.slice(6, 8), 16) / 255 : 1
+  return { r: ((n >> 16) & 255) / 255, g: ((n >> 8) & 255) / 255, b: (n & 255) / 255, a }
+}
+
+export function rgbaToHex(c: RGBA, withAlpha = false): string {
+  const to = (v: number) => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, '0')
+  return '#' + to(c.r) + to(c.g) + to(c.b) + (withAlpha && c.a < 1 ? to(c.a) : '')
+}
+
+export function rgbaToCss(c: RGBA, extraAlpha = 1): string {
+  return `rgba(${Math.round(c.r * 255)},${Math.round(c.g * 255)},${Math.round(c.b * 255)},${+(c.a * extraAlpha).toFixed(4)})`
+}
