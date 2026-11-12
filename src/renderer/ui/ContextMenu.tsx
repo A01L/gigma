@@ -162,7 +162,9 @@ export function ContextMenu({ x, y, onClose }: { x: number; y: number; onClose: 
               { label: 'Go to main component', run: A.goToMainComponent },
               { label: 'Detach instance', key: 'Ctrl+Alt+B', run: A.detachInstance }
             ] as Item[])
-          : [{ label: 'Create component', key: 'Ctrl+Alt+K', run: A.createComponent, disabled: inComponent } as Item]),
+          : one?.isComponent
+            ? [{ label: 'Add variant', run: () => void ed.addVariant(one.id) } as Item]
+            : [{ label: 'Create component', key: 'Ctrl+Alt+K', run: A.createComponent, disabled: inComponent } as Item]),
         pluginsItem,
         'sep',
         { label: 'Show/Hide', key: 'Ctrl+Shift+H', run: A.toggleVisible },

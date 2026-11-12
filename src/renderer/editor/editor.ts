@@ -1,7 +1,7 @@
 // Editor core: in-memory document, selection, camera, undo/redo, spatial index,
 // and batched incremental persistence to the .gigma file.
 import RBush from 'rbush'
-import type { DocMeta, DocSnapshot, GNode, Page, Paint, RGBA } from '@shared/types'
+import type { Constraint, DocMeta, DocSnapshot, GNode, Page, Paint, RGBA } from '@shared/types'
 import { DEFAULT_PAGE_BG } from '@shared/types'
 import { backend } from '../backend'
 import { keyBetween, rectsIntersect, uid, unionRects, type Rect } from './util'
@@ -28,6 +28,21 @@ export type Tool =
   | 'code'
   | 'annotation'
 export type Topic = 'doc' | 'selection' | 'camera' | 'ui' | 'pages'
+
+/** "Size=Large, State=Hover" -> { Size: 'Large', State: 'Hover' } (a name without "=" is one property) */
+export function parseVariant(name: string): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const part of name.split(',')) {
+    const i = part.indexOf('=')
+    if (i > 0) out[part.slice(0, i).trim()] = part.slice(i + 1).trim()
+    else if (part.trim()) out['Property 1'] = part.trim()
+  }
+  return out
+}
+export const variantName = (props: Record<string, string>): string =>
+  Object.entries(props)
+    .map(([k, v]) => `${k}=${v}`)
+    .join(', ')
 
 /** properties an instance layer may differ in from the main component (Figma's overrides) */
 const OVERRIDABLE = ['characters', 'fills', 'strokes', 'effects', 'opacity', 'visible', 'textStyle', 'blendMode'] as const
@@ -409,11 +424,13 @@ export class Editor {
     this.txDepth++
     this.tx = tx
     try {
+      this.detachEditedStyles(tx)
       this.runAutoLayout(tx)
       if (this.runComponentSync(tx)) this.runAutoLayout(tx, false)
     } finally {
       this.tx = null
       this.txDepth--
+      this.skipOverrides.clear()
     }
     for (const [id, e] of tx.nodes) e.after = this.nodes.has(id) ? clone(this.nodes.get(id)!) : null
     for (const [id, e] of tx.pages) e.after = this.pages.has(id) ? clone(this.pages.get(id)!) : null
@@ -432,6 +449,23 @@ export class Editor {
   }
   /** set by the canvas while a drag is committed: layers dropped into an auto layout frame land where they were dropped */
   dropByPosition = false
+  /** layers being dragged on the canvas right now (null = no drag) */
+  dragIds: Set<string> | null = null
+
+  /**
+   * Arrange auto layout frames right now, inside the open transaction: the canvas calls this on every
+   * step of a drag so the layout follows the pointer instead of jumping when the mouse is released.
+   */
+  layoutNow(): void {
+    if (!this.tx || this.txDepth !== 1) return
+    const was = this.dropByPosition
+    this.dropByPosition = true
+    try {
+      this.runAutoLayout(this.tx)
+    } finally {
+      this.dropByPosition = was
+    }
+  }
 
   // ---------------- components ----------------
   /** nearest main component that contains the node (or is the node) */
@@ -461,6 +495,131 @@ export class Editor {
     })
   }
 
+  // ---------------- variants ----------------
+  /** the component set (frame of variants) a main component sits in */
+  componentSetOf(id: string | null | undefined): GNode | null {
+    const n = id ? this.nodes.get(id) : undefined
+    const p = n?.parentId ? this.nodes.get(n.parentId) : undefined
+    return n?.isComponent && p?.isComponentSet ? p : null
+  }
+  /** the variants of a component set with their properties, in layer order */
+  variantsOf(setId: string): { id: string; props: Record<string, string> }[] {
+    const set = this.nodes.get(setId)
+    if (!set) return []
+    return this.children(setId, set.pageId)
+      .filter((id) => this.nodes.get(id)!.isComponent)
+      .map((id) => ({ id, props: parseVariant(this.nodes.get(id)!.name) }))
+  }
+  /**
+   * Add a variant to a main component. The first variant turns the component into a component set
+   * (a frame that holds the variants); variants are named "Property=Value, …" as in Figma.
+   */
+  addVariant(mainId: string): string | null {
+    const main = this.nodes.get(mainId)
+    if (!main?.isComponent) return null
+    let created: string | null = null
+    this.act(() => {
+      let set = this.componentSetOf(mainId)
+      if (!set) {
+        const pad = 16
+        set = this.addNode({
+          type: 'FRAME',
+          name: main.name,
+          parentId: main.parentId,
+          pageId: main.pageId,
+          order: main.order,
+          x: main.x - pad,
+          y: main.y - pad,
+          width: main.width + pad * 2,
+          height: main.height + pad * 2,
+          isComponentSet: true,
+          clipsContent: false,
+          cornerRadius: 5,
+          // the set grows by itself as variants are added
+          layoutMode: 'VERTICAL',
+          itemSpacing: pad,
+          paddingLeft: pad,
+          paddingRight: pad,
+          paddingTop: pad,
+          paddingBottom: pad,
+          primaryAxisSizingMode: 'AUTO',
+          counterAxisSizingMode: 'AUTO'
+        })
+        this.updateNode(mainId, { parentId: set.id, x: pad, y: pad, order: keyBetween(null, null), name: 'Property 1=Default', layoutGrow: undefined, layoutAlign: undefined, layoutPositioning: undefined })
+      }
+      const variants = this.variantsOf(set.id)
+      const props = { ...parseVariant(this.nodes.get(mainId)!.name) }
+      const keys = Object.keys(props)
+      const key = keys[keys.length - 1] ?? 'Property 1'
+      // a value that no variant uses yet
+      let n = variants.length + 1
+      while (variants.some((v) => v.props[key] === 'Variant ' + n)) n++
+      props[key] = 'Variant ' + n
+      const kids = this.children(set.id, set.pageId)
+      const copy = this.cloneSubtree(mainId, set.id, set.pageId, keyBetween(this.nodes.get(kids[kids.length - 1])!.order, null))
+      this.updateNode(copy, { name: variantName(props) })
+      created = copy
+      this.selection = [copy]
+    })
+    this.emit('selection')
+    return created
+  }
+  /** Point an instance at another main component (another variant); overrides are kept by layer name. */
+  swapInstance(instId: string, mainId: string): void {
+    const inst = this.nodes.get(instId)
+    const main = this.nodes.get(mainId)
+    if (!inst?.componentId || !main?.isComponent || inst.componentId === mainId) return
+    const path = (id: string): string => {
+      const names: string[] = []
+      for (let n = this.nodes.get(id); n && n.id !== instId; n = n.parentId ? this.nodes.get(n.parentId) : undefined) names.unshift(n.name)
+      return names.join('/')
+    }
+    this.act(() => {
+      const kept = new Map<string, Partial<GNode>>()
+      for (const d of this.descendants(instId)) {
+        const n = this.nodes.get(d)!
+        if (!n.overrides?.length) continue
+        const patch: Record<string, unknown> = { overrides: [...n.overrides] }
+        for (const k of n.overrides) patch[k] = clone(n[k as keyof GNode])
+        kept.set(path(d), patch as Partial<GNode>)
+      }
+      for (const c of [...this.children(instId, inst.pageId)]) this.deleteNode(c)
+      this.updateNode(instId, { componentId: mainId })
+      this.noConstraints = true
+      try {
+        this.syncInstance(instId)
+      } finally {
+        this.noConstraints = false
+      }
+      if (kept.size)
+        for (const d of this.descendants(instId)) {
+          const patch = kept.get(path(d))
+          if (patch) this.updateNode(d, patch)
+        }
+    })
+  }
+  /** layers whose changes in the current transaction must not be recorded as overrides */
+  private skipOverrides = new Set<string>()
+
+  /** Drop every override of an instance: it looks like its main component again. */
+  resetInstance(instId: string): void {
+    const inst = this.nodes.get(instId)
+    if (!inst?.componentId) return
+    this.act(() => {
+      for (const d of [instId, ...this.descendants(instId)]) {
+        // the values that come back from the main component are not new overrides
+        this.skipOverrides.add(d)
+        if (this.nodes.get(d)!.overrides) this.updateNode(d, { overrides: undefined })
+      }
+      this.noConstraints = true
+      try {
+        this.syncInstance(instId)
+      } finally {
+        this.noConstraints = false
+      }
+    })
+  }
+
   /** Record overrides made on instances and push changes of main components to their instances. */
   private runComponentSync(tx: HistoryEntry): boolean {
     let dirty = new Set<string>()
@@ -477,12 +636,24 @@ export class Editor {
       // a new or re-linked instance needs its layers
       if (n.componentId && (!b || b.componentId !== n.componentId)) fresh.add(id)
       // edits made on an instance become overrides
-      if (b && (n.sourceId || n.componentId) && n.sourceId === b.sourceId && n.componentId === b.componentId) {
+      if (b && !this.skipOverrides.has(id) && (n.sourceId || n.componentId) && n.sourceId === b.sourceId && n.componentId === b.componentId) {
         const changed = OVERRIDABLE.filter((k) => !n.overrides?.includes(k) && JSON.stringify(n[k]) !== JSON.stringify(b[k]))
         if (changed.length) this.updateNode(id, { overrides: [...(n.overrides ?? []), ...changed] })
       }
     }
     if (!dirty.size && !fresh.size) return false
+    let any = false
+    // sizes copied from the main component are not a resize: constraints stay out of it
+    this.noConstraints = true
+    try {
+      any = this.syncAll(fresh, dirty, mark)
+    } finally {
+      this.noConstraints = false
+    }
+    return any
+  }
+
+  private syncAll(fresh: Set<string>, dirty: Set<string>, mark: (id: string | null | undefined, into: Set<string>) => void): boolean {
     let any = false
     for (const id of fresh) any = this.syncInstance(id) || any
     for (let round = 0; round < 6 && dirty.size; round++) {
@@ -584,8 +755,10 @@ export class Editor {
           if ((horiz ? dw : dh) && n.layoutGrow && b.layoutGrow === n.layoutGrow) patch.layoutGrow = 0
           if ((horiz ? dh : dw) && n.layoutAlign === 'STRETCH' && b.layoutAlign === 'STRETCH') patch.layoutAlign = 'INHERIT'
           if (Object.keys(patch).length) this.updateNode(id, patch)
-          if (!dw && !dh && (n.x !== b.x || n.y !== b.y) && inFlow(b)) (moved.get(p.id) ?? moved.set(p.id, new Set()).get(p.id)!).add(id)
-        } else if (this.dropByPosition) (moved.get(p.id) ?? moved.set(p.id, new Set()).get(p.id)!).add(id)
+          // during a drag only the dragged layers count as moved: their neighbours were shifted by the layout itself
+          const isMoved = this.dragIds ? this.dragIds.has(id) : !dw && !dh && (n.x !== b.x || n.y !== b.y) && inFlow(b)
+          if (isMoved) (moved.get(p.id) ?? moved.set(p.id, new Set()).get(p.id)!).add(id)
+        } else if (this.dragIds ? this.dragIds.has(id) : this.dropByPosition) (moved.get(p.id) ?? moved.set(p.id, new Set()).get(p.id)!).add(id)
       }
       // frame resized by hand: it stops hugging on that axis
       if (isAutoLayout(n) && isAutoLayout(b) && n.layoutMode === b.layoutMode) {
@@ -616,7 +789,32 @@ export class Editor {
       // dragged layers take the slot they were dropped on
       const flow = this.children(fid, f.pageId).map((id) => this.nodes.get(id)!).filter(inFlow)
       const center = (k: GNode) => (horiz ? k.x + k.width / 2 : k.y + k.height / 2)
-      const sorted = [...flow].sort((a, b) => center(a) - center(b))
+      let sorted: GNode[]
+      if (f.layoutWrap === 'WRAP') {
+        // several lines: a dragged layer goes next to the item it was dropped closest to
+        sorted = flow.filter((k) => !moved.has(k.id))
+        const cross = (k: GNode) => (horiz ? k.y + k.height / 2 : k.x + k.width / 2)
+        const lineOf = (k: GNode) => Math.round(horiz ? k.y : k.x)
+        for (const m of flow.filter((k) => moved.has(k.id))) {
+          if (!sorted.length) {
+            sorted.push(m)
+            continue
+          }
+          // first the line the layer is over, then its place among the items of that line
+          let line = lineOf(sorted[0])
+          let bestD = Infinity
+          for (const k of sorted) {
+            const d = Math.abs(cross(k) - cross(m))
+            if (d < bestD) {
+              bestD = d
+              line = lineOf(k)
+            }
+          }
+          const inLine = sorted.map((k, i) => ({ k, i })).filter((x) => lineOf(x.k) === line)
+          const next = inLine.find((x) => center(x.k) > center(m))
+          sorted.splice(next ? next.i : inLine[inLine.length - 1].i + 1, 0, m)
+        }
+      } else sorted = [...flow].sort((a, b) => center(a) - center(b))
       if (sorted.some((k, i) => k.id !== flow[i].id)) {
         const keys = flow.map((k) => k.order)
         sorted.forEach((k, i) => k.order !== keys[i] && this.updateNode(k.id, { order: keys[i] }))
@@ -764,6 +962,91 @@ export class Editor {
     this.emit('doc')
   }
 
+  setTextStyles(textStyles: NonNullable<DocMeta['textStyles']>): void {
+    this.meta = { ...this.meta, textStyles }
+    this.pendingMeta = { ...(this.pendingMeta ?? {}), textStyles }
+    this.scheduleFlush()
+    this.emit('doc')
+  }
+
+  // ---------------- linked styles ----------------
+  /** true while a style is being pushed to its layers (that is not a manual edit, so the link stays) */
+  private applyingStyle = false
+
+  /** Change a colour style; every layer linked to it is repainted. */
+  updateColorStyle(id: string, patch: { name?: string; color?: RGBA }): void {
+    const styles = (this.meta.colorStyles ?? []).map((s) => (s.id === id ? { ...s, ...patch } : s))
+    const style = styles.find((s) => s.id === id)
+    if (!style) return
+    this.setColorStyles(styles)
+    if (!patch.color) return
+    this.applyingStyle = true
+    try {
+      this.act(() => {
+        for (const n of [...this.nodes.values()]) {
+          if (n.fillStyleId === id) {
+            // the style drives the top solid fill; other fills (images, gradients) stay
+            const top = [...n.fills].reverse().find((f) => f.type === 'SOLID')
+            this.updateNode(n.id, { fills: top ? n.fills.map((f) => (f === top ? { ...f, color: { ...style.color } } : f)) : [...n.fills, { type: 'SOLID', color: { ...style.color } }] })
+          }
+          if (n.strokeStyleId === id && n.strokes.length) this.updateNode(n.id, { strokes: n.strokes.map((s, i) => (i === 0 ? { ...s, color: { ...style.color } } : s)) })
+        }
+      })
+    } finally {
+      this.applyingStyle = false
+    }
+  }
+
+  /** Change a text style; every text layer linked to it follows. */
+  updateTextStyle(id: string, patch: { name?: string; style?: NonNullable<GNode['textStyle']> }): void {
+    const styles = (this.meta.textStyles ?? []).map((s) => (s.id === id ? { ...s, ...patch } : s))
+    const style = styles.find((s) => s.id === id)
+    if (!style) return
+    this.setTextStyles(styles)
+    if (!patch.style) return
+    this.applyingStyle = true
+    try {
+      this.act(() => {
+        for (const n of [...this.nodes.values()]) if (n.textStyleId === id && n.type === 'TEXT') this.updateNode(n.id, { textStyle: clone(style.style) })
+      })
+    } finally {
+      this.applyingStyle = false
+    }
+  }
+
+  /** Delete a style: its layers keep their look and lose the link. */
+  deleteStyle(kind: 'color' | 'text', id: string): void {
+    this.applyingStyle = true
+    try {
+      this.act(() => {
+        for (const n of [...this.nodes.values()]) {
+          if (kind === 'color' && (n.fillStyleId === id || n.strokeStyleId === id)) this.updateNode(n.id, { fillStyleId: n.fillStyleId === id ? undefined : n.fillStyleId, strokeStyleId: n.strokeStyleId === id ? undefined : n.strokeStyleId })
+          if (kind === 'text' && n.textStyleId === id) this.updateNode(n.id, { textStyleId: undefined })
+        }
+      })
+    } finally {
+      this.applyingStyle = false
+    }
+    if (kind === 'color') this.setColorStyles((this.meta.colorStyles ?? []).filter((s) => s.id !== id))
+    else this.setTextStyles((this.meta.textStyles ?? []).filter((s) => s.id !== id))
+  }
+
+  /** A layer edited by hand no longer follows its style (Figma detaches the style the same way). */
+  private detachEditedStyles(tx: HistoryEntry): void {
+    if (this.applyingStyle) return
+    for (const [id, e] of [...tx.nodes]) {
+      const n = this.nodes.get(id)
+      const b = e.before
+      if (!n || !b) continue
+      const patch: Partial<GNode> = {}
+      const topColor = (x: GNode) => JSON.stringify([...x.fills].reverse().find((f) => f.type === 'SOLID') ?? null)
+      if (n.fillStyleId && n.fillStyleId === b.fillStyleId && topColor(n) !== topColor(b)) patch.fillStyleId = undefined
+      if (n.strokeStyleId && n.strokeStyleId === b.strokeStyleId && JSON.stringify(n.strokes[0]?.color) !== JSON.stringify(b.strokes[0]?.color)) patch.strokeStyleId = undefined
+      if (n.textStyleId && n.textStyleId === b.textStyleId && JSON.stringify(n.textStyle) !== JSON.stringify(b.textStyle)) patch.textStyleId = undefined
+      if (Object.keys(patch).length) this.updateNode(id, patch)
+    }
+  }
+
   // ---------------- mutations (call inside act/begin) ----------------
   addNode(partial: Partial<GNode> & { type: GNode['type'] }): GNode {
     const pageId = partial.pageId ?? this.currentPageId
@@ -806,7 +1089,11 @@ export class Editor {
     const reparent = ('parentId' in patch && patch.parentId !== n.parentId) || ('pageId' in patch && patch.pageId !== n.pageId)
     const reorder = 'order' in patch && patch.order !== n.order
     if (reparent || reorder) this.unlinkChild(n)
+    const oldW = n.width
+    const oldH = n.height
     Object.assign(n, patch)
+    // a resized frame carries its children along according to their constraints
+    if (n.type === 'FRAME' && !this.noConstraints && ('width' in patch || 'height' in patch) && (n.width !== oldW || n.height !== oldH)) this.applyConstraints(n, oldW, oldH)
     if (n.type === 'TEXT' && ('characters' in patch || 'textStyle' in patch || 'width' in patch || 'textAutoResize' in patch)) {
       const s = fitText(n)
       n.width = s.width
@@ -816,6 +1103,37 @@ export class Editor {
     if (reparent && 'pageId' in patch) for (const d of this.descendants(id)) this.updateNode(d, { pageId: n.pageId })
     if (reparent || 'x' in patch || 'y' in patch || 'width' in patch || 'height' in patch || 'rotation' in patch || 'flipX' in patch || 'flipY' in patch || n.type === 'TEXT')
       this.invalidateGeometry(id)
+  }
+
+  /** set while sizes are written by the app itself (auto layout, component sync), not by a resize */
+  private noConstraints = false
+
+  /** Figma constraints: move / resize the children of a frame that went from oldW × oldH to its current size. */
+  private applyConstraints(f: GNode, oldW: number, oldH: number): void {
+    if (oldW <= 0 || oldH <= 0) return
+    const auto = isAutoLayout(f)
+    const axis = (c: Constraint, pos: number, size: number, was: number, now: number): [number, number] => {
+      const d = now - was
+      if (c === 'MAX') return [pos + d, size]
+      if (c === 'CENTER') return [pos + d / 2, size]
+      if (c === 'STRETCH') return [pos, Math.max(1, size + d)]
+      if (c === 'SCALE') return [(pos * now) / was, Math.max(1, (size * now) / was)]
+      return [pos, size]
+    }
+    for (const id of [...this.children(f.id, f.pageId)]) {
+      const k = this.nodes.get(id)!
+      // children arranged by auto layout have no constraints; absolute ones do
+      if (auto && inFlow(k)) continue
+      const c = k.constraints
+      if (!c || (c.horizontal === 'MIN' && c.vertical === 'MIN')) continue
+      const [x, w] = axis(c.horizontal, k.x, k.width, oldW, f.width)
+      const [y, h] = axis(c.vertical, k.y, k.height, oldH, f.height)
+      if (w !== k.width || h !== k.height) {
+        // setWorldRect scales the content of groups and converts auto-width text to fixed width
+        const pw = this.world(f.id)
+        this.setWorldRect(id, { x: pw.x + x, y: pw.y + y, w, h })
+      } else if (x !== k.x || y !== k.y) this.updateNode(id, { x, y })
+    }
   }
 
   deleteNode(id: string): void {
@@ -1060,6 +1378,12 @@ export class Editor {
     this.act(() => {
       for (const id of this.roots(ids)) {
         const n = this.nodes.get(id)!
+        // inside a component set a copy is a new variant
+        if (this.componentSetOf(id)) {
+          const v = this.addVariant(id)
+          if (v) out.push(v)
+          continue
+        }
         // a copy of a main component is an instance of it, as in Figma
         const copy = n.isComponent ? this.createInstance(id, n.parentId, n.x, n.y).id : this.cloneSubtree(id, n.parentId, n.pageId)
         if (offset) this.moveBy(copy, offset, offset)

@@ -13,8 +13,12 @@ import { DEFAULT_CODE, setCodeReadyCallback } from './code-render'
 const BLUE = '#0d99ff'
 /** components and instances */
 const PURPLE = '#9747ff'
+/** measuring lines and snapping guides */
+const RED = '#f24822'
+/** equal spacing markers */
+const PINK = '#ff24bd'
 /** selection colour of a layer: purple inside components and instances */
-const accentOf = (id: string) => (ed.mainComponentOf(id) || ed.instanceOf(id) ? PURPLE : BLUE)
+const accentOf = (id: string) => (ed.mainComponentOf(id) || ed.instanceOf(id) || ed.nodes.get(id)?.isComponentSet ? PURPLE : BLUE)
 /** cursor shown just outside the corners of the selection: drag to rotate */
 const ROTATE_CURSOR =
   `url("data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><g stroke="#fff" stroke-width="4"><path d="M6 15a7 7 0 0 1 9-9"/><path d="M12 4l3.5 2-2 3.5M4 12l2 3.5 3.5-2"/></g><g stroke="#000" stroke-width="1.6"><path d="M6 15a7 7 0 0 1 9-9"/><path d="M12 4l3.5 2-2 3.5M4 12l2 3.5 3.5-2"/></g></svg>')}") 12 12, crosshair`
@@ -62,6 +66,9 @@ export class CanvasController {
   private raf = 0
   private drag: Drag | null = null
   private spaceDown = false
+  private altDown = false
+  /** equal-spacing markers shown while dragging: a gap between two layers that matches another gap */
+  private gaps: { axis: 'x' | 'y'; from: number; to: number; at: number }[] = []
   private guides: Guide[] = []
   private frameLabels: { id: string; r: Rect }[] = []
   private annotationPins: { id: string; r: Rect }[] = []
@@ -103,12 +110,28 @@ export class CanvasController {
         this.spaceDown = true
         canvas.style.cursor = 'grab'
       }
+      // Alt: measure distances from the selection to what is under the cursor
+      if (e.key === 'Alt' && !this.altDown) {
+        this.altDown = true
+        // a lone Alt would otherwise move the focus to the window menu
+        if (ed.selection.length) e.preventDefault()
+        this.invalidate()
+      }
     })
     on(window, 'keyup', (e) => {
       if (e.code === 'Space') {
         this.spaceDown = false
         this.updateCursor()
       }
+      if (e.key === 'Alt') {
+        this.altDown = false
+        if (ed.selection.length) e.preventDefault()
+        this.invalidate()
+      }
+    })
+    on(window, 'blur', () => {
+      this.altDown = false
+      this.invalidate()
     })
     this.resize()
   }
@@ -199,14 +222,29 @@ export class CanvasController {
         continue
       }
       // components and instances are purple, with Figma's marks in front of the name
-      const comp = n.isComponent || n.componentId
-      if (comp) label = (n.isComponent ? '❖ ' : '◇ ') + label
+      const comp = n.isComponent || n.componentId || n.isComponentSet
+      if (comp) label = (n.componentId ? '◇ ' : '❖ ') + label
       ctx.fillStyle = comp ? PURPLE : sel ? BLUE : '#8a8a8a'
       const maxW = Math.max(s.w, 20)
       while (label.length > 1 && ctx.measureText(label).width > maxW) label = label.slice(0, -2) + '…'
       ctx.fillText(label, s.x, s.y - 4)
       this.frameLabels.push({ id, r: { x: s.x, y: s.y - 18, w: Math.min(ctx.measureText(label).width, maxW), h: 16 } })
     }
+
+    // component sets: Figma's dashed purple border around the variants
+    ctx.save()
+    ctx.setLineDash([5, 4])
+    ctx.lineWidth = 1
+    ctx.strokeStyle = PURPLE
+    for (const id of ed.query(view)) {
+      const n = ed.nodes.get(id)
+      if (!n?.isComponentSet || !n.visible) continue
+      const s = this.toScreen(ed.world(id))
+      ctx.beginPath()
+      ctx.roundRect(Math.round(s.x) + 0.5, Math.round(s.y) + 0.5, Math.round(s.w), Math.round(s.h), 5)
+      ctx.stroke()
+    }
+    ctx.restore()
 
     // slices: dashed export areas
     ctx.save()
@@ -383,6 +421,15 @@ export class CanvasController {
       }
     }
 
+    // equal spacing while dragging
+    for (const g of this.gaps) {
+      const a = g.axis === 'x' ? this.toScreen({ x: g.from, y: g.at, w: g.to - g.from, h: 0 }) : this.toScreen({ x: g.at, y: g.from, w: 0, h: g.to - g.from })
+      this.measureLine(a.x, a.y, a.x + a.w, a.y + a.h, round2(g.to - g.from), PINK)
+    }
+
+    // Alt: distances from the selection to the hovered layer (or to the parent frame)
+    if (this.altDown && !this.drag && sel.length && ed.editingTextId === null) this.drawMeasure(sel)
+
     // marquee
     if (this.drag?.kind === 'marquee') {
       const d = this.drag
@@ -393,6 +440,96 @@ export class CanvasController {
       ctx.fillRect(x, y, Math.abs(d.x - d.sx), Math.abs(d.y - d.sy))
       ctx.strokeRect(x + 0.5, y + 0.5, Math.abs(d.x - d.sx), Math.abs(d.y - d.sy))
     }
+  }
+
+  /** a measuring line in screen space with end ticks and the value in a pill */
+  private measureLine(x1: number, y1: number, x2: number, y2: number, value: number, color: string): void {
+    const ctx = this.ctx
+    const horiz = Math.abs(x2 - x1) >= Math.abs(y2 - y1)
+    ctx.save()
+    ctx.strokeStyle = color
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.moveTo(Math.round(x1) + 0.5, Math.round(y1) + 0.5)
+    ctx.lineTo(Math.round(x2) + 0.5, Math.round(y2) + 0.5)
+    for (const [x, y] of [[x1, y1], [x2, y2]]) {
+      ctx.moveTo(Math.round(x) + 0.5 - (horiz ? 0 : 3), Math.round(y) + 0.5 - (horiz ? 3 : 0))
+      ctx.lineTo(Math.round(x) + 0.5 + (horiz ? 0 : 3), Math.round(y) + 0.5 + (horiz ? 3 : 0))
+    }
+    ctx.stroke()
+    const text = String(value)
+    ctx.font = '11px Inter, "Segoe UI", system-ui, sans-serif'
+    const tw = ctx.measureText(text).width + 8
+    const cx = (x1 + x2) / 2
+    const cy = (y1 + y2) / 2
+    // the pill sits beside the line so it never hides it
+    const px = horiz ? cx - tw / 2 : cx + 5
+    const py = horiz ? cy - 20 : cy - 8
+    ctx.fillStyle = color
+    ctx.beginPath()
+    ctx.roundRect(px, py, tw, 16, 3)
+    ctx.fill()
+    ctx.fillStyle = '#fff'
+    ctx.textBaseline = 'middle'
+    ctx.textAlign = 'center'
+    ctx.fillText(text, px + tw / 2, py + 8.5)
+    ctx.restore()
+  }
+
+  /** Figma's Alt measuring: red lines from the selection to the hovered layer, or to its parent frame */
+  private drawMeasure(sel: string[]): void {
+    const ctx = this.ctx
+    const A = ed.selectionBounds(sel)!
+    let target = ed.hoverId && ed.nodes.has(ed.hoverId) && !sel.includes(ed.hoverId) && !sel.some((s) => ed.isAncestor(s, ed.hoverId!)) ? ed.hoverId : null
+    if (!target) target = ed.nodes.get(sel[0])?.parentId ?? null
+    if (!target) return
+    const B = ed.world(target)
+    const a = this.toScreen(A)
+    const b = this.toScreen(B)
+    // outline of what is being measured against
+    ctx.save()
+    ctx.strokeStyle = RED
+    ctx.lineWidth = 1
+    ctx.strokeRect(Math.round(b.x) + 0.5, Math.round(b.y) + 0.5, Math.round(b.w), Math.round(b.h))
+    ctx.setLineDash([3, 3])
+    const dash = (x1: number, y1: number, x2: number, y2: number) => {
+      ctx.beginPath()
+      ctx.moveTo(Math.round(x1) + 0.5, Math.round(y1) + 0.5)
+      ctx.lineTo(Math.round(x2) + 0.5, Math.round(y2) + 0.5)
+      ctx.stroke()
+    }
+    const overlap = (a1: number, a2: number, b1: number, b2: number) => (Math.min(a2, b2) > Math.max(a1, b1) ? (Math.max(a1, b1) + Math.min(a2, b2)) / 2 : null)
+    const segs: [number, number, number, number, number][] = []
+    // horizontal distances are drawn at a height both boxes share, or at the middle of the selection
+    const oy = overlap(a.y, a.y + a.h, b.y, b.y + b.h)
+    const y = oy ?? a.y + a.h / 2
+    const ox = overlap(a.x, a.x + a.w, b.x, b.x + b.w)
+    const x = ox ?? a.x + a.w / 2
+    const H = (s1: number, s2: number, w1: number, w2: number) => Math.abs(w2 - w1) > 0.005 && segs.push([s1, y, s2, y, round2(Math.abs(w2 - w1))])
+    const V = (s1: number, s2: number, w1: number, w2: number) => Math.abs(w2 - w1) > 0.005 && segs.push([x, s1, x, s2, round2(Math.abs(w2 - w1))])
+    if (A.x + A.w <= B.x) H(a.x + a.w, b.x, A.x + A.w, B.x)
+    else if (B.x + B.w <= A.x) H(b.x + b.w, a.x, B.x + B.w, A.x)
+    else {
+      H(Math.min(a.x, b.x), Math.max(a.x, b.x), A.x, B.x)
+      H(Math.min(a.x + a.w, b.x + b.w), Math.max(a.x + a.w, b.x + b.w), A.x + A.w, B.x + B.w)
+    }
+    if (A.y + A.h <= B.y) V(a.y + a.h, b.y, A.y + A.h, B.y)
+    else if (B.y + B.h <= A.y) V(b.y + b.h, a.y, B.y + B.h, A.y)
+    else {
+      V(Math.min(a.y, b.y), Math.max(a.y, b.y), A.y, B.y)
+      V(Math.min(a.y + a.h, b.y + b.h), Math.max(a.y + a.h, b.y + b.h), A.y + A.h, B.y + B.h)
+    }
+    // dashed helpers when the line runs outside the other box
+    if (oy === null && (A.x + A.w <= B.x || B.x + B.w <= A.x)) {
+      const ex = A.x + A.w <= B.x ? b.x : b.x + b.w
+      dash(ex, y, ex, y < b.y ? b.y : b.y + b.h)
+    }
+    if (ox === null && (A.y + A.h <= B.y || B.y + B.h <= A.y)) {
+      const ey = A.y + A.h <= B.y ? b.y : b.y + b.h
+      dash(x, ey, x < b.x ? b.x : b.x + b.w, ey)
+    }
+    ctx.restore()
+    for (const s of segs) this.measureLine(s[0], s[1], s[2], s[3], s[4], RED)
   }
 
   /** stroke the box of a layer, rotated with it */
@@ -780,6 +917,9 @@ export class CanvasController {
           this.dropTarget = this.dropTargetAt(p.x, p.y, d.ids)
           this.reparentDragged(d.ids, this.dropTarget)
         }
+        // auto layout follows the drag: the layer slides between its neighbours as it moves
+        ed.dragIds = new Set(d.ids)
+        ed.layoutNow()
         ed.emit('doc')
         break
       }
@@ -875,6 +1015,7 @@ export class CanvasController {
             h: round2(Math.max(1, o.h * sy))
           })
         }
+        ed.layoutNow()
         ed.emit('doc')
         break
       }
@@ -1067,6 +1208,7 @@ export class CanvasController {
     const d = this.drag
     this.drag = null
     this.guides = []
+    this.gaps = []
     if (this.canvas.hasPointerCapture(e.pointerId)) this.canvas.releasePointerCapture(e.pointerId)
     if (!d) return
     if (d.kind === 'move' && d.moved) {
@@ -1076,8 +1218,10 @@ export class CanvasController {
       this.dropTarget = null
       // inside an auto layout frame the layer takes the slot it was dropped on
       ed.dropByPosition = true
+      ed.dragIds = new Set(d.ids)
       ed.commit()
       ed.dropByPosition = false
+      ed.dragIds = null
     } else if (d.kind === 'move' && !d.moved && !e.shiftKey && ed.selection.length > 1) {
       // click without drag on a multi-selection selects just the clicked node
       const p = this.local(e)
@@ -1139,6 +1283,7 @@ export class CanvasController {
   // ------------------------------------------------------------------ snapping
   private snap(box: Rect, moving: string[]): { dx: number; dy: number } {
     this.guides = []
+    this.gaps = []
     const tol = 5 / ed.camera.zoom
     const skip = new Set(moving)
     for (const id of moving) for (const d of ed.descendants(id)) skip.add(d)
@@ -1170,8 +1315,52 @@ export class CanvasController {
           if (Math.abs(dd) < tol && (!bestY || Math.abs(dd) < Math.abs(bestY.d))) bestY = { d: dd, pos: ty, r }
         }
     }
-    const dx = bestX?.d ?? 0
-    const dy = bestY?.d ?? 0
+    // equal spacing: between two neighbours, or continuing the gap of the two layers next to it
+    const parent = ed.nodes.get(moving[0])?.parentId ?? null
+    const sibs = ed
+      .children(parent)
+      .filter((id) => !skip.has(id) && ed.nodes.get(id)!.visible)
+      .slice(0, 300)
+      .map((id) => ed.world(id))
+    const spacing = (axis: 'x' | 'y'): { d: number; marks: { from: number; to: number; at: number }[] } | null => {
+      const P = axis === 'x' ? 'x' : 'y'
+      const S = axis === 'x' ? 'w' : 'h'
+      const CP = axis === 'x' ? 'y' : 'x'
+      const CS = axis === 'x' ? 'h' : 'w'
+      // only layers that share the row (or the column) with the dragged box
+      const row = sibs.filter((r) => r[CP] < box[CP] + box[CS] && r[CP] + r[CS] > box[CP])
+      const before = row.filter((r) => r[P] + r[S] <= box[P] + tol).sort((a, b) => b[P] + b[S] - (a[P] + a[S]))
+      const after = row.filter((r) => r[P] >= box[P] + box[S] - tol).sort((a, b) => a[P] - b[P])
+      const at = (a: Rect) => Math.max(a[CP], box[CP]) + (Math.min(a[CP] + a[CS], box[CP] + box[CS]) - Math.max(a[CP], box[CP])) / 2
+      const L = before[0]
+      const R = after[0]
+      const tries: { pos: number; marks: { from: number; to: number; at: number }[] }[] = []
+      if (L && R) {
+        const g = (R[P] - (L[P] + L[S]) - box[S]) / 2
+        if (g > 0) tries.push({ pos: L[P] + L[S] + g, marks: [{ from: L[P] + L[S], to: L[P] + L[S] + g, at: at(L) }, { from: R[P] - g, to: R[P], at: at(R) }] })
+      }
+      if (L && before[1]) {
+        const g = L[P] - (before[1][P] + before[1][S])
+        if (g > 0) tries.push({ pos: L[P] + L[S] + g, marks: [{ from: before[1][P] + before[1][S], to: L[P], at: at(L) }, { from: L[P] + L[S], to: L[P] + L[S] + g, at: at(L) }] })
+      }
+      if (R && after[1]) {
+        const g = after[1][P] - (R[P] + R[S])
+        if (g > 0) tries.push({ pos: R[P] - g - box[S], marks: [{ from: R[P] + R[S], to: after[1][P], at: at(R) }, { from: R[P] - g, to: R[P], at: at(R) }] })
+      }
+      let best: { d: number; marks: { from: number; to: number; at: number }[] } | null = null
+      for (const t of tries) {
+        const d = t.pos - box[P]
+        if (Math.abs(d) < tol && (!best || Math.abs(d) < Math.abs(best.d))) best = { d, marks: t.marks }
+      }
+      return best
+    }
+    const gx = spacing('x')
+    const gy = spacing('y')
+    // an edge / centre match wins; spacing is used on an axis that has none
+    const dx = bestX?.d ?? gx?.d ?? 0
+    const dy = bestY?.d ?? gy?.d ?? 0
+    if (!bestX && gx) for (const m of gx.marks) this.gaps.push({ axis: 'x', ...m })
+    if (!bestY && gy) for (const m of gy.marks) this.gaps.push({ axis: 'y', ...m })
     const nb = { ...box, x: box.x + dx, y: box.y + dy }
     if (bestX) {
       const u = unionRects([nb, bestX.r])!

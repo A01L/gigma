@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import type { BlendMode, Effect, EffectType, GNode, GradientPaint, Paint, RGBA } from '@shared/types'
+import type { BlendMode, Constraint, Effect, EffectType, GNode, GradientPaint, Paint, RGBA } from '@shared/types'
 import { BLEND_MODES, defaultEffect, hexToRgba, rgbaToCss, rgbaToHex } from '@shared/types'
 import { isAutoLayout } from '../editor/autolayout'
 import { BOOLEAN_NAMES, layerActions } from './layerActions'
 import { isBooleanGroup } from '../editor/boolean'
-import { editor as ed } from '../editor/editor'
+import { editor as ed, parseVariant, variantName } from '../editor/editor'
 import { useEditor } from './hooks'
 import { BoolIcons, Icons } from './icons'
 import { exportSelectionPng, exportSelectionSvg, restoreFigmaImages, runAction } from './actions'
@@ -22,6 +22,8 @@ import { TypeSettings } from './TypeSettings'
 type Mixed = number | 'mixed'
 
 const same = <T,>(vals: T[]): T | 'mixed' => (vals.every((v) => v === vals[0]) ? vals[0] : 'mixed')
+/** the id shared by the whole selection, or null */
+const sameId = (ids: (string | null)[]): string | null => (ids.every((v) => v === ids[0]) ? ids[0] : null)
 
 /** Number input with Figma-like label scrubbing. `apply` runs inside a transaction. */
 function NumberField({ label, value, apply, min, step = 1, suffix }: { label: React.ReactNode; value: Mixed; apply: (v: number) => void; min?: number; step?: number; suffix?: string }) {
@@ -195,7 +197,7 @@ export function RightPanel() {
   return (
     <div className="panel right">
       <div className="p-head">
-        <div className="title">{nodes.length === 0 ? t('Design') : nodes.length === 1 ? t(nodes[0].isComponent ? 'Component' : nodes[0].componentId ? 'Instance' : isBooleanGroup(nodes[0]) ? BOOLEAN_NAMES[nodes[0].booleanOperation!] : nodes[0].type.charAt(0) + nodes[0].type.slice(1).toLowerCase()) : `${nodes.length} ${t('layers')}`}</div>
+        <div className="title">{nodes.length === 0 ? t('Design') : nodes.length === 1 ? t(nodes[0].isComponentSet ? 'Component set' : nodes[0].isComponent ? 'Component' : nodes[0].componentId ? 'Instance' : isBooleanGroup(nodes[0]) ? BOOLEAN_NAMES[nodes[0].booleanOperation!] : nodes[0].type.charAt(0) + nodes[0].type.slice(1).toLowerCase()) : `${nodes.length} ${t('layers')}`}</div>
         <button className="icon-btn" title="Hide panel (Ctrl+Alt+\)" onClick={() => runAction('toggle-right')}>
           {Icons.sidebarR}
         </button>
@@ -260,13 +262,31 @@ const MinusBtn = ({ onClick }: { onClick: () => void }) => (
 
 const colorKey = (c: RGBA) => rgbaToHex(c) + Math.round(c.a * 100)
 
-/** Saved color styles of the document (Figma's four-dots button). */
-function StylesButton({ current, onApply }: { current: RGBA | null; onApply: (c: RGBA) => void }) {
+/**
+ * Styles of the document (Figma's four-dots button). A style applied from here stays linked:
+ * the layer follows the style until its colour / typography is edited by hand.
+ */
+function StyleMenu<T extends { id: string; name: string }>(p: {
+  styles: T[]
+  /** id of the style the selection is linked to */
+  linkedId?: string | null
+  /** false when there is nothing to save a style from (e.g. no fill) */
+  canSave: boolean
+  preview: (s: T) => React.ReactNode
+  detail: (s: T) => string
+  onApply: (s: T) => void
+  onSave: (name: string) => void
+  /** overwrite the style with what the selection has now */
+  onUpdate: (s: T) => void
+  onRename: (s: T, name: string) => void
+  onDelete: (s: T) => void
+  onDetach: () => void
+}) {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
+  const [renaming, setRenaming] = useState<string | null>(null)
   const btn = useRef<HTMLButtonElement>(null)
   const pop = useRef<HTMLDivElement>(null)
-  const styles = ed.meta.colorStyles ?? []
   useEffect(() => {
     if (!open) return
     const down = (e: MouseEvent) => {
@@ -277,9 +297,10 @@ function StylesButton({ current, onApply }: { current: RGBA | null; onApply: (c:
   }, [open])
   const r = btn.current?.getBoundingClientRect()
   const panelLeft = (btn.current?.closest('.panel') as HTMLElement | null)?.getBoundingClientRect().left ?? 0
+  const linked = p.styles.find((s) => s.id === p.linkedId)
   return (
     <>
-      <button ref={btn} className={'icon-btn' + (open ? ' active-soft' : '')} title={t('Styles')} onClick={() => setOpen(!open)}>
+      <button ref={btn} className={'icon-btn' + (open || linked ? ' active-soft' : '')} title={linked ? `${t('Style')}: ${linked.name}` : t('Styles')} onClick={() => setOpen(!open)}>
         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.2">
           <circle cx="4" cy="4" r="1.6" />
           <circle cx="10" cy="4" r="1.6" />
@@ -290,43 +311,55 @@ function StylesButton({ current, onApply }: { current: RGBA | null; onApply: (c:
       {open &&
         r &&
         createPortal(
-          <div ref={pop} className="tset" style={{ left: Math.max(8, panelLeft - 288), top: Math.max(8, Math.min(window.innerHeight - 360, r.top - 20)) }} onKeyDown={(e) => e.stopPropagation()}>
+          <div ref={pop} className="tset" style={{ left: Math.max(8, panelLeft - 288), top: Math.max(8, Math.min(window.innerHeight - 380, r.top - 20)) }} onKeyDown={(e) => e.stopPropagation()}>
             <div className="tset-head">
               <b>{t('Styles')}</b>
+              {linked && (
+                <button className="btn" style={{ height: 24, padding: '0 8px' }} title={t('The layer keeps its look and stops following the style')} onClick={() => p.onDetach()}>
+                  {t('Detach style')}
+                </button>
+              )}
             </div>
             <div className="styles-list">
-              {styles.length === 0 && <div className="muted" style={{ padding: '6px 2px' }}>{t('No saved styles yet')}</div>}
-              {styles.map((s) => (
-                <div key={s.id} className="style-row" onClick={() => (ed.act(() => onApply(s.color)), setOpen(false))}>
-                  <span className="swatch" style={{ margin: 0 }}>
-                    <div style={{ background: rgbaToCss(s.color) }} />
-                  </span>
-                  <span className="style-name">{s.name}</span>
-                  <span className="muted">{rgbaToHex(s.color).slice(1).toUpperCase()}</span>
-                  <button
-                    className="icon-btn small"
-                    title={t('Delete')}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      ed.setColorStyles(styles.filter((x) => x.id !== s.id))
-                    }}
-                  >
+              {p.styles.length === 0 && <div className="muted" style={{ padding: '6px 2px' }}>{t('No saved styles yet')}</div>}
+              {p.styles.map((s) => (
+                <div key={s.id} className={'style-row' + (s.id === p.linkedId ? ' linked' : '')} onClick={() => (p.onApply(s), setOpen(false))}>
+                  {p.preview(s)}
+                  {renaming === s.id ? (
+                    <input
+                      className="tset-num"
+                      style={{ flex: 1, width: 'auto', textAlign: 'left' }}
+                      autoFocus
+                      defaultValue={s.name}
+                      onClick={(e) => e.stopPropagation()}
+                      onBlur={(e) => (e.target.value.trim() && p.onRename(s, e.target.value.trim()), setRenaming(null))}
+                      onKeyDown={(e) => (e.key === 'Enter' || e.key === 'Escape') && (e.target as HTMLInputElement).blur()}
+                    />
+                  ) : (
+                    <span className="style-name" title={t('Double-click to rename')} onDoubleClick={(e) => (e.stopPropagation(), setRenaming(s.id))}>
+                      {s.name}
+                    </span>
+                  )}
+                  <span className="muted">{p.detail(s)}</span>
+                  {p.canSave && (
+                    <button className="icon-btn small" title={t('Update the style from the selection: every layer that uses it changes')} onClick={(e) => (e.stopPropagation(), p.onUpdate(s))}>
+                      ↻
+                    </button>
+                  )}
+                  <button className="icon-btn small" title={t('Delete')} onClick={(e) => (e.stopPropagation(), p.onDelete(s))}>
                     ×
                   </button>
                 </div>
               ))}
             </div>
-            {current && (
+            {p.canSave && (
               <div className="style-save">
-                <span className="swatch" style={{ margin: 0 }}>
-                  <div style={{ background: rgbaToCss(current) }} />
-                </span>
-                <input className="tset-num" style={{ flex: 1, width: 'auto' }} placeholder={t('Style name')} value={name} onChange={(e) => setName(e.target.value)} />
+                <input className="tset-num" style={{ flex: 1, width: 'auto', textAlign: 'left' }} placeholder={t('Style name')} value={name} onChange={(e) => setName(e.target.value)} />
                 <button
                   className="btn primary"
                   disabled={!name.trim()}
                   onClick={() => {
-                    ed.setColorStyles([...styles, { id: crypto.randomUUID(), name: name.trim(), color: current }])
+                    p.onSave(name.trim())
                     setName('')
                   }}
                 >
@@ -338,6 +371,66 @@ function StylesButton({ current, onApply }: { current: RGBA | null; onApply: (c:
           document.body
         )}
     </>
+  )
+}
+
+/** Colour styles for the Fill and Stroke sections. `link` stores the style id on the selected layers. */
+function ColorStylesButton({ current, linkedId, apply, link }: { current: RGBA | null; linkedId?: string | null; apply: (c: RGBA) => void; link: (id: string | undefined) => void }) {
+  const styles = ed.meta.colorStyles ?? []
+  return (
+    <StyleMenu
+      styles={styles}
+      linkedId={linkedId}
+      canSave={!!current}
+      preview={(s) => (
+        <span className="swatch" style={{ margin: 0 }}>
+          <div style={{ background: rgbaToCss(s.color) }} />
+        </span>
+      )}
+      detail={(s) => rgbaToHex(s.color).slice(1).toUpperCase()}
+      onApply={(s) =>
+        ed.act(() => {
+          apply(s.color)
+          link(s.id)
+        })
+      }
+      onSave={(name) => {
+        const id = crypto.randomUUID()
+        ed.setColorStyles([...styles, { id, name, color: current! }])
+        // the layer the style was made from is its first user
+        ed.act(() => link(id))
+      }}
+      onUpdate={(s) => ed.updateColorStyle(s.id, { color: current! })}
+      onRename={(s, name) => ed.updateColorStyle(s.id, { name })}
+      onDelete={(s) => ed.deleteStyle('color', s.id)}
+      onDetach={() => ed.act(() => link(undefined))}
+    />
+  )
+}
+
+/** Text styles for the Typography section. */
+function TextStylesButton({ nodes }: { nodes: GNode[] }) {
+  const styles = ed.meta.textStyles ?? []
+  const current = nodes[0].textStyle ?? DEFAULT_TEXT_STYLE
+  const linkedId = same(nodes.map((n) => n.textStyleId ?? null))
+  return (
+    <StyleMenu
+      styles={styles}
+      linkedId={linkedId === 'mixed' ? null : linkedId}
+      canSave
+      preview={(s) => <span style={{ width: 22, flex: 'none', fontFamily: `"${s.style.fontFamily}", system-ui`, fontWeight: s.style.fontWeight, fontStyle: s.style.italic ? 'italic' : undefined, fontSize: 13 }}>Ag</span>}
+      detail={(s) => `${s.style.fontSize}`}
+      onApply={(s) => ed.act(() => nodes.forEach((n) => ed.updateNode(n.id, { textStyle: structuredClone(s.style), textStyleId: s.id })))}
+      onSave={(name) => {
+        const id = crypto.randomUUID()
+        ed.setTextStyles([...styles, { id, name, style: structuredClone(current) }])
+        ed.act(() => nodes.forEach((n) => ed.updateNode(n.id, { textStyleId: id })))
+      }}
+      onUpdate={(s) => ed.updateTextStyle(s.id, { style: structuredClone(current) })}
+      onRename={(s, name) => ed.updateTextStyle(s.id, { name })}
+      onDelete={(s) => ed.deleteStyle('text', s.id)}
+      onDetach={() => ed.act(() => nodes.forEach((n) => ed.updateNode(n.id, { textStyleId: undefined })))}
+    />
   )
 }
 
@@ -538,6 +631,205 @@ function ResizingRow({ nodes }: { nodes: GNode[] }) {
   )
 }
 
+/** text input that commits on Enter / blur */
+function CommitInput({ value, onCommit, placeholder }: { value: string; onCommit: (v: string) => void; placeholder?: string }) {
+  const [text, setText] = useState<string | null>(null)
+  return (
+    <input
+      value={text ?? value}
+      placeholder={placeholder}
+      spellCheck={false}
+      onFocus={() => setText(value)}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => {
+        if (text !== null && text !== value) onCommit(text)
+        setText(null)
+      }}
+      onKeyDown={(e) => {
+        e.stopPropagation()
+        if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+        if (e.key === 'Escape') (setText(null), (e.target as HTMLInputElement).blur())
+      }}
+    />
+  )
+}
+
+/** Components: variants of a main component, and the variant / text of an instance (Figma's component properties). */
+function ComponentSection({ node }: { node: GNode }) {
+  const inst = node.componentId ? node : null
+  const main = inst ? ed.nodes.get(inst.componentId!) : node.isComponent ? node : null
+  const set = node.isComponentSet ? node : main ? ed.componentSetOf(main.id) : null
+  const variants = set ? ed.variantsOf(set.id) : []
+  // every property with the values the variants use, in order of appearance
+  const props = new Map<string, string[]>()
+  for (const v of variants) for (const [k, val] of Object.entries(v.props)) props.set(k, [...new Set([...(props.get(k) ?? []), val])])
+  const current = main ? parseVariant(main.name) : {}
+
+  if (inst) {
+    const texts = ed.descendants(inst.id).map((id) => ed.nodes.get(id)!).filter((n) => n.type === 'TEXT').slice(0, 12)
+    const hasOverrides = [inst.id, ...ed.descendants(inst.id)].some((id) => ed.nodes.get(id)!.overrides?.length)
+    const pick = (key: string, value: string) => {
+      const want = { ...current, [key]: value }
+      // the variant that matches every property, or the closest one with the chosen value
+      const score = (p: Record<string, string>) => Object.keys(want).filter((k) => p[k] === want[k]).length
+      const best = variants.filter((v) => v.props[key] === value).sort((a, b) => score(b.props) - score(a.props))[0]
+      if (best) ed.swapInstance(inst.id, best.id)
+    }
+    return (
+      <Section title={main ? (set ? set.name : main.name) : t('Instance')}>
+        {!main && <div className="row muted">{t('The main component was deleted')}</div>}
+        {set &&
+          [...props].map(([key, values]) => (
+            <div className="row" key={key}>
+              <div className="field" style={{ flex: 1 }}>
+                <span className="lbl" style={{ width: 'auto', maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 6 }} title={key}>
+                  {key}
+                </span>
+                <Select value={current[key] ?? null} onChange={(v) => pick(key, v)} options={values.map((v) => ({ value: v, label: v }))} />
+              </div>
+            </div>
+          ))}
+        {texts.map((n) => (
+          <div className="row" key={n.id} title={t('Text of the layer') + ' “' + n.name + '”'}>
+            <div className="field" style={{ flex: 1 }}>
+              <span className="lbl">T</span>
+              <CommitInput value={n.characters ?? ''} onCommit={(v) => ed.act(() => ed.updateNode(n.id, { characters: v }))} />
+            </div>
+          </div>
+        ))}
+        <div className="row btn-stack">
+          <button className="btn" disabled={!main} onClick={layerActions.goToMainComponent}>
+            {t('Go to main component')}
+          </button>
+          <button className="btn" title="Ctrl+Alt+B" onClick={layerActions.detachInstance}>
+            {t('Detach')}
+          </button>
+        </div>
+        {hasOverrides && (
+          <div className="row">
+            <button className="btn" style={{ flex: 1 }} onClick={() => ed.resetInstance(inst.id)}>
+              {t('Reset all changes')}
+            </button>
+          </div>
+        )}
+      </Section>
+    )
+  }
+
+  const rename = (key: string, value: string) => {
+    if (!main || !value.trim()) return
+    ed.act(() => ed.updateNode(main.id, { name: variantName({ ...current, [key]: value.trim() }) }))
+  }
+  // renaming a property renames it in every variant of the set
+  const renameKey = (key: string, next: string) => {
+    if (!set || !next.trim() || props.has(next.trim())) return
+    ed.act(() => {
+      for (const v of variants) {
+        const p: Record<string, string> = {}
+        for (const [k, val] of Object.entries(v.props)) p[k === key ? next.trim() : k] = val
+        ed.updateNode(v.id, { name: variantName(p) })
+      }
+    })
+  }
+  const addProperty = () => {
+    if (!set) return
+    let i = props.size + 1
+    while (props.has('Property ' + i)) i++
+    ed.act(() => variants.forEach((v) => ed.updateNode(v.id, { name: variantName({ ...v.props, ['Property ' + i]: 'Default' }) })))
+  }
+  return (
+    <Section
+      title={set ? t('Variants') : t('Component')}
+      action={
+        set ? (
+          <button className="icon-btn" title={t('Add property')} onClick={addProperty}>
+            {Icons.plus}
+          </button>
+        ) : undefined
+      }
+    >
+      {set && main && (
+        <>
+          <SubLabel>{t('Properties of this variant')}</SubLabel>
+          {[...props.keys()].map((key) => (
+            <div className="grid2" key={key}>
+              <div className="field" title={t('Property name')}>
+                <CommitInput value={key} onCommit={(v) => renameKey(key, v)} />
+              </div>
+              <div className="field" title={t('Value')}>
+                <CommitInput value={current[key] ?? ''} placeholder="—" onCommit={(v) => rename(key, v)} />
+              </div>
+            </div>
+          ))}
+        </>
+      )}
+      {set && !main && (
+        <>
+          {[...props].map(([key, values]) => (
+            <div className="row" key={key} style={{ alignItems: 'baseline', gap: 8 }}>
+              <span style={{ fontWeight: 600 }}>{key}</span>
+              <span className="muted" style={{ flex: 1, minWidth: 0 }}>
+                {values.join(', ')}
+              </span>
+            </div>
+          ))}
+          <div className="row muted">{t('Select a variant to edit its properties.')}</div>
+        </>
+      )}
+      <div className="row">
+        <button className="btn" style={{ flex: 1 }} onClick={() => ed.addVariant(main ? main.id : (variants[variants.length - 1]?.id ?? ''))}>
+          + {t('Add variant')}
+        </button>
+      </div>
+    </Section>
+  )
+}
+
+/** Figma constraints: what a layer does when its parent frame is resized */
+function ConstraintsSection({ nodes }: { nodes: GNode[] }) {
+  // only layers placed freely in a frame have constraints (auto layout arranges its own children)
+  const ok = nodes.every((n) => {
+    const p = parentOf(n)
+    return p?.type === 'FRAME' && (!isAutoLayout(p) || n.layoutPositioning === 'ABSOLUTE')
+  })
+  if (!ok) return null
+  const get = (n: GNode) => n.constraints ?? { horizontal: 'MIN' as Constraint, vertical: 'MIN' as Constraint }
+  const set = (axis: 'horizontal' | 'vertical', v: Constraint) => ed.act(() => nodes.forEach((n) => ed.updateNode(n.id, { constraints: { ...get(n), [axis]: v } })))
+  const h = same(nodes.map((n) => get(n).horizontal))
+  const v = same(nodes.map((n) => get(n).vertical))
+  const opts = (names: [string, string, string, string, string]) => (['MIN', 'MAX', 'STRETCH', 'CENTER', 'SCALE'] as const).map((value, i) => ({ value, label: t(names[i]) }))
+  // small diagram: the frame, the layer and the sides it is pinned to
+  const pin = (on: boolean) => (on ? 'var(--accent)' : 'var(--text-3)')
+  const hv = h === 'mixed' ? '' : h
+  const vv = v === 'mixed' ? '' : v
+  return (
+    <Section title={t('Constraints')}>
+      <div className="row" style={{ alignItems: 'center', gap: 10 }}>
+        <svg width="56" height="56" viewBox="0 0 56 56" fill="none" style={{ flex: 'none' }}>
+          <rect x="1.5" y="1.5" width="53" height="53" rx="5" stroke="var(--border)" strokeWidth="1" fill="var(--panel-2)" />
+          <rect x="20" y="20" width="16" height="16" rx="2" stroke="var(--text-2)" />
+          <path d="M6 28h10" stroke={pin(hv === 'MIN' || hv === 'STRETCH' || hv === 'SCALE')} strokeWidth="2" strokeLinecap="round" />
+          <path d="M40 28h10" stroke={pin(hv === 'MAX' || hv === 'STRETCH' || hv === 'SCALE')} strokeWidth="2" strokeLinecap="round" />
+          <path d="M28 6v10" stroke={pin(vv === 'MIN' || vv === 'STRETCH' || vv === 'SCALE')} strokeWidth="2" strokeLinecap="round" />
+          <path d="M28 40v10" stroke={pin(vv === 'MAX' || vv === 'STRETCH' || vv === 'SCALE')} strokeWidth="2" strokeLinecap="round" />
+          {hv === 'CENTER' && <path d="M24 28h8" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" />}
+          {vv === 'CENTER' && <path d="M28 24v8" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" />}
+        </svg>
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div className="field" title={t('Horizontal')}>
+            <span className="lbl">↔</span>
+            <Select value={h === 'mixed' ? null : h} placeholder={t('Mixed')} onChange={(x) => set('horizontal', x as Constraint)} options={opts(['Left', 'Right', 'Left and right', 'Center', 'Scale'])} />
+          </div>
+          <div className="field" title={t('Vertical')}>
+            <span className="lbl">↕</span>
+            <Select value={v === 'mixed' ? null : v} placeholder={t('Mixed')} onChange={(x) => set('vertical', x as Constraint)} options={opts(['Top', 'Bottom', 'Top and bottom', 'Center', 'Scale'])} />
+          </div>
+        </div>
+      </div>
+    </Section>
+  )
+}
+
 function AutoLayoutSection({ nodes }: { nodes: GNode[] }) {
   const [sides, setSides] = useState(false)
   const frames = nodes.filter((n) => isAutoLayout(n))
@@ -619,6 +911,20 @@ function AutoLayoutSection({ nodes }: { nodes: GNode[] }) {
             <input type="checkbox" checked={between} onChange={(e) => ed.act(() => each({ primaryAxisAlignItems: e.target.checked ? 'SPACE_BETWEEN' : 'MIN' }))} />
             {t('Space between')}
           </label>
+          <label className="checkbox" style={{ padding: 0 }} title={t('Items that do not fit continue on the next line. The frame needs a fixed size along the layout direction.')}>
+            <input
+              type="checkbox"
+              checked={frames.every((x) => x.layoutWrap === 'WRAP')}
+              // wrapping needs a fixed size to wrap at
+              onChange={(e) => ed.act(() => each(e.target.checked ? { layoutWrap: 'WRAP', primaryAxisSizingMode: 'FIXED' } : { layoutWrap: undefined }))}
+            />
+            {t('Wrap')}
+          </label>
+          {frames.every((x) => x.layoutWrap === 'WRAP') && (
+            <div title={t('Gap between lines')}>
+              <NumberField label={padIcon(horiz ? 'M2 2h8M2 10h8M6 5v2' : 'M2 2v8M10 2v8M5 6h2')} value={same(frames.map((x) => x.counterAxisSpacing ?? 0))} apply={(v) => each({ counterAxisSpacing: v })} />
+            </div>
+          )}
         </div>
       </div>
       <SubLabel>{t('Padding')}</SubLabel>
@@ -718,16 +1024,7 @@ function NodeInspector({ nodes }: { nodes: GNode[] }) {
           </button>
         </div>
       )}
-      {nodes.length === 1 && nodes[0].componentId && (
-        <div className="section bool-bar">
-          <button className="btn" onClick={layerActions.goToMainComponent}>
-            {t('Go to main component')}
-          </button>
-          <button className="btn" title="Ctrl+Alt+B" onClick={layerActions.detachInstance}>
-            {t('Detach')}
-          </button>
-        </div>
-      )}
+      {nodes.length === 1 && (nodes[0].componentId || nodes[0].isComponent || nodes[0].isComponentSet) && <ComponentSection node={nodes[0]} />}
       <Section title={t('Position')}>
         <SubLabel>{t('Alignment')}</SubLabel>
         <div className="row split">
@@ -778,6 +1075,8 @@ function NodeInspector({ nodes }: { nodes: GNode[] }) {
           </div>
         </div>
       </Section>
+
+      <ConstraintsSection nodes={nodes} />
 
       <Section title={t('Layout')}>
         <SubLabel>{t('Dimensions')}</SubLabel>
@@ -895,7 +1194,12 @@ function NodeInspector({ nodes }: { nodes: GNode[] }) {
         title={t('Fill')}
         action={
           <span style={{ display: 'flex' }}>
-            <StylesButton current={topSolid?.color ?? null} onApply={(c) => setFills(topSolid ? fills.map((f) => (f === topSolid ? { ...f, color: c } : f)) : [...fills, { type: 'SOLID', color: c }])} />
+            <ColorStylesButton
+              current={topSolid?.color ?? null}
+              linkedId={sameId(nodes.map((n) => n.fillStyleId ?? null))}
+              apply={(c) => setFills(topSolid ? fills.map((f) => (f === topSolid ? { ...f, color: c } : f)) : [...fills, { type: 'SOLID', color: c }])}
+              link={(id) => each((n) => ed.updateNode(n.id, { fillStyleId: id }))}
+            />
             <button className="icon-btn" title={t('Add fill')} onClick={() => ed.act(() => setFills([...(fillsMixed ? [] : fills), { type: 'SOLID', color: { r: 0.85, g: 0.85, b: 0.85, a: 1 } }]))}>
               {Icons.plus}
             </button>
@@ -960,7 +1264,12 @@ function NodeInspector({ nodes }: { nodes: GNode[] }) {
         title={t('Stroke')}
         action={
           <span style={{ display: 'flex' }}>
-            <StylesButton current={strokes[0]?.color ?? null} onApply={(c) => setStrokes(strokes.length ? strokes.map((s, k) => (k === 0 ? { ...s, color: c } : s)) : [{ color: c, weight: 1, align: 'INSIDE' }])} />
+            <ColorStylesButton
+              current={strokes[0]?.color ?? null}
+              linkedId={sameId(nodes.map((n) => n.strokeStyleId ?? null))}
+              apply={(c) => setStrokes(strokes.length ? strokes.map((s, k) => (k === 0 ? { ...s, color: c } : s)) : [{ color: c, weight: 1, align: 'INSIDE' }])}
+              link={(id) => each((n) => ed.updateNode(n.id, { strokeStyleId: id }))}
+            />
             <button className="icon-btn" title={t('Add stroke')} onClick={() => ed.act(() => setStrokes([...(strokesMixed ? [] : strokes), { color: { r: 0, g: 0, b: 0, a: 1 }, weight: 1, align: 'INSIDE' }]))}>
               {Icons.plus}
             </button>
@@ -1397,9 +1706,12 @@ function TextSection({ nodes }: { nodes: GNode[] }) {
     <Section
       title={t('Typography')}
       action={
-        <button ref={tsBtn} className={'icon-btn' + (tsOpen ? ' active-soft' : '')} title={t('Type settings')} onClick={() => setTsOpen(!tsOpen)}>
-          {Icons.typeSettings}
-        </button>
+        <>
+          <TextStylesButton nodes={nodes} />
+          <button ref={tsBtn} className={'icon-btn' + (tsOpen ? ' active-soft' : '')} title={t('Type settings')} onClick={() => setTsOpen(!tsOpen)}>
+            {Icons.typeSettings}
+          </button>
+        </>
       }
     >
       {tsOpen && tsBtn.current && <TypeSettings nodes={nodes} anchor={tsBtn.current} onClose={() => setTsOpen(false)} />}

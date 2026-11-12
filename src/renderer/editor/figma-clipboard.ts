@@ -380,6 +380,15 @@ export async function decodeFigmaClipboard(html: string): Promise<GNode[] | null
       n.primaryAxisSizingMode = f.stackPrimarySizing === undefined ? 'AUTO' : hug(f.stackPrimarySizing)
       n.counterAxisSizingMode = hug(f.stackCounterSizing)
     }
+    if (n.layoutMode && f.stackWrap === 'WRAP') {
+      n.layoutWrap = 'WRAP'
+      n.counterAxisSpacing = f.stackCounterSpacing ?? 0
+    }
+    // constraints (MIN / MIN is the default and is not stored)
+    const cons = (v: unknown) => (v === 'CENTER' || v === 'MAX' || v === 'STRETCH' || v === 'SCALE' ? v : 'MIN')
+    const ch = cons(f.horizontalConstraint)
+    const cv = cons(f.verticalConstraint)
+    if (ch !== 'MIN' || cv !== 'MIN') n.constraints = { horizontal: ch, vertical: cv }
     if (f.stackChildPrimaryGrow) n.layoutGrow = 1
     if (f.stackChildAlignSelf === 'STRETCH') n.layoutAlign = 'STRETCH'
     if (f.stackPositioning === 'ABSOLUTE') n.layoutPositioning = 'ABSOLUTE'

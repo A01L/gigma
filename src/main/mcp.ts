@@ -157,6 +157,8 @@ function buildServer(run: RunCommand): McpServer {
       .describe('Auto layout padding: one number or [top, right, bottom, left]'),
     primaryAxisAlignItems: z.enum(['MIN', 'CENTER', 'MAX', 'SPACE_BETWEEN']).optional().describe('Auto layout: alignment along the layout direction'),
     counterAxisAlignItems: z.enum(['MIN', 'CENTER', 'MAX']).optional().describe('Auto layout: alignment across the layout direction'),
+    layoutWrap: z.enum(['NO_WRAP', 'WRAP']).optional().describe('Auto layout: WRAP = items that do not fit continue on the next line (needs a FIXED size along the layout direction)'),
+    counterAxisSpacing: z.number().optional().describe('Auto layout with WRAP: gap between the lines'),
     primaryAxisSizingMode: z.enum(['FIXED', 'AUTO']).optional().describe('Auto layout: AUTO = hug contents along the layout direction'),
     counterAxisSizingMode: z.enum(['FIXED', 'AUTO']).optional().describe('Auto layout: AUTO = hug contents across the layout direction')
   }
@@ -301,6 +303,13 @@ function buildServer(run: RunCommand): McpServer {
     layoutGrow: z.number().min(0).max(1).optional().describe('Child of an auto layout frame: 1 = fill the frame along the layout direction'),
     layoutAlign: z.enum(['INHERIT', 'STRETCH']).optional().describe('Child of an auto layout frame: STRETCH = fill the frame across the layout direction'),
     layoutPositioning: z.enum(['AUTO', 'ABSOLUTE']).optional().describe('Child of an auto layout frame: ABSOLUTE = keep own x / y'),
+    constraints: z
+      .object({ horizontal: z.enum(['MIN', 'MAX', 'CENTER', 'STRETCH', 'SCALE']).optional(), vertical: z.enum(['MIN', 'MAX', 'CENTER', 'STRETCH', 'SCALE']).optional() })
+      .optional()
+      .describe('What the layer does when its parent frame is resized: MIN = stay at the left / top, MAX = right / bottom, CENTER, STRETCH = both sides (resizes), SCALE = proportional'),
+    fillStyleId: z.string().nullable().optional().describe('Link the fill to a colour style from list_styles (null = detach). The layer follows the style until its fill is edited.'),
+    strokeStyleId: z.string().nullable().optional().describe('Link the stroke colour to a colour style (null = detach)'),
+    textStyleId: z.string().nullable().optional().describe('Link a text layer to a text style from list_styles (null = detach)'),
     blendMode: z
       .enum(['NORMAL', 'DARKEN', 'MULTIPLY', 'COLOR_BURN', 'LIGHTEN', 'SCREEN', 'COLOR_DODGE', 'OVERLAY', 'SOFT_LIGHT', 'HARD_LIGHT', 'DIFFERENCE', 'EXCLUSION', 'HUE', 'SATURATION', 'COLOR', 'LUMINOSITY'])
       .optional()
@@ -325,6 +334,38 @@ function buildServer(run: RunCommand): McpServer {
     y: z.number(),
     parentId: parent
   })
+  tool('add_variant', 'Add a variant to a main component. The first call turns the component into a component set; variants are named "Property=Value, Property 2=Value". Returns the new variant (a main component you can edit and rename).', {
+    componentId: z.string(),
+    name: z.string().optional().describe('Name of the new variant, e.g. "State=Hover" or "Size=Large, State=Default"')
+  })
+  tool('set_variant', 'Switch an instance to another variant of its component set by property values, e.g. {"State": "Hover"}. Overrides of the instance are kept.', {
+    instanceId: z.string(),
+    properties: z.record(z.string(), z.string())
+  })
+  tool('list_styles', 'List the saved colour and text styles of the document.', {})
+  tool('create_style', 'Save a colour style or a text style. Link layers to it with update_node (fillStyleId / strokeStyleId / textStyleId).', {
+    kind: z.enum(['color', 'text']),
+    name: z.string(),
+    color: color.optional().describe('Colour styles: the colour'),
+    fontFamily: z.string().optional(),
+    fontSize: z.number().positive().optional(),
+    fontWeight: z.number().int().optional(),
+    lineHeight: z.number().min(0).optional().describe('px'),
+    letterSpacing: z.number().optional().describe('px'),
+    ...typographyShape
+  })
+  tool('update_style', 'Change a style: every layer linked to it changes too.', {
+    id: z.string(),
+    name: z.string().optional(),
+    color: color.optional(),
+    fontFamily: z.string().optional(),
+    fontSize: z.number().positive().optional(),
+    fontWeight: z.number().int().optional(),
+    lineHeight: z.number().min(0).optional(),
+    letterSpacing: z.number().optional(),
+    ...typographyShape
+  })
+  tool('delete_style', 'Delete a style. Layers that used it keep their look.', { id: z.string() })
   tool('detach_instance', 'Turn instances into plain frames (no longer linked to the main component).', { ids: z.array(z.string()).min(1) })
   tool('outline_stroke', 'Convert the strokes of layers into filled vector shapes (Figma "Outline stroke").', { ids: z.array(z.string()).min(1) })
   tool('flatten_nodes', 'Replace layers (shapes, groups, boolean groups) with a single vector path: their merged outline.', { ids: z.array(z.string()).min(1) })

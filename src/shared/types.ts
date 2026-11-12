@@ -144,7 +144,10 @@ export type BlendMode = (typeof BLEND_MODES)[number]
 /** canvas globalCompositeOperation / CSS mix-blend-mode name */
 export const blendCss = (m: BlendMode | undefined): string => (!m || m === 'NORMAL' ? 'source-over' : m.toLowerCase().replace(/_/g, '-'))
 
-export type BooleanOperation = 'UNION' | 'SUBTRACT' | 'INTERSECT' | 'EXCLUDE'
+/** MIN = left / top, MAX = right / bottom, STRETCH = both sides, SCALE = proportional */
+export type Constraint = 'MIN' | 'MAX' | 'CENTER' | 'STRETCH' | 'SCALE'
+
+export type BooleanOperation ='UNION' | 'SUBTRACT' | 'INTERSECT' | 'EXCLUDE'
 
 export interface BaseNode {
   id: string
@@ -174,6 +177,14 @@ export interface BaseNode {
   flipY?: boolean
   /** keep W/H ratio when editing dimensions in the inspector */
   constrainProportions?: boolean
+  /** how the layer follows its parent frame when that frame is resized (Figma constraints); default MIN / MIN */
+  constraints?: { horizontal: Constraint; vertical: Constraint }
+  /** linked styles of the document (DocMeta.colorStyles / textStyles): the layer follows the style until it is edited by hand */
+  fillStyleId?: string
+  strokeStyleId?: string
+  textStyleId?: string
+  /** FRAME: a component set, the frame that holds the variants of one component */
+  isComponentSet?: boolean
   // ---- components (same idea as Figma: one main component, many linked instances) ----
   /** FRAME: this is a main component */
   isComponent?: boolean
@@ -190,6 +201,10 @@ export interface BaseNode {
   // ---- auto layout (frames), same fields and semantics as Figma ----
   layoutMode?: 'NONE' | 'HORIZONTAL' | 'VERTICAL'
   itemSpacing?: number
+  /** WRAP: items that do not fit continue on the next line (needs a fixed size along the layout direction) */
+  layoutWrap?: 'NO_WRAP' | 'WRAP'
+  /** gap between the lines of a wrapping layout */
+  counterAxisSpacing?: number
   paddingLeft?: number
   paddingRight?: number
   paddingTop?: number
@@ -246,6 +261,14 @@ export interface DocMeta {
   formatVersion: number
   /** saved color styles of this document (the "styles" button in Fill / Stroke) */
   colorStyles?: ColorStyle[]
+  /** saved text styles of this document */
+  textStyles?: TextStyleDef[]
+}
+
+export interface TextStyleDef {
+  id: string
+  name: string
+  style: TextStyle
 }
 
 export interface ColorStyle {

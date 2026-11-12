@@ -1,9 +1,10 @@
 // Executes command-bus requests (from MCP now, plugins later) as normal undoable edits.
 import type { CommandName, CommandRequest, CommandResponse } from '@shared/commands'
 import type { Effect, GNode, Paint, TextStyle } from '@shared/types'
-import { hexToRgba } from '@shared/types'
+import { hexToRgba, rgbaToHex } from '@shared/types'
 import { backend } from '../backend'
-import { editor as ed } from './editor'
+import { editor as ed, parseVariant } from './editor'
+import { DEFAULT_TEXT_STYLE } from './text'
 import { exportPng, imageSize } from './render'
 import { nodesToSvg, svgToNodes } from './svg'
 import { polygonPath, starPath } from './shapes'
@@ -55,8 +56,9 @@ function solid(hex?: string): Paint[] {
 function layoutPatch(a: Args): Partial<GNode> {
   const out: Partial<GNode> = {}
   if (a.layoutMode !== undefined) out.layoutMode = a.layoutMode === 'NONE' ? undefined : a.layoutMode
-  for (const k of ['itemSpacing', 'primaryAxisAlignItems', 'counterAxisAlignItems', 'primaryAxisSizingMode', 'counterAxisSizingMode'] as const)
+  for (const k of ['itemSpacing', 'primaryAxisAlignItems', 'counterAxisAlignItems', 'primaryAxisSizingMode', 'counterAxisSizingMode', 'counterAxisSpacing'] as const)
     if (a[k] !== undefined) (out as Args)[k] = a[k]
+  if (a.layoutWrap !== undefined) out.layoutWrap = a.layoutWrap === 'WRAP' ? 'WRAP' : undefined
   if (a.padding !== undefined) {
     const [t, r, b, l] = Array.isArray(a.padding) ? a.padding : [a.padding, a.padding, a.padding, a.padding]
     Object.assign(out, { paddingTop: t, paddingRight: r, paddingBottom: b, paddingLeft: l })
@@ -366,6 +368,27 @@ const handlers: Record<CommandName, (a: Args) => unknown | Promise<unknown>> = {
       if (a.layoutAlign !== undefined) patch.layoutAlign = a.layoutAlign === 'STRETCH' ? 'STRETCH' : undefined
       if (a.layoutPositioning !== undefined) patch.layoutPositioning = a.layoutPositioning === 'ABSOLUTE' ? 'ABSOLUTE' : undefined
       if (a.blendMode !== undefined) patch.blendMode = a.blendMode === 'NORMAL' ? undefined : a.blendMode
+      if (a.constraints) patch.constraints = { horizontal: a.constraints.horizontal ?? n.constraints?.horizontal ?? 'MIN', vertical: a.constraints.vertical ?? n.constraints?.vertical ?? 'MIN' }
+      // linking a style also gives the layer the look of that style
+      if (a.fillStyleId !== undefined) {
+        const s = a.fillStyleId ? (ed.meta.colorStyles ?? []).find((x) => x.id === a.fillStyleId) : null
+        if (a.fillStyleId && !s) throw new Error('unknown colour style (see list_styles)')
+        patch.fillStyleId = s?.id
+        if (s) patch.fills = [...(patch.fills ?? n.fills).filter((f) => f.type !== 'SOLID'), { type: 'SOLID', color: { ...s.color } }]
+      }
+      if (a.strokeStyleId !== undefined) {
+        const s = a.strokeStyleId ? (ed.meta.colorStyles ?? []).find((x) => x.id === a.strokeStyleId) : null
+        if (a.strokeStyleId && !s) throw new Error('unknown colour style (see list_styles)')
+        patch.strokeStyleId = s?.id
+        const cur = patch.strokes ?? n.strokes
+        if (s) patch.strokes = cur.length ? cur.map((x, i) => (i === 0 ? { ...x, color: { ...s.color } } : x)) : [{ color: { ...s.color }, weight: 1, align: 'INSIDE' }]
+      }
+      if (a.textStyleId !== undefined && n.type === 'TEXT') {
+        const s = a.textStyleId ? (ed.meta.textStyles ?? []).find((x) => x.id === a.textStyleId) : null
+        if (a.textStyleId && !s) throw new Error('unknown text style (see list_styles)')
+        patch.textStyleId = s?.id
+        if (s) patch.textStyle = structuredClone(s.style)
+      }
       ed.updateNode(n.id, patch)
       if (a.parentId !== undefined) ed.reparent(n.id, a.parentId ? checkParent(a.parentId) : null)
     })
@@ -517,6 +540,59 @@ const handlers: Record<CommandName, (a: Args) => unknown | Promise<unknown>> = {
     const n = ed.nodes.get(ed.selection[0])!
     if (n.type !== 'VECTOR') throw new Error('nothing to flatten: the layers have no area')
     return created(n)
+  },
+  add_variant: (a) => {
+    const main = requireNode(a.componentId)
+    if (!main.isComponent) throw new Error('componentId is not a main component (use create_component first)')
+    const id = ed.addVariant(main.id)
+    if (!id) throw new Error('could not add a variant')
+    if (a.name) ed.act(() => ed.updateNode(id, { name: a.name }))
+    const set = ed.componentSetOf(id)!
+    return { ...created(ed.nodes.get(id)!), componentSetId: set.id, variants: ed.variantsOf(set.id).map((v) => ({ id: v.id, properties: v.props })) }
+  },
+  set_variant: (a) => {
+    const inst = requireNode(a.instanceId)
+    const main = inst.componentId ? ed.nodes.get(inst.componentId) : undefined
+    const set = main ? ed.componentSetOf(main.id) : null
+    if (!main || !set) throw new Error('instanceId is not an instance of a component with variants')
+    const want: Record<string, string> = { ...parseVariant(main.name), ...(a.properties as Record<string, string>) }
+    const variants = ed.variantsOf(set.id)
+    const hit = variants.find((v) => Object.keys(want).every((k) => v.props[k] === want[k]))
+    if (!hit) throw new Error('no such variant; available: ' + variants.map((v) => ed.nodes.get(v.id)!.name).join(' | '))
+    ed.swapInstance(inst.id, hit.id)
+    return { ...created(ed.nodes.get(inst.id)!), properties: hit.props }
+  },
+  list_styles: () => ({
+    colors: (ed.meta.colorStyles ?? []).map((s) => ({ id: s.id, name: s.name, color: rgbaToHex(s.color, true) })),
+    texts: (ed.meta.textStyles ?? []).map((s) => ({ id: s.id, name: s.name, ...s.style }))
+  }),
+  create_style: (a) => {
+    const id = crypto.randomUUID()
+    if (a.kind === 'color') {
+      if (!a.color) throw new Error('a colour style needs "color"')
+      ed.setColorStyles([...(ed.meta.colorStyles ?? []), { id, name: a.name, color: hexToRgba(a.color) }])
+    } else
+      ed.setTextStyles([
+        ...(ed.meta.textStyles ?? []),
+        { id, name: a.name, style: { ...DEFAULT_TEXT_STYLE, ...(a.fontFamily && { fontFamily: a.fontFamily }), ...(a.fontSize && { fontSize: a.fontSize }), ...(a.fontWeight && { fontWeight: a.fontWeight }), ...(a.lineHeight !== undefined && { lineHeight: a.lineHeight }), ...(a.letterSpacing !== undefined && { letterSpacing: a.letterSpacing }), ...typography(a) } }
+      ])
+    return { id, kind: a.kind, name: a.name }
+  },
+  update_style: (a) => {
+    const c = (ed.meta.colorStyles ?? []).find((s) => s.id === a.id)
+    const tx = (ed.meta.textStyles ?? []).find((s) => s.id === a.id)
+    if (c) ed.updateColorStyle(c.id, { ...(a.name && { name: a.name }), ...(a.color && { color: hexToRgba(a.color) }) })
+    else if (tx) {
+      const style = { ...tx.style, ...(a.fontFamily && { fontFamily: a.fontFamily }), ...(a.fontSize && { fontSize: a.fontSize }), ...(a.fontWeight && { fontWeight: a.fontWeight }), ...(a.lineHeight !== undefined && { lineHeight: a.lineHeight, lineHeightPercent: undefined }), ...(a.letterSpacing !== undefined && { letterSpacing: a.letterSpacing, letterSpacingPercent: undefined }), ...typography(a) }
+      ed.updateTextStyle(tx.id, { ...(a.name && { name: a.name }), style })
+    } else throw new Error('unknown style (see list_styles)')
+    return { id: a.id, users: [...ed.nodes.values()].filter((n) => n.fillStyleId === a.id || n.strokeStyleId === a.id || n.textStyleId === a.id).length }
+  },
+  delete_style: (a) => {
+    const kind = (ed.meta.colorStyles ?? []).some((s) => s.id === a.id) ? 'color' : (ed.meta.textStyles ?? []).some((s) => s.id === a.id) ? 'text' : null
+    if (!kind) throw new Error('unknown style (see list_styles)')
+    ed.deleteStyle(kind, a.id)
+    return { deleted: a.id }
   },
   create_component: async (a) => {
     a.ids.forEach(requireNode)
