@@ -97,6 +97,18 @@ export async function exportFramesPdf(): Promise<void> {
   await exportPdf(frames, `${ed.meta.name} – ${ed.page.name}`.replace(/[\\/:*?"<>|]/g, '_'))
 }
 
+/** pick PDF files: every page of each becomes a frame */
+export function importPdfFiles(): void {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = '.pdf,application/pdf'
+  input.multiple = true
+  input.onchange = async () => {
+    for (const f of Array.from(input.files ?? [])) await importFile(f)
+  }
+  input.click()
+}
+
 export function placeImage(): void {
   const input = document.createElement('input')
   input.type = 'file'
@@ -116,6 +128,12 @@ export async function importFile(f: File, at?: { x: number; y: number }): Promis
       ed.pasteNodes(nodes, null, at ?? { x: view.x + view.w / 2, y: view.y + view.h / 2 })
     } else if (f.type.startsWith('image/')) {
       await insertImageBytes(new Uint8Array(await f.arrayBuffer()), f.type, f.name.replace(/\.[^.]+$/, ''), at)
+    } else if (f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')) {
+      // a PDF: every page becomes a frame with its text, shapes and pictures as layers (the reader is loaded only when needed)
+      ed.showToast(t('Reading {name}…', { name: f.name }))
+      const { importPdf } = await import('../editor/pdf-import')
+      const n = await importPdf(new Uint8Array(await f.arrayBuffer()), f.name.replace(/\.pdf$/i, ''), at)
+      ed.showToast(n ? t('{name}: pages imported as frames ({n})', { name: f.name, n: String(n) }) : t('{name} has no pages', { name: f.name }))
     }
   } catch (e) {
     ed.showToast(`Could not import ${f.name}: ${(e as Error).message}`)
@@ -164,6 +182,8 @@ export function runAction(action: string): void {
       return ed.setZoom(1)
     case 'place-image':
       return placeImage()
+    case 'import-pdf':
+      return importPdfFiles()
     case 'export-project':
       return void exportProject()
     case 'export-page':

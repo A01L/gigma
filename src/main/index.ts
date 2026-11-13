@@ -604,6 +604,7 @@ function buildMenu(): void {
         { label: L('Export Frames to PDF...', 'Экспорт фреймов в PDF...'), click: toTab('export-frames-pdf') },
         { type: 'separator' },
         { label: L('Place Image...', 'Вставить изображение...'), accelerator: 'CmdOrCtrl+Shift+K', registerAccelerator: false, click: toTab('place-image') },
+        { label: L('Import PDF...', 'Импорт PDF...'), click: toTab('import-pdf') },
         { type: 'separator' },
         isMac ? { role: 'close' } : { role: 'quit', label: L('Exit', 'Выход') }
       ]

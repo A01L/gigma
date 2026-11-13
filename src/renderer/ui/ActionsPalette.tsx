@@ -5,7 +5,7 @@ import { editor as ed } from '../editor/editor'
 import { Icons } from './icons'
 import { useT } from './i18n'
 import { TOOL_GROUPS } from './Toolbar'
-import { runAction, exportFramesPdf, exportPdf, exportSelectionPng, exportSelectionSvg, placeImage } from './actions'
+import { runAction, exportFramesPdf, exportPdf, exportSelectionPng, exportSelectionSvg, importPdfFiles, placeImage } from './actions'
 import { runPlugin, usePlugins } from './plugins'
 import { backend } from '../backend'
 
@@ -56,6 +56,7 @@ export function ActionsPalette({ onClose }: { onClose: () => void }) {
     cmd('pdf', 'Export selection as PDF', '', () => void exportPdf())
     cmd('frames-pdf', 'Export frames to PDF', '', () => void exportFramesPdf())
     cmd('place-image', 'Place image', 'Ctrl+Shift+K', placeImage)
+    cmd('import-pdf', 'Import PDF…', '', importPdfFiles)
     cmd('add-page', 'Add page', '', () => ed.addPage())
     for (const p of plugins) out.push({ id: 'plugin:' + p.id, label: p.name, hint: p.description ?? '', section: t('Plugins'), img: p.iconUrl ?? undefined, run: () => runPlugin(p.id) })
     out.push({ id: 'plugin-manage', label: t('Manage plugins…'), hint: '', section: t('Plugins'), run: () => void backend.tabs.openSettings() })
