@@ -971,6 +971,78 @@ body {
   font-weight: 600;
 }
 
+/* on a phone the mosaic is not a drawing any more: its tiles wrap into two columns */
+.fit.flow {
+  overflow: visible;
+}
+.fit.flow > .fit-inner {
+  position: static;
+  width: auto;
+  height: auto;
+  scale: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  padding: 5px;
+}
+.fit.flow .mos {
+  position: relative;
+  left: auto;
+  top: auto;
+  width: auto;
+  height: auto;
+  min-height: 236px;
+  border-radius: 22px;
+}
+.fit.flow .mos-wide {
+  grid-column: span 2;
+  min-height: 196px;
+}
+.fit.flow .mos-cap {
+  padding: 0.95rem 1rem 0;
+  font-size: 13.5px;
+}
+/* the round one stands alone in the middle */
+.fit.flow .mos-round {
+  position: relative;
+  left: auto;
+  top: auto;
+  grid-column: span 2;
+  justify-self: center;
+  margin: 4px 0;
+}
+.fit.flow .mo-1 {
+  order: 1;
+}
+.fit.flow .mo-2 {
+  order: 2;
+}
+.fit.flow .mo-3 {
+  order: 3;
+}
+.fit.flow .mo-4 {
+  order: 4;
+}
+.fit.flow .mos-round {
+  order: 5;
+}
+.fit.flow .mo-6 {
+  order: 6;
+}
+.fit.flow .mo-7 {
+  order: 7;
+}
+.fit.flow .mos-pen {
+  width: 100%;
+  height: auto;
+}
+.fit.flow .mos-code {
+  left: 14px;
+}
+.fit.flow .mos-note {
+  display: none;
+}
+
 /* ================================================================ document block */
 .doc p {
   font-size: 1.32rem;

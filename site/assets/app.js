@@ -6,6 +6,13 @@
   const fits = [...document.querySelectorAll('.fit')]
   const layout = () => {
     for (const box of fits) {
+      // data-from: on a screen narrower than this the mockup is not scaled at all, its parts flow like ordinary blocks
+      const flow = innerWidth < +(box.dataset.from || 0)
+      box.classList.toggle('flow', flow)
+      if (flow) {
+        box.style.height = ''
+        continue
+      }
       const w = +box.dataset.w
       const h = +box.dataset.h
       // data-min: below that scale the mockup keeps its size and scrolls sideways instead
