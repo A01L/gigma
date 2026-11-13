@@ -413,7 +413,7 @@ export class CanvasController {
         ctx.translate(-(b.x + b.w / 2), -(b.y + b.h / 2))
       }
       ctx.strokeRect(Math.round(b.x) + 0.5, Math.round(b.y) + 0.5, Math.round(b.w), Math.round(b.h))
-      if (!(this.drag?.kind === 'move' && this.drag.moved)) {
+      if (!(this.drag?.kind === 'move' && this.drag.moved) && !this.selfSized()) {
         for (const [, hx, hy] of this.handles(b)) {
           ctx.fillStyle = '#fff'
           ctx.fillRect(hx - HANDLE / 2, hy - HANDLE / 2, HANDLE, HANDLE)
@@ -803,7 +803,7 @@ export class CanvasController {
   }
   /** just outside a corner of the selection box: the rotate zone, as in Figma */
   private rotateZoneAt(sx0: number, sy0: number): boolean {
-    if (!ed.selection.length || ed.tool !== 'move') return false
+    if (!ed.selection.length || ed.tool !== 'move' || this.selfSized()) return false
     const b = this.toScreen(ed.selectionBounds()!)
     const { x, y } = this.intoBox(sx0, sy0, b)
     if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) return false
@@ -818,8 +818,12 @@ export class CanvasController {
     return false
   }
 
+  /** a guideline is like a document: its size comes from its contents, so it has no resize handles and does not rotate */
+  private selfSized(): boolean {
+    return ed.selection.length > 0 && ed.selection.every((id) => ed.nodes.get(id)?.type === 'GUIDE')
+  }
   private handleAt(sx0: number, sy0: number): Handle | null {
-    if (!ed.selection.length) return null
+    if (!ed.selection.length || this.selfSized()) return null
     const b = this.toScreen(ed.selectionBounds()!)
     const { x: sx, y: sy } = this.intoBox(sx0, sy0, b)
     for (const [h, hx, hy] of this.handles(b)) if (Math.abs(sx - hx) <= 6 && Math.abs(sy - hy) <= 6) return h

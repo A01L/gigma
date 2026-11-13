@@ -7,9 +7,8 @@ import type { Rect } from './util'
 export const guideStore = new Map<string, GuideData>()
 
 export const GUIDE_DOT = 72
+/** an open card is a document of a fixed width; its height follows its contents */
 export const GUIDE_CARD_W = 440
-/** an open card is never narrower than this: below it the texts no longer fit */
-export const GUIDE_CARD_MIN_W = 320
 const GREY = '#8c8c8c'
 
 /** accent of a guideline as a CSS colour (grey when none is set) */

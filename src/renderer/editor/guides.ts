@@ -129,8 +129,9 @@ export function reconcile(): void {
   for (const n of live) {
     const g = guides.get(n.guide.id)
     if (!g) continue
-    const h = n.guide.open ? guideCardHeight(g, n.width) : GUIDE_DOT
-    const w = n.guide.open ? n.width : GUIDE_DOT
+    // like a document: the width is fixed, the height is whatever the contents need
+    const w = n.guide.open ? GUIDE_CARD_W : GUIDE_DOT
+    const h = n.guide.open ? guideCardHeight(g, w) : GUIDE_DOT
     if (n.name !== g.name || Math.abs(n.height - h) > 0.5 || Math.abs(n.width - w) > 0.5) ed.patchQuietly(n.id, { name: g.name, width: w, height: h })
   }
   // 5. colours and fonts of the guidelines used here are styles of the document

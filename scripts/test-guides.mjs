@@ -123,18 +123,18 @@ if (shot) {
   const res2 = await send('Page.captureScreenshot', { format: 'png' })
   writeFileSync(shot.replace(/\.png$/, '-editor.png'), Buffer.from(res2.data, 'base64'))
 }
-// an open card cannot be squeezed: it has a minimum width and its height follows its contents
+// an open card is like a document: its size comes from its contents and cannot be set by hand
 const size = () => js(`(() => { const n = editor.nodes.get('${made.nodeId}'); return [n.x, n.y, n.width, Math.round(n.height)] })()`)
 const wide = await size()
 await js(`editor.act(() => editor.setWorldRect('${made.nodeId}', { ...editor.world('${made.nodeId}'), w: 150 })), 1`)
-const narrow = await size()
-check('squeezed from the right: stops at the minimum width, grows taller', [narrow[0], narrow[2], narrow[3] >= wide[3]], [wide[0], 320, true])
-await js(`editor.act(() => { const r = editor.world('${made.nodeId}'); editor.setWorldRect('${made.nodeId}', { ...r, x: r.x + 250, w: r.w - 250 }) }), 1`)
-check('squeezed from the left: the right edge stays', await size(), narrow)
-await js(`editor.act(() => editor.setWorldRect('${made.nodeId}', { ...editor.world('${made.nodeId}'), h: 40 })), 1`)
-check('the height cannot be set by hand', await size(), narrow)
-await js(`editor.act(() => editor.setWorldRect('${made.nodeId}', { ...editor.world('${made.nodeId}'), w: 440 })), 1`)
-check('widened back', await size(), wide)
+check('the width cannot be changed', await size(), wide)
+await js(`editor.act(() => { const r = editor.world('${made.nodeId}'); editor.setWorldRect('${made.nodeId}', { x: r.x + 250, y: r.y - 80, w: r.w - 250, h: 40 }) }), 1`)
+check('nor the height, and a resize does not move it', await size(), wide)
+await js(`editor.setSelection(['${made.nodeId}']), 1`)
+await paint()
+check('no resize handles on a guideline', await js(`(() => { const r = editor.world('${made.nodeId}'), c = editor.camera; return canvasView.handleAt((r.x + r.w) * c.zoom + c.x, (r.y + r.h) * c.zoom + c.y) })()`), null)
+await js(`editor.act(() => editor.updateNode('${made.nodeId}', { x: ${wide[0]} + 30, y: ${wide[1]} + 20 })), 1`)
+check('it can still be moved', await size(), [wide[0] + 30, wide[1] + 20, wide[2], wide[3]])
 // fold back into a dot
 await js(`editor.setSelection(['${made.nodeId}']), new Promise((r) => setTimeout(r, 300))`)
 await js(`document.querySelector('.guide-ins .btn.primary')?.click(), 1`)
