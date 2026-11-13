@@ -6,6 +6,15 @@ import { useEditor } from './hooks'
 import { Icons } from './icons'
 import { useT } from './i18n'
 import { placeImage } from './actions'
+import { vectorEdit, type VectorTool } from '../editor/vector-edit'
+
+/** tools of the vector edit mode (double click on a vector), shown instead of the usual ones */
+const VECTOR_TOOLS: { tool: VectorTool; icon: keyof typeof Icons; label: string; key: string }[] = [
+  { tool: 'move', icon: 'move', label: 'Move points', key: 'V' },
+  { tool: 'pen', icon: 'pen', label: 'Pen: add points, continue and join paths', key: 'P' },
+  { tool: 'bend', icon: 'bend', label: 'Bend: corner or curve', key: 'Ctrl' },
+  { tool: 'bucket', icon: 'bucket', label: 'Paint bucket: fill on or off', key: 'B' }
+]
 
 export interface ToolItem {
   tool?: Tool
@@ -131,6 +140,21 @@ function GroupButton({ group }: { group: (typeof TOOL_GROUPS)[number] }) {
 export function Toolbar({ onActions, onGuides }: { onActions: () => void; onGuides: () => void }) {
   useEditor('ui')
   const t = useT()
+  const ve = vectorEdit.current
+  if (ve?.active)
+    return (
+      <div className="toolbar">
+        {VECTOR_TOOLS.map((v) => (
+          <button key={v.tool} className={'icon-btn tip' + (ve.tool === v.tool ? ' active' : '')} data-tip={`${t(v.label)}  ${v.key}`} onClick={() => ve.setTool(v.tool)}>
+            {Icons[v.icon]}
+          </button>
+        ))}
+        <span className="tool-sep" />
+        <button className="tool-done tip" data-tip={t('Leave the point editing') + '  Enter'} onClick={() => ve.stop()}>
+          {t('Done')}
+        </button>
+      </div>
+    )
   return (
     <div className="toolbar">
       {TOOL_GROUPS.map((g) => (

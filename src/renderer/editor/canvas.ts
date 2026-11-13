@@ -6,7 +6,7 @@ import { rgbaToCss } from '@shared/types'
 import { editor as ed } from './editor'
 import { guides, placeGuide, newGuide, saveGuide, setGuideOpen } from './guides'
 import { guideAccent } from './guide-render'
-import { VectorEdit } from './vector-edit'
+import { VectorEdit, vectorEdit } from './vector-edit'
 import { applyNodeTransform, drawScene, hasTransform, outlineShape, setImageLoadedCallback } from './render'
 import { rectsIntersect, round2, unionRects, type Rect } from './util'
 import { polygonPath, smoothPath, starPath } from './shapes'
@@ -118,6 +118,7 @@ export class CanvasController {
       el.addEventListener(ev, fn as EventListener, opts)
       this.disposers.push(() => el.removeEventListener(ev, fn as EventListener, opts))
     }
+    vectorEdit.current = this.vedit
     // for the UI test scripts, like window.editor
     ;(window as unknown as { canvasView: unknown }).canvasView = this
     on(canvas, 'pointerdown', (e) => this.down(e))

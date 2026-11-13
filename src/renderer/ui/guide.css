@@ -269,3 +269,13 @@ textarea.g-in {
   flex: 0 0 44px;
   padding: 0 6px;
 }
+
+/* "Done" of the vector edit toolbar */
+.toolbar .tool-done {
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 8px;
+  background: var(--accent, #0c8ce9);
+  color: #fff;
+  font-weight: 600;
+}

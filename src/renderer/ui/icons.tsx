@@ -55,6 +55,8 @@ export const Icons = {
   // curly braces, like Figma's code tool
   code: S(<path d="M6 2.5c-1.6 0-2 .7-2 2v1.6c0 1-.5 1.6-1.5 1.9 1 .3 1.5.9 1.5 1.9v1.6c0 1.3.4 2 2 2M10 2.5c1.6 0 2 .7 2 2v1.6c0 1 .5 1.6 1.5 1.9-1 .3-1.5.9-1.5 1.9v1.6c0 1.3-.4 2-2 2" />, 18),
   annotation: S(<path d="M8 2.5a5.5 5.5 0 010 11H3.2a.7.7 0 01-.7-.7V8A5.5 5.5 0 018 2.5z" strokeLinejoin="round" />, 18),
+  bend: S([<path key="a" d="M2.5 12.5C4 4 12 4 13.5 12.5" />, <circle key="b" cx="8" cy="6.2" r="1.6" fill="currentColor" stroke="none" />], 18),
+  bucket: S([<path key="a" d="M3 8.2l5-5 5 5-4.3 4.3a1 1 0 01-1.4 0L3 8.2z" />, <path key="b" d="M3.2 8.2h9.6" />, <path key="c" d="M13.6 11c.7 1 .9 1.5.9 2a.9.9 0 01-1.8 0c0-.5.2-1 .9-2z" fill="currentColor" stroke="none" />], 18),
   guide: S([<circle key="a" cx="8" cy="8" r="5.5" />, <circle key="b" cx="8" cy="8" r="2" fill="currentColor" stroke="none" />], 18),
   actions: S([<rect key="a" x="2.5" y="2.5" width="4.3" height="4.3" rx="1.2" />, <rect key="b" x="2.5" y="9.2" width="4.3" height="4.3" rx="1.2" />, <rect key="c" x="9.2" y="2.5" width="4.3" height="4.3" rx="1.2" />, <path key="d" d="M11.35 9.2v4.3M9.2 11.35h4.3" />], 18),
   chevDown: S(<path d="M4.5 6.5L8 10l3.5-3.5" strokeWidth="1.6" />, 10),
