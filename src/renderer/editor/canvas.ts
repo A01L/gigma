@@ -19,6 +19,8 @@ const RED = '#f24822'
 const PINK = '#ff24bd'
 /** wires between Spec cards and frames */
 const WIRE = '#7cb7ff'
+/** wires that bring materials into a Spec card (frames with components, references) */
+const WIRE_IN = '#b99bff'
 /** selection colour of a layer: purple inside components and instances */
 const accentOf = (id: string) => (ed.mainComponentOf(id) || ed.instanceOf(id) || ed.nodes.get(id)?.isComponentSet ? PURPLE : BLUE)
 /** cursor shown just outside the corners of the selection: drag to rotate */
@@ -102,6 +104,8 @@ export class CanvasController {
       el.addEventListener(ev, fn as EventListener, opts)
       this.disposers.push(() => el.removeEventListener(ev, fn as EventListener, opts))
     }
+    // for the UI test scripts, like window.editor
+    ;(window as unknown as { canvasView: unknown }).canvasView = this
     on(canvas, 'pointerdown', (e) => this.down(e))
     on(canvas, 'pointermove', (e) => this.move(e))
     on(canvas, 'pointerup', (e) => this.up(e))
@@ -181,6 +185,10 @@ export class CanvasController {
     ctx.imageSmoothingQuality = zoom < 1 ? 'medium' : 'high'
     const view = ed.visibleWorldRect()
     const visible = new Set(ed.query(view))
+    // wires run behind the layers they connect
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    this.drawSpecWires()
+    ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, dpr * cx, dpr * cy)
     drawScene(ctx, ed, { view, zoom: zoom * dpr, visible })
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
@@ -430,7 +438,7 @@ export class CanvasController {
       }
     }
 
-    this.drawSpecWires()
+    this.drawSpecPorts()
 
     // equal spacing while dragging
     for (const g of this.gaps) {
@@ -472,8 +480,8 @@ export class CanvasController {
     }
     return null
   }
-  /** a wire from a port to a point: leaves the card sideways and arrives sideways */
-  private wire(x1: number, y1: number, x2: number, y2: number, side: 'l' | 'r', endSide: 'l' | 'r' | 't' | 'b' | null): void {
+  /** a wire from a port to a point: leaves the card sideways and arrives sideways. Returns points along it (for hit testing). */
+  private wire(x1: number, y1: number, x2: number, y2: number, side: 'l' | 'r', endSide: 'l' | 'r' | 't' | 'b' | null): { x: number; y: number }[] {
     const ctx = this.ctx
     const k = Math.max(30, Math.min(160, Math.abs(x2 - x1) / 2 + Math.abs(y2 - y1) / 6))
     const c1x = x1 + (side === 'l' ? -k : k)
@@ -483,6 +491,13 @@ export class CanvasController {
     ctx.moveTo(x1, y1)
     ctx.bezierCurveTo(c1x, y1, c2x, c2y, x2, y2)
     ctx.stroke()
+    const pts: { x: number; y: number }[] = []
+    for (let i = 0; i <= 28; i++) {
+      const t = i / 28
+      const u = 1 - t
+      pts.push({ x: u * u * u * x1 + 3 * u * u * t * c1x + 3 * u * t * t * c2x + t * t * t * x2, y: u * u * u * y1 + 3 * u * u * t * y1 + 3 * u * t * t * c2y + t * t * t * y2 })
+    }
+    return pts
   }
   /** where a wire from (px, py) lands on a frame: the middle of the side that faces the card */
   private wireEnd(target: Rect, px: number, py: number): { x: number; y: number; side: 'l' | 'r' | 't' | 'b' } {
@@ -490,55 +505,102 @@ export class CanvasController {
     if (px > target.x + target.w) return { x: target.x + target.w, y: target.y + Math.min(target.h / 2, 60), side: 'r' }
     return py < target.y + target.h / 2 ? { x: target.x + target.w / 2, y: target.y, side: 't' } : { x: target.x + target.w / 2, y: target.y + target.h, side: 'b' }
   }
-  /** wires of every Spec card on the page, the ports of the selected card and the wire being dragged */
+  /** the wires drawn in the last frame, in screen space */
+  private wires: { spec: string; other: string; pts: { x: number; y: number }[] }[] = []
+  private hoverWire: { spec: string; other: string } | null = null
+  private hoverFrame: string | null = null
+  private wireAt(sx: number, sy: number): { spec: string; other: string } | null {
+    for (const w of this.wires) for (const p of w.pts) if (Math.hypot(p.x - sx, p.y - sy) <= 7) return { spec: w.spec, other: w.other }
+    return null
+  }
+  /** a wire lights up when the pointer is on it, on its card or on its frame, and while either end is selected */
+  private wireLit(spec: string, other: string): boolean {
+    const h = ed.hoverId
+    const d = this.drag
+    const hf = this.hoverFrame
+    return (
+      hf === other ||
+      (!!hf && ed.isAncestor(other, hf)) ||
+      ed.selection.includes(spec) ||
+      ed.selection.includes(other) ||
+      h === spec ||
+      h === other ||
+      (!!h && ed.isAncestor(other, h)) ||
+      (this.hoverWire?.spec === spec && this.hoverWire.other === other) ||
+      (d?.kind === 'link' && d.spec === spec)
+    )
+  }
+  /**
+   * Wires of every Spec card on the page. Drawn before the layers, so they pass behind the frames and cards:
+   * materials come in at the left port, the frames to work in go out of the right one.
+   */
   private drawSpecWires(): void {
+    const ctx = this.ctx
+    const S = (p: { x: number; y: number }) => this.toScreen({ x: p.x, y: p.y, w: 0, h: 0 })
+    this.wires = []
+    ctx.save()
+    ctx.lineCap = 'round'
+    for (const n of ed.nodes.values()) {
+      if (n.type !== 'SPEC' || n.pageId !== ed.currentPageId || !n.visible || !n.spec) continue
+      const rules = n.spec.kind === 'RULES'
+      const done = !rules && n.spec.status === 'DONE'
+      const ports = this.specPorts(n.id)
+      for (const [side, ids] of [['r', n.spec.targets ?? []], ['l', n.spec.sources ?? []]] as const) {
+        for (const tid of ids) {
+          const t = ed.nodes.get(tid)
+          if (!t || t.pageId !== n.pageId || !t.visible) continue
+          const tw = ed.world(tid)
+          const a = S(ports[side])
+          const endW = this.wireEnd(tw, ports[side].x, ports[side].y)
+          const b = S(endW)
+          const lit = this.wireLit(n.id, tid)
+          const color = side === 'l' ? WIRE_IN : done ? '#27ae60' : WIRE
+          ctx.globalAlpha = lit ? 1 : 0.28
+          ctx.lineWidth = lit ? 2 : 1.5
+          ctx.strokeStyle = color
+          ctx.shadowColor = lit ? color : 'transparent'
+          ctx.shadowBlur = lit ? 10 * this.dpr : 0
+          // an open task is dashed; materials, rules and finished work are solid
+          ctx.setLineDash(side === 'r' && !done && !rules ? [6, 5] : [])
+          this.wires.push({ spec: n.id, other: tid, pts: this.wire(a.x, a.y, b.x, b.y, side, endW.side) })
+          ctx.setLineDash([])
+          ctx.fillStyle = color
+          for (const p of [a, b]) {
+            ctx.beginPath()
+            ctx.arc(p.x, p.y, 4, 0, Math.PI * 2)
+            ctx.fill()
+          }
+        }
+      }
+    }
+    ctx.restore()
+  }
+  /** on top of the layers: outlines of what a selected card is wired to, its ports and the wire being dragged */
+  private drawSpecPorts(): void {
     const ctx = this.ctx
     const S = (p: { x: number; y: number }) => this.toScreen({ x: p.x, y: p.y, w: 0, h: 0 })
     ctx.save()
     ctx.lineWidth = 1.5
     ctx.lineCap = 'round'
-    for (const n of ed.nodes.values()) {
-      if (n.type !== 'SPEC' || n.pageId !== ed.currentPageId || !n.visible || !n.spec?.targets?.length) continue
-      const selected = ed.selection.includes(n.id)
-      const done = n.spec.status === 'DONE'
-      const color = done ? '#27ae60' : WIRE
-      const ports = this.specPorts(n.id)
-      for (const tid of n.spec.targets) {
-        const t = ed.nodes.get(tid)
-        if (!t || t.pageId !== n.pageId || !t.visible) continue
-        const tw = ed.world(tid)
-        // the wire leaves from the side of the card that faces the frame
-        const side: 'l' | 'r' = tw.x + tw.w / 2 < ports.l.x + (ports.r.x - ports.l.x) / 2 ? 'l' : 'r'
-        const a = S(ports[side])
-        const endW = this.wireEnd(tw, ports[side].x, ports[side].y)
-        const b = S(endW)
-        ctx.globalAlpha = selected || ed.selection.includes(tid) ? 1 : 0.55
+    const sel = ed.selection.length === 1 ? ed.nodes.get(ed.selection[0]) : undefined
+    if (sel?.type === 'SPEC') {
+      for (const [color, ids] of [[WIRE, sel.spec?.targets ?? []], [WIRE_IN, sel.spec?.sources ?? []]] as const) {
         ctx.strokeStyle = color
-        ctx.setLineDash(done ? [] : [6, 5])
-        this.wire(a.x, a.y, b.x, b.y, side, endW.side)
-        ctx.setLineDash([])
-        ctx.fillStyle = color
-        for (const p of [a, b]) {
-          ctx.beginPath()
-          ctx.arc(p.x, p.y, 4, 0, Math.PI * 2)
-          ctx.fill()
-        }
-        // the linked frame is outlined while the card is selected
-        if (selected) {
-          const f = this.toScreen(tw)
+        for (const id of ids) {
+          if (!ed.nodes.has(id) || ed.nodes.get(id)!.pageId !== sel.pageId) continue
+          const f = this.toScreen(ed.world(id))
           ctx.strokeRect(Math.round(f.x) + 0.5, Math.round(f.y) + 0.5, Math.round(f.w), Math.round(f.h))
         }
       }
     }
-    ctx.globalAlpha = 1
-    // ports of the selected card: drag one to a frame
-    const sel = ed.selection.length === 1 ? ed.nodes.get(ed.selection[0]) : undefined
+    // ports of the selected card: drag one to a frame (left = materials in, right = where to work)
     if (sel?.type === 'SPEC' && ed.tool === 'move' && !(this.drag?.kind === 'move' && this.drag.moved)) {
       const ports = this.specPorts(sel.id)
       for (const side of ['l', 'r'] as const) {
+        const color = side === 'l' ? WIRE_IN : WIRE
         const p = S(ports[side])
         const cx = p.x + (side === 'l' ? -14 : 14)
-        ctx.strokeStyle = WIRE
+        ctx.strokeStyle = color
         ctx.beginPath()
         ctx.moveTo(p.x, p.y)
         ctx.lineTo(cx, p.y)
@@ -548,7 +610,7 @@ export class CanvasController {
         ctx.arc(cx, p.y, 6, 0, Math.PI * 2)
         ctx.fill()
         ctx.stroke()
-        ctx.fillStyle = WIRE
+        ctx.fillStyle = color
         ctx.beginPath()
         ctx.arc(cx, p.y, 2.5, 0, Math.PI * 2)
         ctx.fill()
@@ -556,10 +618,11 @@ export class CanvasController {
     }
     const d = this.drag
     if (d?.kind === 'link') {
+      const color = d.side === 'l' ? WIRE_IN : WIRE
       const a = S(this.specPorts(d.spec)[d.side])
       let end = S({ x: d.x, y: d.y })
       let endSide: 'l' | 'r' | 't' | 'b' | null = null
-      ctx.strokeStyle = WIRE
+      ctx.strokeStyle = color
       if (d.target && ed.nodes.has(d.target)) {
         const tw = ed.world(d.target)
         const e = this.wireEnd(tw, this.specPorts(d.spec)[d.side].x, this.specPorts(d.spec)[d.side].y)
@@ -571,7 +634,7 @@ export class CanvasController {
         ctx.lineWidth = 1.5
       }
       this.wire(a.x, a.y, end.x, end.y, d.side, endSide)
-      ctx.fillStyle = WIRE
+      ctx.fillStyle = color
       ctx.beginPath()
       ctx.arc(end.x, end.y, 4, 0, Math.PI * 2)
       ctx.fill()
@@ -1012,8 +1075,14 @@ export class CanvasController {
       }
       if ((ed.tool === 'move' || ed.tool === 'scale') && !this.spaceDown && !ed.editingTextId) {
         const h = this.pickAt(p.x, p.y, e.ctrlKey || e.metaKey)
-        if (h !== ed.hoverId) {
+        // wires lie behind the layers: one is hovered only where nothing else is
+        const hw = h ? null : this.wireAt(p.sx, p.sy)
+        // the frame or section under the pointer, also over its empty area: its wires light up
+        const hf = this.wires.length ? ed.frameAt(p.x, p.y) : null
+        if (h !== ed.hoverId || hf !== this.hoverFrame || hw?.spec !== this.hoverWire?.spec || hw?.other !== this.hoverWire?.other) {
           ed.hoverId = h
+          this.hoverFrame = hf
+          this.hoverWire = hw
           this.invalidate()
         }
       }
@@ -1075,10 +1144,10 @@ export class CanvasController {
       case 'link': {
         d.x = p.x
         d.y = p.y
-        // the frame under the cursor (the outermost one: specs are about whole screens)
+        // the frame under the cursor (the outermost one: specs are about whole screens), or the section when over its empty area
         let hit = ed.frameAt(p.x, p.y)
         while (hit && ed.nodes.get(hit)!.parentId && ed.nodes.get(ed.nodes.get(hit)!.parentId!)?.type === 'FRAME') hit = ed.nodes.get(hit)!.parentId
-        d.target = hit && ed.nodes.get(hit)?.type === 'FRAME' ? hit : null
+        d.target = hit && !ed.isAncestor(hit, d.spec) ? hit : null
         this.invalidate()
         break
       }
@@ -1387,12 +1456,16 @@ export class CanvasController {
       const hit = this.pickAt(p.x, p.y, e.ctrlKey || e.metaKey)
       if (hit) ed.setSelection([hit])
     } else if (d.kind === 'link') {
-      // dropping the wire on a frame links it; dropping it on an already linked frame removes the link
+      // dropping the wire on a frame links it; dropping it on an already linked frame removes the link.
+      // The left port takes materials, the right one points at the frames to work in.
       const spec = ed.nodes.get(d.spec)
       if (spec?.spec && d.target) {
-        const cur = (spec.spec.targets ?? []).filter((t) => ed.nodes.has(t))
-        const targets = cur.includes(d.target) ? cur.filter((t) => t !== d.target) : [...cur, d.target]
-        ed.act(() => ed.updateNode(spec.id, { spec: { ...spec.spec!, targets: targets.length ? targets : undefined } }))
+        const mine = d.side === 'l' ? 'sources' : 'targets'
+        const other = d.side === 'l' ? 'targets' : 'sources'
+        const cur = (spec.spec[mine] ?? []).filter((t) => ed.nodes.has(t))
+        const next = cur.includes(d.target) ? cur.filter((t) => t !== d.target) : [...cur, d.target]
+        const rest = (spec.spec[other] ?? []).filter((t) => t !== d.target)
+        ed.act(() => ed.updateNode(spec.id, { spec: { ...spec.spec!, [mine]: next.length ? next : undefined, [other]: rest.length ? rest : undefined } }))
       }
       this.invalidate()
     } else if (d.kind === 'resize' || d.kind === 'rotate') ed.commit()

@@ -31,8 +31,12 @@ export interface SpecData {
   status: 'TODO' | 'IN_PROGRESS' | 'DONE'
   /** what the AI (or a person) did, filled when completing */
   result?: string
-  /** ids of the frames this spec is wired to: the task is about them (drawn as wires on the canvas) */
+  /** ids of the frames or sections this spec is wired to: the work happens there (drawn as wires on the canvas) */
   targets?: string[]
+  /** ids of the frames wired into this spec as materials: components, references, the design to rebuild */
+  sources?: string[]
+  /** RULES = not a task with a status but standing rules for the linked frames (style guide, constraints) */
+  kind?: 'TASK' | 'RULES'
 }
 
 export interface CodeData {

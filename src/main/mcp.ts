@@ -110,8 +110,9 @@ function buildServer(run: RunCommand, client = 'AI'): McpServer {
         '(fills incl. images, strokes with alignment, corner radius, opacity, effects, masks, clip content, full typography); ' +
         'align_nodes / reorder_nodes / duplicate_nodes / group_nodes / ungroup_nodes mirror the inspector and layer actions. ' +
         'The user may leave tasks as Spec cards (list_specs) and notes as annotations (list_annotations): check them, do the work, then update_spec / resolve_annotation. ' +
-        'A Spec card can be wired to one or several frames: such a frame lists its "specs" in get_document / get_node, and a spec lists its "linkedFrames". ' +
-        'Before changing a frame that has an unfinished spec, read that spec and follow it; when handed a spec, do the work in its linked frames. ' +
+        'A Spec card can be wired to frames or sections: such a frame lists its "specs" in get_document / get_node, and a spec lists its "linkedFrames" (where to work) and "sourceFrames" (materials). ' +
+        'A spec is either a TASK (do it, then mark DONE) or RULES (standing rules for its frames, follow them in every change). ' +
+        'Before changing a frame, read the specs wired to it; when handed a spec, take the materials from its sourceFrames and do the work in its linkedFrames. ' +
         'For complex layouts you can use create_code (HTML + CSS rendered as a design block) instead of placing every element by coordinates.'
     }
   )
@@ -429,30 +430,38 @@ function buildServer(run: RunCommand, client = 'AI'): McpServer {
   })
   tool(
     'list_specs',
-    'List Spec cards — tasks the user left on the canvas for AI. Each card has linkedFrames: the frames the user wired the task to, so do the work inside those frames (no linked frames = the task is about the page in general). Read them, do the work (design with the other tools), then call update_spec with status DONE and a short result.',
-    { status: z.enum(['TODO', 'IN_PROGRESS', 'DONE']).optional(), allPages: z.boolean().default(true) }
+    'List Spec cards the user left on the canvas for AI. kind TASK = a task with a status: do the work, then call update_spec with status DONE and a short result. ' +
+      'kind RULES = standing rules (style guide, constraints) for the linked frames: follow them in every change there, they are never "done". ' +
+      'linkedFrames = the frames / sections where the work happens (none = the page in general). ' +
+      'sourceFrames = materials wired into the spec (frames with components, references, an old design): inspect them with get_node / export_png and build from them in the linked frames; do not edit the sources unless the spec says so.',
+    { status: z.enum(['TODO', 'IN_PROGRESS', 'DONE']).optional(), kind: z.enum(['TASK', 'RULES']).optional(), allPages: z.boolean().default(true) }
   )
-  tool('update_spec', 'Update a Spec card (status, result notes, title, description).', {
+  tool('update_spec', 'Update a Spec card (status, result notes, title, description, kind, links).', {
     id: z.string(),
     status: z.enum(['TODO', 'IN_PROGRESS', 'DONE']).optional(),
     result: z.string().optional().describe('What you did, shown on the card for the user'),
     title: z.string().optional(),
     body: z.string().optional(),
-    frameIds: z.array(z.string()).optional().describe('Replace the frames this spec is wired to ([] removes every link)')
+    kind: z.enum(['TASK', 'RULES']).optional(),
+    frameIds: z.array(z.string()).optional().describe('Replace the frames / sections this spec is wired to ([] removes every link)'),
+    sourceIds: z.array(z.string()).optional().describe('Replace the frames wired in as materials')
   })
   tool(
     'link_spec',
-    'Wire a Spec card to frames (drawn as wires on the canvas), the same as dragging the port of the card onto a frame. A wired frame reports its specs in get_document / get_node, and results of create_* / update_node inside it carry a reminder.',
+    'Wire a Spec card to frames or sections (drawn as wires on the canvas), the same as dragging a port of the card onto a frame. role "target" (right port) = where the work happens; role "source" (left port) = materials to build from. A target frame reports its specs in get_document / get_node, and results of create_* / update_node inside it carry a reminder.',
     {
       specId: z.string(),
       frameIds: z.array(z.string()).min(1),
+      role: z.enum(['target', 'source']).default('target'),
       mode: z.enum(['add', 'remove', 'set']).default('add')
     }
   )
-  tool('create_spec', 'Create a Spec card (task note) on the canvas, optionally wired to the frames it is about.', {
+  tool('create_spec', 'Create a Spec card on the canvas: a task or a set of rules, optionally wired to the frames it is about and to source frames with materials.', {
     title: z.string(),
     body: z.string().default(''),
-    frameIds: z.array(z.string()).optional().describe('Frames the task is about'),
+    kind: z.enum(['TASK', 'RULES']).default('TASK'),
+    frameIds: z.array(z.string()).optional().describe('Frames / sections the spec is about'),
+    sourceIds: z.array(z.string()).optional().describe('Frames wired in as materials'),
     x: z.number().default(0),
     y: z.number().default(0),
     width: z.number().positive().default(320),

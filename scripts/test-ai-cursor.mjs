@@ -31,6 +31,8 @@ ws.addEventListener('message', (ev) => {
 })
 const send = (method, params) => new Promise((res) => (pending.set(++id, res), ws.send(JSON.stringify({ id, method, params }))))
 const js = (expression) => send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true }).then((r) => r.result?.value ?? r.exceptionDetails?.exception?.description ?? null)
+// a covered window draws no frames; taking a screenshot makes it draw one
+const paint = () => send('Page.captureScreenshot', { format: 'png', clip: { x: 0, y: 0, width: 4, height: 4, scale: 1 } })
 const wait = (ms) => new Promise((r) => setTimeout(r, ms))
 const cursors = () => js(`[...document.querySelectorAll('.ai-cursor:not(.pop)')].map((c) => c.querySelector('.ai-cursor-name').textContent)`)
 // screen position of the tip, relative to the canvas
@@ -51,7 +53,8 @@ check('reading leaves it where it was', await tip(), await corner(title.id))
 const btn = await mcp('create_rectangle', { name: 'btn', x: 32, y: 220, width: 160, height: 48, fill: '#0C8CE9', cornerRadius: 12, parentId: frame.id })
 await mcp('update_node', { id: btn.id, x: 200 })
 check('update_node points at the changed layer', await tip(), await corner(btn.id))
-await js(`editor.setZoom(editor.camera.zoom * 1.5), new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(1))))`)
+await js(`editor.setZoom(editor.camera.zoom * 1.5), new Promise((r) => (requestAnimationFrame(() => requestAnimationFrame(() => r(1))), setTimeout(() => r(0), 400)))`)
+await paint()
 check('it follows the layer when the view changes', await tip(), await corner(btn.id))
 check('the name is hidden until hover', await js(`getComputedStyle(document.querySelector('.ai-cursor-name')).opacity`), '0')
 check('it glows', await js(`getComputedStyle(document.querySelector('.ai-cursor-glow')).animationName.includes('ai-cursor-glow')`), true)
@@ -68,7 +71,7 @@ if (shot) {
 // the end of the work: the cursor pops and is removed
 await js(`aiCursor.finish('Codex'), 1`)
 check('popping', await js(`document.querySelectorAll('.ai-cursor.pop').length`), 1)
-await wait(700)
+await wait(1600)
 check('gone after the pop', await js(`[...document.querySelectorAll('.ai-cursor')].map((c) => c.querySelector('.ai-cursor-name').textContent)`), ['Claude'])
 console.log(results.join('\n'))
 console.log(results.some((r) => r.startsWith('FAIL')) ? 'SOME FAILED' : `all ${results.length} passed`)

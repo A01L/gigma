@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import type { BlendMode, Constraint, Effect, EffectType, GNode, GradientPaint, Paint, RGBA } from '@shared/types'
+import type { BlendMode, Constraint, Effect, EffectType, GNode, GradientPaint, Paint, RGBA, SpecData } from '@shared/types'
 import { BLEND_MODES, defaultEffect, hexToRgba, rgbaToCss, rgbaToHex } from '@shared/types'
 import { isAutoLayout } from '../editor/autolayout'
 import { BOOLEAN_NAMES, layerActions } from './layerActions'
@@ -1447,33 +1447,68 @@ function SpecialInspector({ node: n }: { node: GNode }) {
   )
   if (n.type === 'SPEC') {
     const sp = n.spec ?? { title: '', body: '', status: 'TODO' as const }
-    const set = (patch: Partial<typeof sp>) => ed.updateNode(n.id, { spec: { ...sp, ...patch } })
+    const set = (patch: Partial<SpecData>) => ed.updateNode(n.id, { spec: { ...sp, ...patch } })
+    const rules = sp.kind === 'RULES'
+    const links = (role: 'targets' | 'sources') =>
+      (sp[role] ?? [])
+        .filter((id) => ed.nodes.has(id))
+        .map((id) => (
+          <div className="row tight" key={id}>
+            <button className="field" style={{ flex: 1, textAlign: 'left', cursor: 'pointer' }} title={t('Show on the canvas')} onClick={() => ed.zoomToRect(ed.world(id), 1)}>
+              <span className="lbl">{ed.nodes.get(id)!.type === 'SECTION' ? Icons.section : Icons.frame}</span>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ed.nodes.get(id)!.name}</span>
+            </button>
+            <MinusBtn onClick={() => ed.act(() => set({ [role]: (sp[role] ?? []).filter((x) => x !== id) }))} />
+          </div>
+        ))
     return (
       <>
         {layout}
-        <Section title={t('Task')}>
-          <div className="row muted hint">{t('Spec cards are tasks for AI: MCP clients find them with list_specs and mark them done.')}</div>
-          <div className="field-label">{t('Status')}</div>
+        <Section title={rules ? t('Rules') : t('Task')}>
           <div className="row">
             <div className="seg">
               {(
                 [
-                  ['TODO', t('To do')],
-                  ['IN_PROGRESS', t('In progress')],
-                  ['DONE', t('Done')]
+                  ['TASK', t('Task')],
+                  ['RULES', t('Rules')]
                 ] as const
               ).map(([v, label]) => (
-                <button key={v} className={sp.status === v ? 'on' : ''} onClick={() => ed.act(() => set({ status: v }))}>
+                <button key={v} className={(sp.kind ?? 'TASK') === v ? 'on' : ''} onClick={() => ed.act(() => set({ kind: v === 'RULES' ? 'RULES' : undefined }))}>
                   {label}
                 </button>
               ))}
             </div>
           </div>
+          <div className="row muted hint">
+            {rules
+              ? t('Rules are not a task to finish: the AI follows them every time it works in the linked frames.')
+              : t('Spec cards are tasks for AI: MCP clients find them with list_specs and mark them done.')}
+          </div>
+          {!rules && (
+            <>
+              <div className="field-label">{t('Status')}</div>
+              <div className="row">
+                <div className="seg">
+                  {(
+                    [
+                      ['TODO', t('To do')],
+                      ['IN_PROGRESS', t('In progress')],
+                      ['DONE', t('Done')]
+                    ] as const
+                  ).map(([v, label]) => (
+                    <button key={v} className={sp.status === v ? 'on' : ''} onClick={() => ed.act(() => set({ status: v }))}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
           <div className="field-label">{t('Title')}</div>
           <AreaField className="prose" rows={2} value={sp.title} onCommit={(v) => set({ title: v, ...(v ? {} : {}) })} />
           <div className="field-label">{t('Description')}</div>
           <AreaField className="prose" rows={8} value={sp.body} onCommit={(v) => set({ body: v })} />
-          {sp.result && (
+          {sp.result && !rules && (
             <>
               <div className="field-label">{t('Result')}</div>
               <AreaField className="prose" rows={4} value={sp.result} onCommit={(v) => set({ result: v })} />
@@ -1481,18 +1516,12 @@ function SpecialInspector({ node: n }: { node: GNode }) {
           )}
         </Section>
         <Section title={t('Linked frames')}>
-          {(sp.targets ?? []).filter((id) => ed.nodes.has(id)).length === 0 && <div className="row muted hint">{t('Drag the round port on the edge of the card to a frame. The AI will see that this task is about that frame.')}</div>}
-          {(sp.targets ?? [])
-            .filter((id) => ed.nodes.has(id))
-            .map((id) => (
-              <div className="row tight" key={id}>
-                <button className="field" style={{ flex: 1, textAlign: 'left', cursor: 'pointer' }} title={t('Show on the canvas')} onClick={() => ed.zoomToRect(ed.world(id), 1)}>
-                  <span className="lbl">{Icons.frame}</span>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ed.nodes.get(id)!.name}</span>
-                </button>
-                <MinusBtn onClick={() => ed.act(() => set({ targets: (sp.targets ?? []).filter((x) => x !== id) }))} />
-              </div>
-            ))}
+          {links('targets').length === 0 && <div className="row muted hint">{t('Drag the blue port on the right edge of the card to a frame or a section. The AI will see that this spec is about it.')}</div>}
+          {links('targets')}
+        </Section>
+        <Section title={t('Materials')}>
+          {links('sources').length === 0 && <div className="row muted hint">{t('Drag the violet port on the left edge to frames with components, references or an old design. The AI will build from them in the linked frames.')}</div>}
+          {links('sources')}
         </Section>
       </>
     )

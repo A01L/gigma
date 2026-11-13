@@ -14,30 +14,54 @@ import { aiCursor } from './ai-cursor'
 
 type Args = Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
 
+type SpecRef = { id: string; kind: 'TASK' | 'RULES'; title: string; status?: string; body: string }
 /**
- * Spec cards wired to a layer or to one of the frames it sits in. `open` leaves out finished tasks.
- * This is how the AI learns, while working inside a frame, that the user left a task for it there.
+ * Spec cards wired to a layer or to one of the frames / sections it sits in. `open` leaves out finished tasks
+ * (rules never finish). This is how the AI learns, while working inside a frame, what the user wants there.
  */
-function specsFor(n: GNode, open = false): { id: string; title: string; status: string; body: string }[] {
-  const chain = new Set<string>([n.id, ...ed.ancestors(n.id).map((a) => a.id)])
-  const out: { id: string; title: string; status: string; body: string }[] = []
+function specsFor(n: GNode, open = false, own = false): SpecRef[] {
+  const chain = new Set<string>(own ? [n.id] : [n.id, ...ed.ancestors(n.id).map((a) => a.id)])
+  const out: SpecRef[] = []
   for (const s of ed.nodes.values()) {
     if (s.type !== 'SPEC' || !s.spec?.targets?.some((t) => chain.has(t))) continue
-    if (open && s.spec.status === 'DONE') continue
-    out.push({ id: s.id, title: s.spec.title, status: s.spec.status, body: s.spec.body })
+    const rules = s.spec.kind === 'RULES'
+    if (open && !rules && s.spec.status === 'DONE') continue
+    out.push({ id: s.id, kind: rules ? 'RULES' : 'TASK', title: s.spec.title, ...(!rules && { status: s.spec.status }), body: s.spec.body })
   }
   return out
 }
-/** the frames a Spec card is wired to (deleted ones are skipped) */
-const framesOf = (s: GNode) =>
-  (s.spec?.targets ?? []).flatMap((id) => {
+const brief = (s: SpecRef) => ({ id: s.id, kind: s.kind, title: s.title, ...(s.status && { status: s.status }) })
+/** specs this frame is wired into as a material */
+const materialFor = (n: GNode) => [...ed.nodes.values()].filter((s) => s.type === 'SPEC' && s.spec?.sources?.includes(n.id)).map((s) => ({ id: s.id, title: s.spec!.title }))
+/** the frames a Spec card is wired to (deleted ones are skipped): `targets` = where to work, `sources` = materials */
+const framesOf = (s: GNode, role: 'targets' | 'sources' = 'targets') =>
+  (s.spec?.[role] ?? []).flatMap((id) => {
     const f = ed.nodes.get(id)
-    return f ? [{ id: f.id, name: f.name, pageId: f.pageId, width: Math.round(f.width), height: Math.round(f.height) }] : []
+    return f ? [{ id: f.id, type: f.type, name: f.name, pageId: f.pageId, width: Math.round(f.width), height: Math.round(f.height) }] : []
   })
-function setTargets(specId: string, frameIds: string[]): void {
+/** what a spec says about itself to the AI */
+const specView = (s: GNode) => ({
+  ...s.spec,
+  kind: s.spec?.kind ?? 'TASK',
+  ...(s.spec?.kind === 'RULES' && { status: undefined, result: undefined }),
+  targets: undefined,
+  sources: undefined,
+  // where the work happens
+  linkedFrames: framesOf(s),
+  // materials wired into the spec: read them (get_node, export_png) and build from them, do not change them
+  sourceFrames: framesOf(s, 'sources')
+})
+function setLinks(specId: string, frameIds: string[], role: 'targets' | 'sources' = 'targets'): void {
   const s = requireNode(specId)
-  for (const id of frameIds) if (requireNode(id).type !== 'FRAME') throw new Error(`"${id}" is not a frame: a spec can only be linked to frames`)
-  ed.act(() => ed.updateNode(s.id, { spec: { ...(s.spec ?? { title: '', body: '', status: 'TODO' }), targets: frameIds.length ? [...new Set(frameIds)] : undefined } }))
+  for (const id of frameIds) {
+    const t = requireNode(id).type
+    if (t !== 'FRAME' && t !== 'SECTION') throw new Error(`"${id}" is not a frame or a section: a spec can only be linked to those`)
+  }
+  const other = role === 'targets' ? 'sources' : 'targets'
+  const spec = s.spec ?? { title: '', body: '', status: 'TODO' as const }
+  // a frame is either a material or a place to work, not both
+  const rest = (spec[other] ?? []).filter((id) => !frameIds.includes(id))
+  ed.act(() => ed.updateNode(s.id, { spec: { ...spec, [role]: frameIds.length ? [...new Set(frameIds)] : undefined, [other]: rest.length ? rest : undefined } }))
 }
 
 function summarize(n: GNode, depth: number): Record<string, unknown> {
@@ -54,14 +78,18 @@ function summarize(n: GNode, depth: number): Record<string, unknown> {
   const solid = n.fills.find((f) => f.type === 'SOLID')
   if (solid && solid.type === 'SOLID') out.fill = '#' + [solid.color.r, solid.color.g, solid.color.b].map((v) => Math.round(v * 255).toString(16).padStart(2, '0')).join('')
   if (!n.visible) out.visible = false
-  if (n.type === 'FRAME') {
-    const specs = specsFor(n).filter((s) => ed.nodes.get(s.id)!.spec!.targets!.includes(n.id))
-    if (specs.length) out.specs = specs.map((s) => ({ id: s.id, title: s.title, status: s.status }))
+  if (n.type === 'FRAME' || n.type === 'SECTION') {
+    const specs = specsFor(n, false, true)
+    if (specs.length) out.specs = specs.map(brief)
+    const mat = materialFor(n)
+    if (mat.length) out.materialForSpecs = mat
   }
   if (n.type === 'SPEC') {
-    out.spec = { title: n.spec?.title, status: n.spec?.status }
+    out.spec = { kind: n.spec?.kind ?? 'TASK', title: n.spec?.title, ...(n.spec?.kind !== 'RULES' && { status: n.spec?.status }) }
     const frames = framesOf(n)
     if (frames.length) out.linkedFrames = frames.map((f) => ({ id: f.id, name: f.name }))
+    const src = framesOf(n, 'sources')
+    if (src.length) out.sourceFrames = src.map((f) => ({ id: f.id, name: f.name }))
   }
   const kids = ed.children(n.id, n.pageId)
   if (kids.length) {
@@ -156,12 +184,17 @@ export function alignNodes(ids: string[], how: string): void {
 
 function created(n: GNode) {
   const out: Record<string, unknown> = { id: n.id, type: n.type, name: n.name, x: n.x, y: n.y, width: n.width, height: n.height, parentId: n.parentId }
-  // working inside a frame that has an unfinished spec: say so, the task describes what is wanted here
+  // working inside a frame that has rules or an unfinished task: say so, they describe what is wanted here
   if (n.type !== 'SPEC') {
     const specs = specsFor(n, true)
     if (specs.length) {
-      out.specs = specs.map((s) => ({ id: s.id, title: s.title, status: s.status }))
-      out.note = 'The user left a spec (task) for this frame. Read it with list_specs and follow it; when done call update_spec with status DONE.'
+      out.specs = specs.map(brief)
+      const rules = specs.some((s) => s.kind === 'RULES')
+      const tasks = specs.some((s) => s.kind === 'TASK')
+      out.note =
+        'The user wired specs to this frame. Read them with list_specs. ' +
+        (rules ? 'RULES are standing rules: every change in this frame must follow them. ' : '') +
+        (tasks ? 'A TASK says what to do here; when it is done call update_spec with status DONE.' : '')
     }
   }
   return out
@@ -203,17 +236,20 @@ const handlers: Record<CommandName, (a: Args) => unknown | Promise<unknown>> = {
   },
   get_node: (a) => {
     const n = requireNode(a.id)
-    if (n.type === 'SPEC') return { ...n, linkedFrames: framesOf(n) }
+    if (n.type === 'SPEC') return { ...n, spec: undefined, ...specView(n) }
     const specs = specsFor(n)
-    return specs.length ? { ...n, specs } : n
+    const mat = materialFor(n)
+    return specs.length || mat.length ? { ...n, ...(specs.length && { specs }), ...(mat.length && { materialForSpecs: mat }) } : n
   },
   link_spec: (a) => {
     const s = requireNode(a.specId)
     if (s.type !== 'SPEC') throw new Error('specId is not a Spec card')
-    const cur = (s.spec?.targets ?? []).filter((id) => ed.nodes.has(id))
+    const role = a.role === 'source' ? 'sources' : 'targets'
+    const cur = (s.spec?.[role] ?? []).filter((id) => ed.nodes.has(id))
     const ids: string[] = a.frameIds
-    setTargets(s.id, a.mode === 'set' ? ids : a.mode === 'remove' ? cur.filter((id) => !ids.includes(id)) : [...cur, ...ids])
-    return { id: s.id, title: s.spec?.title, linkedFrames: framesOf(ed.nodes.get(s.id)!) }
+    setLinks(s.id, a.mode === 'set' ? ids : a.mode === 'remove' ? cur.filter((id) => !ids.includes(id)) : [...cur, ...ids], role)
+    const now = ed.nodes.get(s.id)!
+    return { id: s.id, title: s.spec?.title, linkedFrames: framesOf(now), sourceFrames: framesOf(now, 'sources') }
   },
   find_nodes: (a) => {
     const q = (a.name ?? '').toLowerCase()
@@ -499,16 +535,13 @@ const handlers: Record<CommandName, (a: Args) => unknown | Promise<unknown>> = {
   },
   list_specs: (a) =>
     [...ed.nodes.values()]
-      .filter((n) => n.type === 'SPEC' && (a.allPages !== false || n.pageId === ed.currentPageId) && (!a.status || n.spec?.status === a.status))
+      .filter((n) => n.type === 'SPEC' && (a.allPages !== false || n.pageId === ed.currentPageId) && (!a.status || (n.spec?.kind !== 'RULES' && n.spec?.status === a.status)) && (!a.kind || (n.spec?.kind ?? 'TASK') === a.kind))
       .map((n) => ({
         id: n.id,
         pageId: n.pageId,
         page: ed.pages.get(n.pageId)?.name,
         parentId: n.parentId,
-        ...n.spec,
-        targets: undefined,
-        // the frames the task is about: do the work there
-        linkedFrames: framesOf(n),
+        ...specView(n),
         x: n.x,
         y: n.y,
         width: n.width,
@@ -524,13 +557,14 @@ const handlers: Record<CommandName, (a: Args) => unknown | Promise<unknown>> = {
           ...(a.status && { status: a.status }),
           ...(a.result !== undefined && { result: a.result }),
           ...(a.title !== undefined && { title: a.title }),
-          ...(a.body !== undefined && { body: a.body })
+          ...(a.body !== undefined && { body: a.body }),
+          ...(a.kind && { kind: a.kind === 'RULES' ? ('RULES' as const) : undefined })
         }
       })
     )
-    if (Array.isArray(a.frameIds)) setTargets(n.id, a.frameIds)
-    const now = ed.nodes.get(n.id)!
-    return { id: n.id, ...now.spec, targets: undefined, linkedFrames: framesOf(now) }
+    if (Array.isArray(a.frameIds)) setLinks(n.id, a.frameIds)
+    if (Array.isArray(a.sourceIds)) setLinks(n.id, a.sourceIds, 'sources')
+    return { id: n.id, ...specView(ed.nodes.get(n.id)!) }
   },
   create_spec: (a) => {
     const n = ed.act(() =>
@@ -542,11 +576,13 @@ const handlers: Record<CommandName, (a: Args) => unknown | Promise<unknown>> = {
         y: a.y,
         width: a.width ?? 320,
         height: a.height ?? 220,
-        spec: { title: a.title, body: a.body ?? '', status: 'TODO' }
+        spec: { title: a.title, body: a.body ?? '', status: 'TODO', ...(a.kind === 'RULES' && { kind: 'RULES' as const }) }
       })
     )
-    if (Array.isArray(a.frameIds) && a.frameIds.length) setTargets(n.id, a.frameIds)
-    return { ...created(ed.nodes.get(n.id)!), linkedFrames: framesOf(ed.nodes.get(n.id)!) }
+    if (Array.isArray(a.frameIds) && a.frameIds.length) setLinks(n.id, a.frameIds)
+    if (Array.isArray(a.sourceIds) && a.sourceIds.length) setLinks(n.id, a.sourceIds, 'sources')
+    const now = ed.nodes.get(n.id)!
+    return { ...created(now), kind: now.spec?.kind ?? 'TASK', linkedFrames: framesOf(now), sourceFrames: framesOf(now, 'sources') }
   },
   create_code: async (a) => {
     const n = ed.act(() =>

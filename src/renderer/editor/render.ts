@@ -556,7 +556,7 @@ function drawSpecCard(ctx: CanvasRenderingContext2D, n: GNode, r: Rect): void {
   ctx.moveTo(ix + 3, cy + 3)
   ctx.lineTo(ix + 6.5, cy + 3)
   ctx.stroke()
-  const chip = { TODO: ['#f2994a', 'TODO'], IN_PROGRESS: ['#2f80ed', 'IN PROGRESS'], DONE: ['#27ae60', 'DONE'] }[sp.status]
+  const chip = sp.kind === 'RULES' ? ['#8b6fe8', 'RULES'] : { TODO: ['#f2994a', 'TODO'], IN_PROGRESS: ['#2f80ed', 'IN PROGRESS'], DONE: ['#27ae60', 'DONE'] }[sp.status]
   ctx.textBaseline = 'middle'
   ctx.letterSpacing = '0px'
   ctx.font = '700 9.5px Inter, "Segoe UI", sans-serif'
@@ -600,13 +600,13 @@ function drawSpecCard(ctx: CanvasRenderingContext2D, n: GNode, r: Rect): void {
   ctx.fillStyle = sp.title ? '#1e1e1e' : '#b3b3b3'
   ctx.font = cssFont(title.textStyle!)
   tl.lines.forEach((ln) => ctx.fillText(ln.text, sx + 18, sy + 20 + ln.y + tl.lineHeight / 2))
-  const body: GNode = { ...title, characters: sp.body || 'Describe the task for the AI…', textStyle: { fontFamily: 'Inter', fontSize: 13, fontWeight: 400, align: 'LEFT', lineHeightPercent: 150 } }
+  const body: GNode = { ...title, characters: sp.body || (sp.kind === 'RULES' ? 'Rules the AI follows in the linked frames…' : 'Describe the task for the AI…'), textStyle: { fontFamily: 'Inter', fontSize: 13, fontWeight: 400, align: 'LEFT', lineHeightPercent: 150 } }
   const bl = layoutText(body)
   ctx.fillStyle = sp.body ? '#444444' : '#b3b3b3'
   ctx.font = cssFont(body.textStyle!)
   let top = sy + 30 + tl.height
   bl.lines.forEach((ln) => ctx.fillText((ln.marker ? ln.marker + ' ' : '') + ln.text, sx + 18, top + ln.y + bl.lineHeight / 2))
-  if (sp.result) {
+  if (sp.result && sp.kind !== 'RULES') {
     // what was done, written by the AI (or a person) when the task was closed
     top += bl.height + 16
     ctx.strokeStyle = '#e6e6e6'
