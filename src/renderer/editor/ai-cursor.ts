@@ -2,7 +2,9 @@
 // layer the AI has just created or changed, glows while the work goes on, shows who it is on hover,
 // and pops when the calls stop.
 import { editor as ed } from './editor'
-import { ARROW_PATH } from './canvas'
+
+/** the body of the arrow; its strokes round the corners and make it plump */
+const AI_ARROW = 'M6.5 5.5 18.2 10.4 12.6 12.4 10.6 18Z'
 
 /** no call for this long = the AI has finished (clients think for a while between calls) */
 const IDLE_MS = 15_000
@@ -30,7 +32,7 @@ function make(client: string): Cursor | null {
   el.className = 'ai-cursor'
   el.innerHTML =
     `<span class="ai-cursor-glow"></span><span class="ai-cursor-ring"></span>` +
-    `<svg class="ai-cursor-arrow" width="24" height="24" viewBox="0 0 24 24"><path d="${ARROW_PATH}" fill="#0c8ce9" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg>` +
+    `<svg class="ai-cursor-arrow" width="24" height="24" viewBox="0 0 24 24" fill="#0c8ce9" stroke-linejoin="round" stroke-linecap="round"><path d="${AI_ARROW}" stroke="#fff" stroke-width="6.5"/><path d="${AI_ARROW}" stroke="#0c8ce9" stroke-width="3.2"/></svg>` +
     `<span class="ai-cursor-name"></span>`
   el.querySelector('.ai-cursor-name')!.textContent = client
   host.appendChild(el)
