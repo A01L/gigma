@@ -111,15 +111,15 @@ check('Style: Solid again', await pick('.stroke-set .stroke-set-field', 0, '^(So
 check('the line is solid', await node('n.dashPattern ?? null'), null)
 
 // joins and the miter angle
-check('Join starts as Miter with the angle of Figma', await js(`[[...document.querySelectorAll('.stroke-set .seg button')].findIndex((b) => b.classList.contains('on')), document.querySelector('.stroke-set .tset-row:last-child .tset-num').value]`), [0, '28.96°'])
-const bevel = await center('.stroke-set .seg button', 1)
+check('Join starts as Miter with the angle of Figma', await js(`[[...document.querySelectorAll('.stroke-set .tset-row .seg button')].findIndex((b) => b.classList.contains('on')), document.querySelector('.stroke-set .tset-row:last-child .tset-num').value]`), [0, '28.96°'])
+const bevel = await center('.stroke-set .tset-row .seg button', 1)
 await click(bevel[0], bevel[1])
 check('Bevel', await node('n.strokeJoin'), 'BEVEL')
 check('the miter angle goes away with it', await js(`!!document.querySelector('.stroke-set .tset-row:last-child .tset-num')`), false)
-const roundJ = await center('.stroke-set .seg button', 2)
+const roundJ = await center('.stroke-set .tset-row .seg button', 2)
 await click(roundJ[0], roundJ[1])
 check('Round', await node('n.strokeJoin'), 'ROUND')
-const miter = await center('.stroke-set .seg button', 0)
+const miter = await center('.stroke-set .tset-row .seg button', 0)
 await click(miter[0], miter[1])
 check('Miter', await node('n.strokeJoin'), 'MITER')
 

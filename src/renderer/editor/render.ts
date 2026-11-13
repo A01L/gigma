@@ -13,7 +13,8 @@ import { backend } from '../backend'
 import type { Editor } from './editor'
 import { cssFont, layoutText, DEFAULT_TEXT_STYLE, justifyWords, lineX, measureWord, textBaseline, verticalOffset } from './text'
 import { rectsIntersect, unionRects, type Rect } from './util'
-import { capsOf, dashOf, endCut, endShape, isOpenPath, joinOf, miterLimitOf, nodeEnds, plainCap, profileOutline, sizedPath } from './stroke'
+import { capsOf, dashOf, endCut, endShape, isOpenPath, joinOf, miterLimitOf, nodeEnds, plainCap, sizedPath } from './stroke'
+import { strokeArt } from './stroke-art'
 import { segsToD } from './svgpath'
 import { getCodeBitmap, codeBitmapAsync } from './code-render'
 import { booleanAsVector, isBooleanGroup } from './boolean'
@@ -379,13 +380,18 @@ function drawStrokes(ctx: CanvasRenderingContext2D, n: GNode, r: Rect, path: Pat
     ctx.save()
     ctx.strokeStyle = rgbaToCss(s.color)
     ctx.fillStyle = ctx.strokeStyle
-    // a stroke whose width changes along the path is an area of its own, filled
-    const profiled = n.type === 'VECTOR' && n.path && n.strokeProfile && n.strokeProfile !== 'UNIFORM' ? profileOutline(segsToD(sizedPath(n)), s.weight, n.strokeProfile, !!n.strokeProfileFlip) : null
-    if (profiled) {
+    // a width profile and a brush are areas of their own, filled; a dynamic stroke is another line, stroked as usual
+    const art = n.type === 'VECTOR' && n.path && (n.strokeBrush || n.strokeDynamic || (n.strokeProfile && n.strokeProfile !== 'UNIFORM')) ? strokeArt(n, s.weight, segsToD(sizedPath(n))) : null
+    if (art?.area) {
       ctx.translate(r.x, r.y)
-      ctx.fill(pathOf(profiled))
+      ctx.fill(pathOf(art.area))
       ctx.restore()
       continue
+    }
+    let line = path
+    if (art?.line) {
+      line = new Path2D()
+      line.addPath(pathOf(art.line), new DOMMatrix([1, 0, 0, 1, r.x, r.y]))
     }
     ctx.lineJoin = joinOf(n)
     ctx.miterLimit = miterLimitOf(n)
@@ -417,9 +423,9 @@ function drawStrokes(ctx: CanvasRenderingContext2D, n: GNode, r: Rect, path: Pat
       }
       ctx.save()
       ctx.clip(keep, 'evenodd')
-      ctx.stroke(path)
+      ctx.stroke(line)
       ctx.restore()
-    } else ctx.stroke(path)
+    } else ctx.stroke(line)
     if (caps && (dash || !both)) {
       if (ends) {
         ctx.setLineDash([])

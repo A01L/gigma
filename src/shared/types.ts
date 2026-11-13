@@ -327,9 +327,13 @@ export interface BaseNode {
   /** the ends of every dash; default NONE */
   dashCap?: 'NONE' | 'SQUARE' | 'ROUND'
   /** how the width of the stroke changes along a path; default UNIFORM */
-  strokeProfile?: 'UNIFORM' | 'TAPER' | 'LENS' | 'WEDGE'
+  strokeProfile?: 'UNIFORM' | 'TAPER' | 'WEDGE' | 'LENS' | 'BLADE' | 'DROP' | 'PINCH'
   /** the profile runs from the end of the path to its start */
   strokeProfileFlip?: boolean
+  /** a dynamic stroke: the line shakes around the path. All three are 0..100 */
+  strokeDynamic?: { frequency: number; wiggle: number; smoothen: number }
+  /** a brush stroke. gap, wiggle and sizeJitter are percents, rotation is degrees (scatter brushes) */
+  strokeBrush?: { name: BrushName; flip?: boolean; gap?: number; wiggle?: number; sizeJitter?: number; rotation?: number }
   /** SPEC node payload */
   spec?: SpecData
   /** CODE node payload */
@@ -351,6 +355,8 @@ export interface BaseNode {
 
 /** the end of an open path: a plain cap or an arrow */
 export type CapKind = 'NONE' | 'ROUND' | 'SQUARE' | 'LINE_ARROW' | 'TRIANGLE_ARROW' | 'REVERSED_TRIANGLE' | 'CIRCLE_ARROW' | 'DIAMOND_ARROW'
+
+export type BrushName = 'INK' | 'MARKER' | 'CALLIGRAPHY' | 'CHARCOAL' | 'DRY' | 'DOTS' | 'SPLATTER' | 'HATCH'
 
 export type GNode = BaseNode
 

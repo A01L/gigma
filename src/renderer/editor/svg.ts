@@ -11,7 +11,8 @@ import type { Editor } from './editor'
 import { layoutText, DEFAULT_TEXT_STYLE, justifyWords, lineX, textBaseline, verticalOffset } from './text'
 import { base64ToBytes, bytesToBase64, uid, unionRects, keyBetween } from './util'
 import { parsePath, segsBounds, segsToD, transformSegs, type Mat, type Seg } from './svgpath'
-import { capsOf, dashOf, endShape, isOpenPath, joinOf, miterLimitOf, pathEnds, plainCap, profileOutline } from './stroke'
+import { capsOf, dashOf, endShape, isOpenPath, joinOf, miterLimitOf, pathEnds, plainCap } from './stroke'
+import { strokeArt } from './stroke-art'
 import { clipsAsShape, cornerRadiiOf } from './render'
 import { codeToPngDataUrl } from './code-render'
 
@@ -475,13 +476,12 @@ async function nodeSvgInner(ed: Editor, id: string, ox: number, oy: number, defs
       const d = segsToD(segs)
       const st = n.strokes.find((s) => s.visible !== false && s.weight > 0)
       const ink = st ? ` fill="${rgbaToHex(st.color)}"${st.color.a < 1 ? ` fill-opacity="${f(st.color.a)}"` : ''}` : ''
-      // a stroke with a width profile is an area: the path keeps its fill only, the stroke goes out as its outline
-      const profiled = st && n.strokeProfile && n.strokeProfile !== 'UNIFORM' ? profileOutline(d, st.weight, n.strokeProfile, !!n.strokeProfileFlip) : null
-      if (profiled) {
-        const body = n.fills.some((p) => p.visible !== false) ? `<path d="${d}"${n.fillRule === 'evenodd' ? ' fill-rule="evenodd"' : ''}${paintAttrs({ ...n, strokes: [] })}${name}/>` : ''
-        return body + `<path d="${profiled}"${ink}${n.opacity < 1 ? ` opacity="${f(n.opacity)}"` : ''}${body ? '' : name}/>`
-      }
-      let out = `<path d="${d}"${n.fillRule === 'evenodd' ? ' fill-rule="evenodd"' : ''}${paintAttrs(n)}${name}/>`
+      // a width profile or a brush is an area: the path keeps its fill only, the stroke goes out as that area.
+      // A dynamic stroke is another line: the fill stays on the path, the stroke is drawn along the shaken line.
+      const art = st ? strokeArt(n, st.weight, d) : null
+      const body = art && n.fills.some((p) => p.visible !== false) ? `<path d="${d}"${n.fillRule === 'evenodd' ? ' fill-rule="evenodd"' : ''}${paintAttrs({ ...n, strokes: [] })}${name}/>` : ''
+      if (art?.area) return body + `<path d="${art.area}"${ink}${n.opacity < 1 ? ` opacity="${f(n.opacity)}"` : ''}${body ? '' : name}/>`
+      let out = art?.line ? body + `<path d="${art.line}"${paintAttrs({ ...n, fills: [] })}${body ? '' : name}/>` : `<path d="${d}"${n.fillRule === 'evenodd' ? ' fill-rule="evenodd"' : ''}${paintAttrs(n)}${name}/>`
       const caps = st && isOpenPath(n) ? capsOf(n) : null
       const ends = caps ? pathEnds(segs) : null
       if (st && caps && ends) {

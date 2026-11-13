@@ -1,10 +1,12 @@
-// Figma's "Stroke settings" popover: style (solid / dashed), width profile, the two end points of an open path,
-// how corners are joined and the miter angle. It opens to the left of the inspector, next to the Stroke section.
+// Figma's "Stroke settings" popover. Basic: style (solid / dashed), width profile, the two end points of an open path,
+// how corners are joined and the miter angle. Dynamic: a line that shakes around the path. Brush: stretch and scatter
+// brushes. It opens to the left of the inspector, next to the Stroke section.
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import type { CapKind, GNode } from '@shared/types'
+import type { BrushName, CapKind, GNode } from '@shared/types'
 import { editor as ed } from '../editor/editor'
-import { CAP_KINDS, CAP_LABELS, DEFAULT_MITER_ANGLE, PROFILE_LABELS, capsOf, dashOf, isOpenPath, joinOf, type Profile } from '../editor/stroke'
+import { CAP_KINDS, CAP_LABELS, DEFAULT_MITER_ANGLE, capsOf, dashOf, isOpenPath, joinOf } from '../editor/stroke'
+import { BRUSHES, DEFAULT_BRUSH, DEFAULT_DYNAMIC, PROFILE_LABELS, brushKind, profileAt, type Profile } from '../editor/stroke-art'
 import { Select } from './Select'
 import { t } from './i18n'
 
@@ -63,14 +65,45 @@ export function setCaps(n: GNode, patch: { start?: CapKind; end?: CapKind }): vo
   })
 }
 
-const ProfileIcon = ({ p }: { p: Profile }) => (
-  <svg width="64" height="12" viewBox="0 0 64 12" fill="currentColor">
-    {p === 'UNIFORM' && <rect x="0" y="4.5" width="64" height="3" rx="1" />}
-    {p === 'TAPER' && <path d="M0 2.5L64 6L0 9.5Z" />}
-    {p === 'LENS' && <path d="M0 6C16 1 48 1 64 6C48 11 16 11 0 6Z" />}
-    {p === 'WEDGE' && <path d="M0 2L64 5V7L0 10Z" />}
-  </svg>
-)
+/** the shape a stroke of that profile has, drawn from the same function the canvas uses */
+const ProfileIcon = ({ p }: { p: Profile }) => {
+  const top: string[] = []
+  const bottom: string[] = []
+  for (let i = 0; i <= 32; i++) {
+    const h = p === 'UNIFORM' ? 1.5 : Math.max(0.4, profileAt(p, i / 32) * 5)
+    top.push(`${i * 2} ${6 - h}`)
+    bottom.push(`${i * 2} ${6 + h}`)
+  }
+  return (
+    <svg width="64" height="12" viewBox="0 0 64 12" fill="currentColor">
+      <path d={'M' + top.join('L') + 'L' + bottom.reverse().join('L') + 'Z'} />
+    </svg>
+  )
+}
+
+/** a slider with its number beside it; the value is applied while it is dragged, as one step of history per drag */
+function Slider({ label, value, min = 0, max = 100, suffix, onChange }: { label: string; value: number; min?: number; max?: number; suffix?: string; onChange: (v: number) => void }) {
+  return (
+    <div className="tset-row">
+      <span>{label}</span>
+      <div className="stroke-set-slider">
+        <input
+          type="range"
+          min={min}
+          max={max}
+          value={value}
+          onPointerDown={() => ed.begin()}
+          onPointerUp={() => ed.commit()}
+          onChange={(e) => {
+            onChange(+e.target.value)
+            ed.emit('doc')
+          }}
+        />
+        <Num value={value} min={min} max={max} suffix={suffix} onCommit={(v) => ed.act(() => onChange(v))} />
+      </div>
+    </div>
+  )
+}
 
 function Num({ value, min, max, suffix, onCommit }: { value: number | null; min: number; max: number; suffix?: string; onCommit: (v: number) => void }) {
   const [text, setText] = useState<string | null>(null)
@@ -138,6 +171,17 @@ export function StrokeSettings({ nodes, anchor, onClose }: { nodes: GNode[]; anc
   const open = nodes.every(isOpenPath)
   const caps = nodes.map(capsOf)
   const join = sameOf(nodes.map(joinOf))
+  // which tab is shown follows what the stroke is: a brush, a dynamic line, or a plain one
+  const mode: 'basic' | 'dynamic' | 'brush' = nodes[0].strokeBrush ? 'brush' : nodes[0].strokeDynamic ? 'dynamic' : 'basic'
+  const setMode = (m: typeof mode) =>
+    set({
+      strokeBrush: m === 'brush' ? (nodes[0].strokeBrush ?? { ...DEFAULT_BRUSH }) : undefined,
+      strokeDynamic: m === 'dynamic' ? (nodes[0].strokeDynamic ?? { ...DEFAULT_DYNAMIC }) : undefined
+    })
+  const dyn = nodes[0].strokeDynamic ?? DEFAULT_DYNAMIC
+  const brush = nodes[0].strokeBrush ?? DEFAULT_BRUSH
+  /** live change from a slider: inside the transaction the slider opened */
+  const live = (patch: Partial<GNode>) => nodes.forEach((n) => ed.updateNode(n.id, patch))
 
   return createPortal(
     <div ref={pop} className="tset stroke-set" style={{ left: pos.left, top: pos.top }} onKeyDown={(e) => e.stopPropagation()}>
@@ -150,6 +194,54 @@ export function StrokeSettings({ nodes, anchor, onClose }: { nodes: GNode[]; anc
         </button>
       </div>
 
+      {vectors && (
+        <div className="seg stroke-set-tabs">
+          {(['basic', 'dynamic', 'brush'] as const).map((m) => (
+            <button key={m} className={mode === m ? 'on' : ''} onClick={() => setMode(m)}>
+              {t(m === 'basic' ? 'Basic' : m === 'dynamic' ? 'Dynamic' : 'Brush')}
+            </button>
+          ))}
+        </div>
+      )}
+      {mode === 'dynamic' && (
+        <>
+          <Slider label={t('Frequency')} value={dyn.frequency} onChange={(v) => live({ strokeDynamic: { ...dyn, frequency: v } })} />
+          <Slider label={t('Wiggle')} value={dyn.wiggle} onChange={(v) => live({ strokeDynamic: { ...dyn, wiggle: v } })} />
+          <Slider label={t('Smoothen')} value={dyn.smoothen} onChange={(v) => live({ strokeDynamic: { ...dyn, smoothen: v } })} />
+        </>
+      )}
+      {mode === 'brush' && (
+        <>
+          <div className="tset-row">
+            <span>{t('Brush')}</span>
+            <div className="stroke-set-pair">
+              <div className="field stroke-set-field">
+                <Select
+                  value={brush.name}
+                  onChange={(v) => set({ strokeBrush: { ...brush, name: v as BrushName } })}
+                  options={BRUSHES.map((b) => ({ value: b.name, label: t(b.label) }))}
+                />
+              </div>
+              <button className={'icon-btn' + (brush.flip ? ' active-soft' : '')} title={t('Flip direction')} onClick={() => set({ strokeBrush: { ...brush, flip: brush.flip ? undefined : true } })}>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeLinejoin="round">
+                  <path d="M8 2v12" strokeDasharray="1.5 1.5" />
+                  <path d="M6 5L2.5 8L6 11ZM10 5l3.5 3L10 11Z" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          {brushKind(brush.name) === 'SCATTER' && (
+            <>
+              <Slider label={t('Gap')} value={brush.gap ?? 100} min={20} max={400} suffix="%" onChange={(v) => live({ strokeBrush: { ...brush, gap: v } })} />
+              <Slider label={t('Wiggle')} value={brush.wiggle ?? 20} suffix="%" onChange={(v) => live({ strokeBrush: { ...brush, wiggle: v } })} />
+              <Slider label={t('Size jitter')} value={brush.sizeJitter ?? 30} suffix="%" onChange={(v) => live({ strokeBrush: { ...brush, sizeJitter: v } })} />
+              {brush.name === 'HATCH' && <Slider label={t('Rotation')} value={brush.rotation ?? 0} min={-90} max={90} suffix="°" onChange={(v) => live({ strokeBrush: { ...brush, rotation: v } })} />}
+            </>
+          )}
+        </>
+      )}
+      {mode === 'basic' && (
+        <>
       <div className="tset-row">
         <span>{t('Style')}</span>
         <div className="field stroke-set-field">
@@ -233,7 +325,9 @@ export function StrokeSettings({ nodes, anchor, onClose }: { nodes: GNode[]; anc
           </div>
         </div>
       )}
-      {open && (
+        </>
+      )}
+      {open && mode !== 'brush' && (
         <>
           <div className="stroke-set-line" />
           <div className="tset-row">
@@ -249,7 +343,8 @@ export function StrokeSettings({ nodes, anchor, onClose }: { nodes: GNode[]; anc
           </div>
         </>
       )}
-      <div className="stroke-set-line" />
+      {mode !== 'brush' && <div className="stroke-set-line" />}
+      {mode !== 'brush' && (
       <div className="tset-row">
         <span>{t('Join')}</span>
         <div className="seg">
@@ -268,7 +363,8 @@ export function StrokeSettings({ nodes, anchor, onClose }: { nodes: GNode[]; anc
           ))}
         </div>
       </div>
-      {join === 'miter' && (
+      )}
+      {mode !== 'brush' && join === 'miter' && (
         <div className="tset-row">
           <span>{t('Miter angle')}</span>
           <Num value={sameOf(nodes.map((n) => n.strokeMiterAngle ?? DEFAULT_MITER_ANGLE))} min={1} max={180} suffix="°" onCommit={(v) => set({ strokeMiterAngle: Math.abs(v - DEFAULT_MITER_ANGLE) < 0.005 ? undefined : v })} />

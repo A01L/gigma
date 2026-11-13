@@ -328,7 +328,24 @@ function buildServer(run: RunCommand, client = 'AI'): McpServer {
     strokeMiterAngle: z.number().min(1).max(180).optional().describe('Degrees: corners sharper than this are bevelled instead of mitered (default 28.96)'),
     dashPattern: z.array(z.number().min(0)).length(2).optional().describe('[dash, gap] in pixels; [0, 0] makes the stroke solid again'),
     dashCap: z.enum(['NONE', 'SQUARE', 'ROUND']).optional().describe('The ends of every dash'),
-    strokeProfile: z.enum(['UNIFORM', 'TAPER', 'LENS', 'WEDGE']).optional().describe('Vector paths: how the width of the stroke changes along the path'),
+    strokeDynamic: z
+      .object({ frequency: z.number().min(0).max(100), wiggle: z.number().min(0).max(100), smoothen: z.number().min(0).max(100) })
+      .nullable()
+      .optional()
+      .describe('Vector paths: a dynamic stroke, the line shakes around the path (all values 0..100). null makes the stroke plain again'),
+    strokeBrush: z
+      .object({
+        name: z.enum(['INK', 'MARKER', 'CALLIGRAPHY', 'CHARCOAL', 'DRY', 'DOTS', 'SPLATTER', 'HATCH']),
+        flip: z.boolean().optional(),
+        gap: z.number().optional().describe('Scatter brushes (DOTS, SPLATTER, HATCH): distance between stamps, percent'),
+        wiggle: z.number().optional().describe('Scatter brushes: how far stamps stray from the path, percent'),
+        sizeJitter: z.number().optional().describe('Scatter brushes: how much stamps differ in size, percent'),
+        rotation: z.number().optional().describe('HATCH: degrees')
+      })
+      .nullable()
+      .optional()
+      .describe('Vector paths: a brush stroke. null makes the stroke plain again'),
+    strokeProfile: z.enum(['UNIFORM', 'TAPER', 'WEDGE', 'LENS', 'BLADE', 'DROP', 'PINCH']).optional().describe('Vector paths: how the width of the stroke changes along the path'),
     strokeProfileFlip: z.boolean().optional().describe('The width profile runs from the end of the path to its start'),
     ...layoutShape,
     layoutGrow: z.number().min(0).max(1).optional().describe('Child of an auto layout frame: 1 = fill the frame along the layout direction'),

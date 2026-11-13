@@ -607,6 +607,15 @@ const handlers: Record<CommandName, (a: Args) => unknown | Promise<unknown>> = {
       if (a.dashCap !== undefined) patch.dashCap = a.dashCap === 'NONE' ? undefined : a.dashCap
       if (a.strokeProfile !== undefined) patch.strokeProfile = a.strokeProfile === 'UNIFORM' ? undefined : a.strokeProfile
       if (a.strokeProfileFlip !== undefined) patch.strokeProfileFlip = a.strokeProfileFlip || undefined
+      // a stroke is a brush, a dynamic line or a plain one: setting one clears the other
+      if (a.strokeDynamic !== undefined) {
+        patch.strokeDynamic = a.strokeDynamic ?? undefined
+        if (a.strokeDynamic) patch.strokeBrush = undefined
+      }
+      if (a.strokeBrush !== undefined) {
+        patch.strokeBrush = a.strokeBrush ?? undefined
+        if (a.strokeBrush) patch.strokeDynamic = undefined
+      }
       if (Array.isArray(a.cornerRadii)) {
         patch.cornerRadii = a.cornerRadii as [number, number, number, number]
         patch.cornerRadius = undefined

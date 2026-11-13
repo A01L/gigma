@@ -782,3 +782,25 @@
   opacity: 0.35;
   pointer-events: none;
 }
+
+/* tabs of the stroke settings, and the sliders of the Dynamic and Brush tabs */
+.stroke-set-tabs {
+  margin-bottom: 6px;
+}
+.stroke-set-tabs button {
+  flex: 1;
+  height: 26px;
+  font-weight: 500;
+}
+.stroke-set-slider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.stroke-set-slider input[type='range'] {
+  width: 96px;
+  accent-color: var(--accent);
+}
+.stroke-set-slider .tset-num {
+  width: 56px;
+}

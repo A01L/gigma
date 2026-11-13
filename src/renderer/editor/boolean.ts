@@ -4,7 +4,8 @@
 // The geometry is exact (Bézier curves stay curves): paper.js does the path maths.
 import paper from 'paper/dist/paper-core'
 import type { BooleanOperation, CapKind, GNode } from '@shared/types'
-import { capsOf, endCut, endShape, joinOf, miterLimitOf, profileOutline } from './stroke'
+import { capsOf, dashOf, endCut, endShape, joinOf, miterLimitOf, plainCap } from './stroke'
+import { strokeArt } from './stroke-art'
 import type { Editor } from './editor'
 import { cornerRadiiOf } from './render'
 import { parsePath, segsToD, transformSegs } from './svgpath'
@@ -105,6 +106,42 @@ function unionAll(items: PathItem[]): PathItem | null {
     items = next
   }
   return items[0] ?? null
+}
+
+/** Cut the outline of `item` into the dashes a dashed stroke draws: open pieces of `dash` pixels with `gap` between them. */
+function dashPieces(item: PathItem, dash: number, gap: number): PPath[] {
+  const out: PPath[] = []
+  for (const src of item instanceof paper.CompoundPath ? (item.children as PPath[]) : [item as PPath]) {
+    const p = src.clone() as PPath
+    p.flatten(0.2)
+    const pts = p.segments.map((s) => s.point)
+    if (p.closed && pts.length) pts.push(pts[0])
+    let on = true
+    let left = dash
+    let cur: InstanceType<typeof paper.Point>[] = pts.length ? [pts[0]] : []
+    for (let i = 1; i < pts.length; i++) {
+      let a = pts[i - 1]
+      const b = pts[i]
+      let len = a.getDistance(b)
+      while (len > left) {
+        // the dash (or the gap) ends inside this stretch
+        const m = a.add(b.subtract(a).multiply(left / len))
+        if (on) {
+          cur.push(m)
+          if (cur.length > 1) out.push(new paper.Path({ segments: cur, closed: false }))
+          cur = []
+        } else cur = [m]
+        len -= left
+        a = m
+        on = !on
+        left = on ? dash : Math.max(gap, 0.01)
+      }
+      left -= len
+      if (on) cur.push(b)
+    }
+    if (on && cur.length > 1) out.push(new paper.Path({ segments: cur, closed: false }))
+  }
+  return out
 }
 
 /** Area covered by a stroke of `weight` centred on the outline of `item` (curves are followed in small steps). */
@@ -208,7 +245,9 @@ export function strokeOutline(ed: Editor, id: string): OutlineResult | null {
   const s = n?.strokes.find((x) => x.visible !== false && x.weight > 0)
   if (!n || !s) return null
   const w = s.weight
-  const simple = n.type === 'RECTANGLE' || n.type === 'ELLIPSE' || n.type === 'FRAME' || n.type === 'IMAGE' || n.type === 'SECTION'
+  const box = n.type === 'RECTANGLE' || n.type === 'ELLIPSE' || n.type === 'FRAME' || n.type === 'IMAGE' || n.type === 'SECTION'
+  // a dashed rectangle is traced along its outline like any path; a solid one has an exact answer
+  const simple = box && !dashOf(n)
   const bool = isBooleanGroup(n)
   const closed = n.type !== 'VECTOR' || /z/i.test(n.path ?? '')
   const align = closed ? (s.align ?? 'CENTER') : 'CENTER'
@@ -232,25 +271,41 @@ export function strokeOutline(ed: Editor, id: string): OutlineResult | null {
     const outer = grown(o)
     const inner = grown(i)
     ring = outer && inner ? outer.subtract(inner) : outer
-  } else if (n.type === 'VECTOR' || bool) {
+  } else if (n.type === 'VECTOR' || bool || box) {
     let shape: PathItem | null = null
     if (bool) shape = combine(ed.children(id, n.pageId).map((c) => itemOf(ed, c)).filter((x): x is PathItem => !!x), n.booleanOperation!)
-    else if (n.path) {
-      const sx = n.width / (n.pathBox?.w || n.width || 1)
-      const sy = n.height / (n.pathBox?.h || n.height || 1)
-      shape = paper.PathItem.create(segsToD(transformSegs(parsePath(n.path), [sx, 0, 0, sy, 0, 0])))
+    else {
+      const dd = shapeD(n)
+      if (dd) shape = paper.PathItem.create(dd)
     }
     if (!shape) return null
     const join = joinOf(n)
     const limit = miterLimitOf(n)
     const caps = capsOf(n)
-    // a stroke with a width profile is already an area
-    const profiled = !bool && n.strokeProfile && n.strokeProfile !== 'UNIFORM' ? profileOutline(shape.pathData, w, n.strokeProfile, !!n.strokeProfileFlip) : null
-    if (profiled) ring = paper.PathItem.create(profiled)
-    else if (align === 'CENTER') ring = centerStroke(shape, w, join, limit, caps)
+    // a width profile and a brush are already areas; a dynamic stroke is traced along its shaken line
+    const art = bool ? null : strokeArt(n, w, shape.pathData)
+    const dash = dashOf(n)
+    /** the stroke of `of` at that weight: one piece, or (dashed) every dash on its own with the dash caps */
+    const trace = (of: PathItem, weight: number): PathItem | null => {
+      if (!dash) return centerStroke(of, weight, join, limit, caps)
+      const dc = plainCap(n.dashCap ?? 'NONE') === 'round' ? 'ROUND' : plainCap(n.dashCap ?? 'NONE') === 'square' ? 'SQUARE' : 'NONE'
+      const dashes = dashPieces(of, dash[0], dash[1])
+        .map((d) => centerStroke(d, weight, join, limit, { start: dc, end: dc }))
+        .filter((x): x is PathItem => !!x)
+      // arrows of the two ends stand on top of the dashes
+      const ends = centerStroke(of, weight, join, limit, { start: plainCap(caps.start) ? 'NONE' : caps.start, end: plainCap(caps.end) ? 'NONE' : caps.end })
+      const whole = centerStroke(of, weight, join, limit, { start: 'NONE', end: 'NONE' })
+      const tips = ends && whole ? ends.subtract(whole) : null
+      return unionAll(tips && !tips.isEmpty() ? [...dashes, tips] : dashes)
+    }
+    if (art?.area) ring = paper.PathItem.create(art.area)
     else {
-      const wide = centerStroke(shape, w * 2, join, limit, caps)
-      ring = wide ? (align === 'INSIDE' ? wide.intersect(shape) : wide.subtract(shape)) : null
+      const along = art?.line ? paper.PathItem.create(art.line) : shape
+      if (align === 'CENTER') ring = trace(along, w)
+      else {
+        const wide = trace(along, w * 2)
+        ring = wide ? (align === 'INSIDE' ? wide.intersect(shape) : wide.subtract(shape)) : null
+      }
     }
   }
   if (!ring) return null
