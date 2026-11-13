@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { editor as ed } from '../editor/editor'
 import { guides, guidesVersion, loadGuides, removeGuide, subscribeGuides } from '../editor/guides'
-import { guideAccent } from '../editor/guide-render'
+import { guideAccent, guideBallCss } from '../editor/guide-render'
 import { backend } from '../backend'
 import { Icons } from './icons'
 import { useT } from './i18n'
@@ -81,7 +81,7 @@ export function GuidesPalette({ onClose }: { onClose: () => void }) {
           {list.map((g, i) => (
             <button key={g.id} className={'palette-item' + (i === active ? ' active' : '')} onMouseEnter={() => setActive(i)} onClick={() => place(g.id)}>
               <span className="pi-icon">
-                <i className="guide-dot" style={{ background: guideAccent(g), boxShadow: `0 0 8px ${guideAccent(g)}` }} />
+                <i className="guide-dot" style={{ background: guideBallCss(guideAccent(g)) }} />
               </span>
               <span className="pi-label">{g.name}</span>
               <span className="pi-hint">

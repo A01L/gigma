@@ -1,4 +1,4 @@
-// How a guideline looks on the canvas: a glowing dot when closed, a card with its colours, fonts,
+// How a guideline looks on the canvas: a lit ball of its accent colour when closed, a card with its colours, fonts,
 // logos and rules when open. One routine both measures and draws the card, so the two never disagree.
 import type { GNode, GuideData, GuideImage } from '@shared/types'
 import type { Rect } from './util'
@@ -14,6 +14,54 @@ const GREY = '#8c8c8c'
 /** accent of a guideline as a CSS colour (grey when none is set) */
 export function guideAccent(g: GuideData | undefined): string {
   return g?.accent && /^#[0-9a-f]{3,8}$/i.test(g.accent) ? g.accent : GREY
+}
+
+/** #rgb, #rrggbb or #rrggbbaa -> [r, g, b] */
+function rgbOf(hex: string): [number, number, number] {
+  let h = hex.slice(1)
+  if (h.length < 6) h = [...h.slice(0, 3)].map((c) => c + c).join('')
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)]
+}
+/** the colour moved towards white (t > 0) or black (t < 0) */
+function tone(hex: string, t: number): string {
+  const to = t > 0 ? 255 : 0
+  const k = Math.abs(t)
+  const [r, g, b] = rgbOf(hex).map((c) => Math.round(c + (to - c) * k))
+  return `rgb(${r},${g},${b})`
+}
+/** the three tones of the ball: where the light falls, the colour itself, the side in shade */
+export function guideTones(accent: string): { light: string; base: string; dark: string; ring: string } {
+  return { light: tone(accent, 0.78), base: accent, dark: tone(accent, -0.3), ring: tone(accent, 0.45) }
+}
+/** the same ball in CSS, for the lists of the interface */
+export function guideBallCss(accent: string): string {
+  const c = guideTones(accent)
+  return `radial-gradient(circle at 35% 30%, ${c.light}, ${c.base} 60%, ${c.dark})`
+}
+
+/**
+ * A guideline is drawn as a small ball lit from the top left: a gradient of its accent, no glow.
+ * `ring` adds the thin circle around it (the node on the canvas).
+ */
+function ball(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, accent: string, ring = false): void {
+  const c = guideTones(accent)
+  const g = ctx.createRadialGradient(cx - r * 0.3, cy - r * 0.4, 0, cx, cy, r)
+  g.addColorStop(0, c.light)
+  g.addColorStop(0.6, c.base)
+  g.addColorStop(1, c.dark)
+  ctx.fillStyle = g
+  ctx.beginPath()
+  ctx.arc(cx, cy, r, 0, Math.PI * 2)
+  ctx.fill()
+  if (!ring) return
+  ctx.save()
+  ctx.globalAlpha *= 0.6
+  ctx.strokeStyle = c.ring
+  ctx.lineWidth = Math.max(1, r * 0.07)
+  ctx.beginPath()
+  ctx.arc(cx, cy, r * 1.19, 0, Math.PI * 2)
+  ctx.stroke()
+  ctx.restore()
 }
 
 // ---------------- pictures (data: URLs decoded once) ----------------
@@ -137,14 +185,7 @@ function card(ctx: CanvasRenderingContext2D, g: GuideData, x: number, y: number,
   // header: accent dot, name
   const accent = guideAccent(g)
   if (paint) {
-    ctx.save()
-    ctx.shadowColor = accent
-    ctx.shadowBlur = 12
-    ctx.fillStyle = accent
-    ctx.beginPath()
-    ctx.arc(x + pad + 7, cy + 13, 7, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.restore()
+    ball(ctx, x + pad + 7, cy + 13, 7, accent)
     ctx.font = `600 9.5px ${FONT}`
     ctx.fillStyle = '#9a9a9a'
     ctx.letterSpacing = '0.8px'
@@ -276,32 +317,11 @@ export function drawGuide(ctx: CanvasRenderingContext2D, n: GNode, r: Rect, g: G
     ctx.stroke()
     return
   }
-  // closed: a dot that glows with the accent
+  // closed: a ball of the accent colour, lit from the top left, with a thin ring around it
   const cx = r.x + r.w / 2
   const cy = r.y + r.h / 2
   const rad = Math.min(r.w, r.h) / 2
-  // neon: the light stays close to the edge, a thin halo instead of a cloud
-  ctx.save()
-  ctx.shadowColor = accent
-  ctx.shadowBlur = 7 * k
-  ctx.fillStyle = accent
-  ctx.beginPath()
-  ctx.arc(cx, cy, rad * 0.78, 0, Math.PI * 2)
-  ctx.fill()
-  ctx.restore()
-  // a soft highlight makes it a sphere, not a flat disc
-  const shine = ctx.createRadialGradient(cx - rad * 0.25, cy - rad * 0.3, 0, cx, cy, rad * 0.78)
-  shine.addColorStop(0, 'rgba(255,255,255,0.45)')
-  shine.addColorStop(0.6, 'rgba(255,255,255,0)')
-  ctx.fillStyle = shine
-  ctx.beginPath()
-  ctx.arc(cx, cy, rad * 0.78, 0, Math.PI * 2)
-  ctx.fill()
-  ctx.strokeStyle = 'rgba(255,255,255,0.55)'
-  ctx.lineWidth = 1.5
-  ctx.beginPath()
-  ctx.arc(cx, cy, rad * 0.78 - 0.75, 0, Math.PI * 2)
-  ctx.stroke()
+  ball(ctx, cx, cy, rad * 0.8, accent, true)
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   // the name under the dot
