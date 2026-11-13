@@ -434,23 +434,27 @@
     </section>
 
     <!-- ================================================================ last word -->
-    <section class="relative overflow-hidden bg-[#0b0b0d] pt-[120px]">
+    <section class="relative overflow-hidden bg-[#0b0b0d] pt-[290px] sm:pt-[410px] lg:pt-[130px]">
       <div class="band dots-warm left-[-6%] top-[90px] w-[520px] rotate-[18deg] opacity-80" style="background-color: rgba(255, 90, 30, 0.18)"></div>
       <div class="pointer-events-none absolute left-[-4%] top-[120px] h-[60px] w-[520px] rotate-[18deg] bg-gradient-to-r from-transparent via-[#ff5a1f]/60 to-transparent blur-[18px]"></div>
       <div class="band dots-blue left-[33%] top-[430px] w-[640px] rotate-[20deg] opacity-80" style="background-color: rgba(70, 90, 255, 0.16)"></div>
+      <!-- the G of the logo, cut by the top left corner; its layers drift apart and back together -->
+      <div class="g-stack pointer-events-none absolute left-[-36px] top-[-40px] w-[300px] sm:left-[-52px] sm:top-[-60px] sm:w-[440px] lg:left-[-72px] lg:top-[-84px] lg:w-[640px]" aria-hidden="true">
+        <svg viewBox="-36 -20 176 176" class="block w-full overflow-visible">
+          <defs>
+            <path id="g-shape" d="M25.78 111.2C13.9 111.2 3.64 108.8 -5 104C-13.64 99.08 -20.3 92.24 -24.98 83.48C-29.66 74.6 -32 64.34 -32 52.7C-32 44.42 -30.74 36.56 -28.22 29.12C-25.7 21.56 -22.16 14.72 -17.6 8.6C-13.04 2.35999 -7.7 -3.04001 -1.58 -7.60001C4.66 -12.16 11.5 -15.7 18.94 -18.22C26.5 -20.74 34.48 -22 42.88 -22C50.8 -22 58 -20.86 64.48 -18.58C70.96 -16.3 76.6 -13.12 81.4 -9.04001C86.2 -5.08 89.92 -0.400002 92.56 4.99999C95.32 10.4 96.76 16.28 96.88 22.64H69.16C68.8 19.4 67.9 16.4 66.46 13.64C65.14 10.88 63.28 8.48 60.88 6.43999C58.6 4.39999 55.72 2.83999 52.24 1.75999C48.88 0.559996 44.98 -0.0400085 40.54 -0.0400085C35.38 -0.0400085 30.58 0.92 26.14 2.84C21.7 4.64 17.62 7.21999 13.9 10.58C10.3 13.94 7.18 17.9 4.54 22.46C1.9 26.9 -0.140001 31.82 -1.58 37.22C-3.02 42.5 -3.74 48.02 -3.74 53.78C-3.74 64.82 -0.98 73.58 4.54 80.06C10.06 86.42 17.62 89.6 27.22 89.6C35.26 89.6 41.86 88.52 47.02 86.36C52.18 84.2 56.44 81.44 59.8 78.08L84.82 87.26C77.26 94.82 68.62 100.7 58.9 104.9C49.18 109.1 38.14 111.2 25.78 111.2ZM57.1 87.26L64.66 54.14L69.16 59.72H34.96L39.82 38.48H96.16L84.82 87.26H57.1Z" />
+            <linearGradient id="g-front" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff" /><stop offset="1" stop-color="#d4d6e6" /></linearGradient>
+          </defs>
+          <use href="#g-shape" class="g-layer" style="--i: 5" fill="#17171c" />
+          <use href="#g-shape" class="g-layer" style="--i: 4" fill="#24242b" />
+          <use href="#g-shape" class="g-layer" style="--i: 3" fill="#3c3c46" />
+          <use href="#g-shape" class="g-layer" style="--i: 2" fill="#686874" />
+          <use href="#g-shape" class="g-layer" style="--i: 1" fill="#a6a8b8" />
+          <use href="#g-shape" class="g-layer" style="--i: 0" fill="url(#g-front)" />
+        </svg>
+      </div>
       <div class="relative mx-auto grid max-w-[1216px] items-center gap-12 px-6 pb-[90px] lg:grid-cols-[1fr_1.05fr]">
-        <div class="reveal flex justify-center lg:justify-end lg:pr-10">
-          <div class="dial">
-            <div class="dial-ticks"></div>
-            <div class="dial-glow"></div>
-            <div class="dial-ring"></div>
-            <img src="assets/img/icon.png" alt="" class="absolute left-1/2 top-1/2 h-[120px] w-[120px] -translate-x-1/2 -translate-y-1/2 rounded-[28px] opacity-35 grayscale" />
-            <div class="dots mask-radial absolute inset-[60px] rounded-full opacity-25"></div>
-            <span class="absolute left-1/2 top-1/2 h-[4px] w-[128px] origin-left -translate-y-1/2 rounded-full bg-gradient-to-r from-white/70 to-[#ff3b5c]" style="rotate: -30deg" id="hand"></span>
-            <span class="absolute left-1/2 top-1/2 h-[12px] w-[12px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#2a2a31] ring-2 ring-white/40"></span>
-            <span class="absolute right-[-18px] top-1/2 h-[30px] w-[10px] -translate-y-1/2 rounded-[3px] bg-[#2a2a31]"></span>
-          </div>
-        </div>
+        <div class="hidden lg:block"></div>
         <div class="reveal" style="--d: 0.08s">
           <h2 class="h-display text-[56px] sm:text-[84px]" style="background: linear-gradient(180deg, #fff 40%, #c9c6ff); -webkit-background-clip: text; background-clip: text; color: transparent">Start designing<br />offline</h2>
           <p class="mt-4 max-w-[340px] text-[16px] font-medium leading-[1.35] text-white/85">Free and open source. Your projects stay yours. The AI is optional and always under your control.</p>

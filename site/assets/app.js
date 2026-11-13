@@ -178,17 +178,6 @@
     }
   }
 
-  // the hand of the dial at the end sweeps slowly
-  const hand = document.getElementById('hand')
-  if (hand && !calm) {
-    let a = -30
-    setInterval(() => {
-      a = a === -30 ? 40 : -30
-      hand.animate([{ rotate: hand.style.rotate }, { rotate: a + 'deg' }], { duration: 2200, easing: 'cubic-bezier(0.65,0,0.35,1)', fill: 'forwards' })
-      hand.style.rotate = a + 'deg'
-    }, 3000)
-  }
-
   // the promo video in a window
   const player = document.getElementById('player')
   const video = document.getElementById('player-video')

@@ -555,42 +555,22 @@ body {
   mask: linear-gradient(to bottom, transparent, #000 15%, #000 85%, transparent);
 }
 
-/* ================================================================ the dial */
-.dial {
-  position: relative;
-  width: 340px;
-  height: 340px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 50% 40%, #1f2027, #0b0b0e 70%);
-  box-shadow: 0 0 0 10px #17171c, 0 0 0 11px #2a2a31, 0 30px 80px rgba(0, 0, 0, 0.7), inset 0 0 40px rgba(0, 0, 0, 0.8);
+/* ================================================================ the G of layers */
+/* every layer is the same letter, shifted down and to the right by its number times the gap; the gap breathes */
+.g-layer {
+  translate: calc(var(--i) * 4px) calc(var(--i) * 4px);
+  animation: layers 9s ease-in-out infinite;
+  /* the lower a layer lies, the later it follows: they float instead of moving as one block */
+  animation-delay: calc(var(--i) * -0.5s);
 }
-.dial-ring {
-  position: absolute;
-  inset: 34px;
-  border-radius: 50%;
-  background: conic-gradient(from 200deg, transparent 0 10%, #3b5bff 22%, #9a7bff 40%, #ff3b5c 58%, transparent 70%);
-  -webkit-mask: radial-gradient(closest-side, transparent 92%, #000 94%, #000 98%, transparent 100%);
-  mask: radial-gradient(closest-side, transparent 92%, #000 94%, #000 98%, transparent 100%);
-  filter: drop-shadow(0 0 6px #6c7bff) drop-shadow(0 0 16px #8a6bff);
-  animation: spin 9s linear infinite;
-}
-.dial-glow {
-  position: absolute;
-  inset: 40px;
-  border-radius: 50%;
-  background: conic-gradient(from 200deg, transparent 0 10%, rgba(60, 90, 255, 0.5) 22%, rgba(154, 123, 255, 0.5) 40%, rgba(255, 59, 92, 0.4) 58%, transparent 70%);
-  -webkit-mask: radial-gradient(closest-side, transparent 55%, #000);
-  mask: radial-gradient(closest-side, transparent 55%, #000);
-  filter: blur(14px);
-  animation: spin 9s linear infinite;
-}
-.dial-ticks {
-  position: absolute;
-  inset: 22px;
-  border-radius: 50%;
-  background: repeating-conic-gradient(from -1deg, rgba(255, 255, 255, 0.35) 0 0.6deg, transparent 0.6deg 6deg);
-  -webkit-mask: radial-gradient(closest-side, transparent 92%, #000 93%);
-  mask: radial-gradient(closest-side, transparent 92%, #000 93%);
+@keyframes layers {
+  0%,
+  100% {
+    translate: calc(var(--i) * 2px) calc(var(--i) * 2px);
+  }
+  50% {
+    translate: calc(var(--i) * 7.5px) calc(var(--i) * 7.5px);
+  }
 }
 .band {
   position: absolute;
