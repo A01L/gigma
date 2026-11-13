@@ -547,6 +547,387 @@ body {
   opacity: 0.35;
 }
 
+/* ================================================================ Gigma's task board, rebuilt (same sizes and colours as the app's own stylesheet) */
+.gapp {
+  --g-bg: #1e1e1e;
+  --g-panel: #2c2c2c;
+  --g-panel-2: #383838;
+  --g-border: #444;
+  --g-text: #e6e6e6;
+  --g-text-2: #a5a5a5;
+  --g-text-3: #7a7a7a;
+  --g-accent: #0d99ff;
+  --g-hover: #3a3a3a;
+  display: flex;
+  flex-direction: column;
+  background: var(--g-bg);
+  color: var(--g-text);
+  font: 11px/1.4 "Inter", "Segoe UI", system-ui, sans-serif;
+  text-align: left;
+}
+.gapp svg {
+  display: block;
+  flex: none;
+}
+.gapp-tabbar {
+  height: 40px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-left: 6px;
+  background: var(--g-panel);
+  border-bottom: 1px solid var(--g-border);
+}
+.gapp-menu {
+  width: 36px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+}
+.gapp-menu img {
+  border-radius: 5px;
+}
+.gapp-tab {
+  height: 30px;
+  width: 170px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  border-radius: 6px;
+  color: var(--g-text-2);
+}
+.gapp-tab.home {
+  width: auto;
+  padding: 0 8px;
+}
+.gapp-tab.on {
+  background: var(--g-bg);
+  color: var(--g-text);
+}
+.gapp-new {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  color: var(--g-text-2);
+}
+.gapp-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.gapp-side {
+  width: 260px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 8px;
+  background: var(--g-panel);
+  border-right: 1px solid var(--g-border);
+}
+.gapp-brand {
+  padding: 6px 10px 12px;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.gapp-brand i {
+  font-weight: 900;
+  padding-right: 3px;
+  background: linear-gradient(100deg, #ff7a59 0%, #ff4fa3 40%, #9b5cff 72%, #3fa9ff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.gapp-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 12px;
+  margin-bottom: 6px;
+  border-radius: 10px;
+  background: var(--g-panel-2);
+  color: var(--g-text-3);
+  font-size: 12px;
+}
+.gapp-search.wide {
+  flex: 1;
+  max-width: 520px;
+  margin: 0;
+}
+.gapp-specs {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 11px 12px 12px;
+  margin-bottom: 6px;
+  border-radius: 10px;
+  background: var(--g-panel-2);
+  border: 1px solid var(--g-accent);
+}
+.gapp-specs-top {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.gapp-specs-top b {
+  font-size: 20px;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.gapp-specs-top span {
+  font-size: 12px;
+  color: var(--g-text-2);
+}
+.gapp em {
+  font-style: normal;
+  margin-left: auto;
+  align-self: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(12, 140, 233, 0.16);
+  color: #0c8ce9;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.gapp-specs-bottom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--g-text-2);
+}
+.gapp-bar {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--g-hover);
+  overflow: hidden;
+}
+.gapp-bar i {
+  display: block;
+  height: 100%;
+  width: 30%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #0c8ce9, #5cc0ff);
+  transition: width 0.6s ease;
+}
+.gapp-specs-bottom > span:last-child {
+  min-width: 30px;
+  text-align: right;
+}
+.gapp-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
+  color: var(--g-text-2);
+  font-size: 12px;
+}
+.gapp-item small {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--g-text-3);
+}
+.gapp-item.small {
+  height: 32px;
+}
+.gapp-item img {
+  border-radius: 4px;
+}
+.gapp-group {
+  margin-top: 14px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  padding: 0 6px;
+  font-weight: 600;
+}
+.gapp-settings {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 52px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid var(--g-border);
+  font-size: 12px;
+  font-weight: 500;
+}
+.gapp-settings span {
+  margin-left: auto;
+  color: var(--g-text-3);
+  font-size: 16px;
+}
+.gapp-main {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+.gapp-head {
+  display: flex;
+  align-items: center;
+  padding: 22px 32px 6px;
+}
+.gapp-head h3 {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.4;
+}
+.gapp-sub {
+  padding: 0 36px 14px;
+  font-size: 12px;
+  color: var(--g-text-3);
+}
+.gapp-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 36px 14px;
+}
+.gapp-select {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--g-border);
+  font-size: 12px;
+  color: var(--g-text-3);
+}
+.gapp-select b {
+  color: var(--g-text);
+  font-weight: 600;
+  margin-right: 4px;
+}
+.gapp-total {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--g-text-3);
+  white-space: nowrap;
+}
+/* a group is a head and its rows; each carries its own piece of the panel, so a row can travel between groups */
+.gapp-list {
+  margin: 0 36px;
+}
+.gt-head,
+.gt-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: var(--g-panel);
+  border: 0 solid var(--g-border);
+  border-left-width: 1px;
+  border-right-width: 1px;
+}
+.gt-head[hidden],
+.gt-ai[hidden] {
+  display: none;
+}
+.gt-head {
+  gap: 8px;
+  height: 38px;
+  padding: 0 14px;
+  border-top-width: 1px;
+  border-radius: 12px 12px 0 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.gt-head ~ .gt-head {
+  margin-top: 14px;
+}
+.gt-head small {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--g-text-3);
+}
+.gt-chev {
+  font-size: 9px;
+  color: var(--g-text-3);
+}
+.gt-row {
+  gap: 10px;
+  height: 40px;
+  padding: 0 14px;
+  border-top-width: 1px;
+  font-size: 12px;
+}
+.gt-row.last {
+  border-bottom-width: 1px;
+  border-radius: 0 0 12px 12px;
+}
+.gt-row b {
+  flex: none;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.gt-ex {
+  flex: 1;
+  min-width: 0;
+  color: var(--g-text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gt-chip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: var(--g-panel-2);
+  color: var(--g-text-2);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.gt-ai i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #0c8ce9;
+  box-shadow: 0 0 6px #0c8ce9;
+}
+.gt-ai u {
+  text-decoration: none;
+}
+.gt-page {
+  flex: none;
+  width: 60px;
+  text-align: right;
+  color: var(--g-text-3);
+  font-size: 11px;
+}
+.gt-ico.progress {
+  color: #f5a524;
+}
+.gt-ico.todo {
+  color: var(--g-text-3);
+}
+.gt-ico.done {
+  color: #14ae5c;
+}
+/* finished tasks step back, as in the app */
+.gt-row.done > * {
+  opacity: 0.55;
+}
+
 /* ================================================================ mosaic tiles */
 .mos {
   position: absolute;
