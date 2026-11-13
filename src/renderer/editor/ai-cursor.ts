@@ -5,7 +5,7 @@ import { editor as ed } from './editor'
 import { ARROW_PATH } from './canvas'
 
 /** no call for this long = the AI has finished (clients think for a while between calls) */
-const IDLE_MS = 12_000
+const IDLE_MS = 15_000
 const POP_MS = 420
 /** commands that only look at the document: they keep the cursor alive but do not move it */
 const READS = /^(get_|list_|find_|export_|zoom_to|set_selection|set_current_page|switch_tab)/
@@ -63,6 +63,7 @@ function pop(client: string): void {
   const c = cursors.get(client)
   if (!c) return
   cursors.delete(client)
+  clearTimeout(c.timer)
   c.el.classList.add('pop')
   setTimeout(() => c.el.remove(), POP_MS)
 }
