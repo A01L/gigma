@@ -266,32 +266,11 @@
       <div class="relative mx-auto max-w-[830px] px-6">
         <h2 class="h-display reveal text-[46px] sm:text-[80px] lg:text-[88px]">Connect your AI.<br />Both ways.</h2>
         <p class="reveal mt-5 max-w-[470px] text-[16px] leading-[1.4] text-white/65" style="--d: 0.08s">Gigma runs an MCP server on your machine. The assistant reads layers, styles and screenshots, then draws back on the canvas. Use it from Claude, Cursor, VS Code or LM Studio.</p>
-        <div class="reveal mt-[90px]" style="--d: 0.1s">
+        <!-- the editor itself: a task in progress wired to the frame, the guideline it is built from, and two assistants on the canvas -->
+        <div class="reveal mt-[90px] lg:-mx-[80px] xl:-mx-[150px]" style="--d: 0.1s">
           <div class="neon">
             <div class="neon-dots"></div>
-            <div class="fit overflow-hidden rounded-[11px]" data-w="804" data-h="470">
-              <div class="fit-inner ui">
-                <div class="absolute inset-0 grid grid-cols-[54px_1fr] bg-[#121316]">
-                  <div class="flex flex-col items-center gap-4 border-r border-white/5 py-3">
-                    <img src="assets/img/icon.png" alt="" class="h-[26px] w-[26px] rounded-[7px]" />
-                    <div class="flex h-[90px] w-[36px] flex-col items-center justify-between rounded-[10px] bg-gradient-to-b from-[#1f2a44] to-[#0d1b33] py-2 ring-1 ring-white/10"><span class="text-[11px] font-semibold">64<sup class="text-[6px]">%</sup></span><span class="h-[2px] w-[16px] rounded bg-[#0c8ce9]"></span><span class="text-[7px] font-bold">SPEC</span></div>
-                    <svg class="ui-ico mt-2"><use href="#i-comment" /></svg><svg class="ui-ico"><use href="#i-frame" /></svg><svg class="ui-ico text-white"><use href="#i-spec" /></svg><svg class="ui-ico"><use href="#i-guide" /></svg><svg class="ui-ico"><use href="#i-actions" /></svg>
-                  </div>
-                  <div class="p-3">
-                    <div class="flex items-center gap-2"><div class="flex h-[28px] flex-1 items-center gap-2 rounded-[6px] bg-white/[0.06] px-2.5 text-[11px] text-white/35"><svg class="h-3 w-3"><use href="#i-search" /></svg>Search MCP activity…</div><span class="flex h-[28px] items-center gap-1.5 rounded-[6px] bg-white/[0.06] px-2.5 text-[11px]"><svg class="h-3 w-3"><use href="#i-eye" /></svg>View</span><span class="flex h-[28px] items-center gap-1.5 rounded-[6px] bg-white/[0.06] px-2.5 text-[11px]">⚙ Show</span></div>
-                    <div class="mt-3 rounded-[8px] bg-white/[0.03] ring-1 ring-white/5">
-                      <div class="flex items-center gap-2 px-3 py-2 text-[10.5px] font-semibold"><svg class="h-2.5 w-2.5"><use href="#i-chevd" /></svg>IN PROGRESS <span class="font-normal text-white/40">· 6</span></div>
-                      <div id="mcp-rows"></div>
-                    </div>
-                    <div class="mt-3 rounded-[8px] bg-white/[0.02] opacity-45 ring-1 ring-white/5">
-                      <div class="flex items-center gap-2 px-3 py-2 text-[10.5px] font-semibold"><svg class="h-2.5 w-2.5"><use href="#i-chevd" /></svg>DONE <span class="font-normal text-white/40">· 3</span></div>
-                      <div id="mcp-done"></div>
-                    </div>
-                    <div class="mt-3 px-3 text-[10.5px] font-semibold text-white/25">› QUEUED</div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <img src="assets/img/app-ai.jpg" width="1608" height="940" loading="lazy" alt="Gigma editor: a Spec task in progress wired to a landing page, the guideline it is built from, and the cursors of Claude and Codex on the canvas" class="relative block h-auto w-full rounded-[11px]" />
           </div>
         </div>
         <div class="mt-[120px] grid grid-cols-2 gap-x-6 gap-y-12 sm:grid-cols-3 sm:gap-x-10 sm:gap-y-16">

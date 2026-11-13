@@ -19,57 +19,6 @@
   layout()
   new ResizeObserver(layout).observe(document.body)
 
-  // the activity list of the MCP mockup
-  const rows = [
-    ['GIG-412', 'create_frame', 'Landing / Hero', 'Claude', '#0c8ce9', '0.4 s', 'now'],
-    ['GIG-411', 'create_text', 'Breakfast, delivered warm.', 'Claude', '#0c8ce9', '0.2 s', '2 s'],
-    ['GIG-410', 'update_node', 'Primary · cornerRadius 18', 'Codex', '#a98bff', '0.1 s', '5 s'],
-    ['GIG-409', 'get_screenshot', 'Landing, 2x PNG', 'Claude', '#0c8ce9', '0.9 s', '9 s'],
-    ['GIG-408', 'link_spec', 'Landing hero → Landing', 'Codex', '#a98bff', '0.1 s', '14 s'],
-    ['GIG-407', 'apply_guideline', 'Sunrise → Landing', 'Claude', '#0c8ce9', '0.3 s', '21 s'],
-  ]
-  const done = [
-    ['GIG-406', 'create_component', 'Button / Primary', 'Claude', '#0c8ce9', '0.5 s', '1 min'],
-    ['GIG-405', 'set_auto_layout', 'Card / Product', 'Codex', '#a98bff', '0.2 s', '2 min'],
-    ['GIG-404', 'export_node', 'Hero.svg', 'Claude', '#0c8ce9', '0.6 s', '3 min'],
-  ]
-  const row = ([id, tool, what, who, color, took, when], live) => `
-    <div class="flex h-[34px] items-center gap-3 border-t border-white/5 px-3 text-[11px]">
-      <span class="w-[52px] text-white/35">${id}</span>
-      <span class="flex h-[14px] w-[14px] items-center justify-center rounded-full border ${live ? 'border-[#f5a524]' : 'border-[#22c55e] bg-[#22c55e]/20'}">${live ? '<span class="h-[6px] w-[6px] rounded-full bg-[#f5a524]"></span>' : ''}</span>
-      <span class="font-mono text-[10.5px] text-white/90">${tool}</span>
-      <span class="truncate text-white/45">${what}</span>
-      <span class="ml-auto flex items-center gap-1.5 rounded-full bg-white/[0.06] px-2 py-[2px] text-[10px] text-white/75"><span class="h-[7px] w-[7px] rounded-full" style="background:${color}"></span>${who}</span>
-      <span class="w-[36px] text-right text-white/35">${took}</span>
-      <span class="w-[40px] text-right text-white/35">${when}</span>
-      <span class="flex h-[18px] w-[18px] items-center justify-center rounded-full text-[8px] font-bold text-white" style="background:${color}">${who[0]}</span>
-    </div>`
-  const list = document.getElementById('mcp-rows')
-  if (list) list.innerHTML = rows.map((r) => row(r, true)).join('')
-  const old = document.getElementById('mcp-done')
-  if (old) old.innerHTML = done.map((r) => row(r, false)).join('')
-  // the newest call slides in from time to time, as if an assistant is at work
-  if (list && !calm) {
-    const tools = [
-      ['create_rect', 'Badge background'],
-      ['update_text', 'Headline, weight 700'],
-      ['create_frame', 'Pricing / Card'],
-      ['get_layers', 'Page 1'],
-      ['set_fill', 'Primary · #F97316'],
-      ['create_ellipse', 'Avatar'],
-    ]
-    let n = 413
-    setInterval(() => {
-      const [tool, what] = tools[n % tools.length]
-      const claude = n % 3 !== 1
-      list.insertAdjacentHTML('afterbegin', row([`GIG-${n}`, tool, what, claude ? 'Claude' : 'Codex', claude ? '#0c8ce9' : '#a98bff', '0.2 s', 'now'], true))
-      const first = list.firstElementChild
-      first.animate([{ opacity: 0, transform: 'translateY(-8px)', background: 'rgba(12,140,233,0.18)' }, { opacity: 1, transform: 'none', background: 'transparent' }], { duration: 700, easing: 'cubic-bezier(0.2,0.7,0.2,1)' })
-      list.lastElementChild.remove()
-      n++
-    }, 2600)
-  }
-
   // things appear as they scroll into view
   const seen = new IntersectionObserver(
     (entries) => {
