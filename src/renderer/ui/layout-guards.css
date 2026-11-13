@@ -662,12 +662,50 @@
 .tr {
   grid-template-columns: 56px minmax(0, 1fr) minmax(90px, 160px) minmax(80px, 140px) 84px;
 }
+/* Settings laid out like Windows Settings: the page is centred in the free area and, when the window is
+   wide, the cards go in two columns instead of leaving the right half empty */
 .settings {
-  max-width: min(760px, 100%);
+  width: 100%;
+  max-width: 860px;
+  margin: 0 auto;
+}
+.settings h1 {
+  column-span: all;
+}
+.settings section {
+  break-inside: avoid;
+  /* a margin would be split between columns; the gap lives inside the flow instead */
+  display: inline-block;
+  width: 100%;
+  margin-bottom: 16px;
+}
+@media (min-width: 1300px) {
+  .settings {
+    max-width: 1480px;
+    column-count: 2;
+    column-gap: 16px;
+  }
 }
 .set-row {
   flex-wrap: wrap;
   row-gap: 8px;
+}
+/* label on the left, control at the right edge of the card, as in Windows */
+.set-row > span:first-child {
+  flex: 1 1 140px;
+  width: auto;
+  color: var(--text);
+  font-weight: 500;
+}
+.set-row > .path {
+  flex: 2 1 200px;
+  text-align: right;
+}
+.set-row > .set-input {
+  flex: 2 1 220px;
+}
+.settings section > .set-row + .set-row {
+  border-top: 1px solid var(--border);
 }
 .settings pre {
   max-width: 100%;

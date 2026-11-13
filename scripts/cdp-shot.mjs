@@ -1,7 +1,7 @@
 // Screenshot a page over CDP. Usage: node scripts/cdp-shot.mjs "#doc=" out.png
 import { writeFileSync } from 'node:fs'
 const [, , match = '#doc=', out = 'shot.png'] = process.argv
-const pages = await (await fetch('http://127.0.0.1:9333/json')).json()
+const pages = await (await fetch(`http://127.0.0.1:${process.env.CDP_PORT ?? 9333}/json`)).json()
 const page = pages.find((p) => p.type === 'page' && p.url.includes(match))
 const ws = new WebSocket(page.webSocketDebuggerUrl)
 await new Promise((r) => ws.addEventListener('open', r, { once: true }))
