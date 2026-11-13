@@ -7,6 +7,7 @@ import { backend } from '../backend'
 import { keyBetween, rectsIntersect, uid, unionRects, type Rect } from './util'
 import { DEFAULT_TEXT_STYLE, fitText } from './text'
 import { computeLayout, inFlow, isAutoLayout } from './autolayout'
+import { GUIDE_CARD_MIN_W, GUIDE_DOT, guideCardHeight, guideStore } from './guide-render'
 
 export type Tool =
   | 'move'
@@ -1114,9 +1115,25 @@ export class Editor {
     if (reparent || reorder) this.unlinkChild(n)
     const oldW = n.width
     const oldH = n.height
+    const oldX = n.x
+    const oldY = n.y
     Object.assign(n, patch)
     // a resized frame carries its children along according to their constraints
     if (n.type === 'FRAME' && !this.noConstraints && ('width' in patch || 'height' in patch) && (n.width !== oldW || n.height !== oldH)) this.applyConstraints(n, oldW, oldH)
+    // a guideline sizes itself: a dot is a dot, an open card has a minimum width and is as tall as its contents
+    if (n.type === 'GUIDE' && ('width' in patch || 'height' in patch || 'guide' in patch)) {
+      const right = n.x + n.width
+      const data = guideStore.get(n.guide?.id ?? '')
+      if (!n.guide?.open) n.width = n.height = GUIDE_DOT
+      else {
+        n.width = Math.max(GUIDE_CARD_MIN_W, n.width)
+        if (data) n.height = guideCardHeight(data, n.width)
+      }
+      // dragged by the left or the top edge: the opposite edge stays where it was
+      if (n.x !== oldX && patch.width !== undefined && patch.width !== oldW) n.x = right - n.width
+      // the height is not the user's to set, so dragging the top edge does not move the card
+      if (n.y !== oldY && patch.height !== undefined && patch.height !== oldH) n.y = oldY
+    }
     if (n.type === 'TEXT' && ('characters' in patch || 'textStyle' in patch || 'width' in patch || 'textAutoResize' in patch)) {
       const s = fitText(n)
       n.width = s.width

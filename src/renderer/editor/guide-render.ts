@@ -8,6 +8,8 @@ export const guideStore = new Map<string, GuideData>()
 
 export const GUIDE_DOT = 72
 export const GUIDE_CARD_W = 440
+/** an open card is never narrower than this: below it the texts no longer fit */
+export const GUIDE_CARD_MIN_W = 320
 const GREY = '#8c8c8c'
 
 /** accent of a guideline as a CSS colour (grey when none is set) */
@@ -168,9 +170,11 @@ function card(ctx: CanvasRenderingContext2D, g: GuideData, x: number, y: number,
   if (g.colors.length) {
     heading('Colors')
     const tile = 72
-    const gap = (inner - tile * 5) / 4
+    // as many swatches in a row as the card is wide; the rest wrap
+    const cols = Math.max(1, Math.min(5, Math.floor((inner + 10) / (tile + 10))))
+    const gap = cols > 1 ? Math.min(20, (inner - tile * cols) / (cols - 1)) : 0
     g.colors.forEach((c, i) => {
-      const col = i % 5
+      const col = i % cols
       if (i && col === 0) cy += 92
       if (!paint) return
       const tx = x + pad + col * (tile + gap)
