@@ -54,26 +54,57 @@ export async function saveThumbnail(): Promise<void> {
   }
 }
 
-function download(blob: Blob, name: string) {
-  const a = document.createElement('a')
-  a.href = URL.createObjectURL(blob)
-  a.download = name
-  a.click()
-  setTimeout(() => URL.revokeObjectURL(a.href), 5000)
+const clean = (name: string) => name.replace(/[\\/:*?"<>|]/g, '_').trim() || 'Untitled'
+const fileName = () => clean(ed.selection.length === 1 ? ed.nodes.get(ed.selection[0])!.name : ed.meta.name)
+
+/** hand exported files to the app: it asks where to save (a file name for one, a folder for a batch) and tells the result */
+async function saveFiles(files: { name: string; bytes: Uint8Array }[]): Promise<void> {
+  const r = await backend.files.save(files)
+  if (!r) return ed.hideToast()
+  if (!r.paths.length) return ed.hideToast()
+  const msg = r.paths.length === 1 ? t('Saved: {name}', { name: files[0].name }) : t('Files saved: {n}', { n: String(r.paths.length) })
+  ed.showToast(msg, { label: t('Show in folder'), run: () => void backend.files.reveal(r.paths[0]) })
 }
 
-const fileName = () => (ed.selection.length === 1 ? ed.nodes.get(ed.selection[0])!.name : ed.meta.name).replace(/[\\/:*?"<>|]/g, '_')
+/**
+ * The selected layers as export files. As in Figma, every selected layer becomes a file of its own, named after the
+ * layer (layers with the same name get a number), in the order they read on the page.
+ */
+async function exportEach(ext: string, suffix: string, make: (id: string) => Promise<Uint8Array>): Promise<void> {
+  const ids = ed.roots(ed.selection)
+  if (!ids.length) return ed.showToast(t('Select layers to export'))
+  // rows first, then left to right: the order the files should have in a folder
+  const row = (id: string) => ed.world(id)
+  ids.sort((a, b) => {
+    const p = row(a)
+    const q = row(b)
+    return Math.abs(p.y - q.y) > Math.min(p.h, q.h) / 2 ? p.y - q.y : p.x - q.x
+  })
+  const used = new Map<string, number>()
+  const files: { name: string; bytes: Uint8Array }[] = []
+  for (const [i, id] of ids.entries()) {
+    if (ids.length > 1) ed.showToast(t('Exporting {i} of {n}…', { i: String(i + 1), n: String(ids.length) }))
+    const base = clean(ed.nodes.get(id)!.name)
+    const seen = used.get(base.toLowerCase()) ?? 0
+    used.set(base.toLowerCase(), seen + 1)
+    files.push({ name: `${base}${seen ? ' ' + (seen + 1) : ''}${suffix}.${ext}`, bytes: await make(id) })
+    // let the progress be painted between two heavy renders
+    if (ids.length > 1) await new Promise((r) => setTimeout(r, 0))
+  }
+  await saveFiles(files)
+}
 
 export async function exportSelectionPng(scale = 2): Promise<void> {
-  if (!ed.selection.length) return ed.showToast('Select layers to export')
-  const c = await renderToCanvas(ed, ed.selection, scale)
-  c.toBlob((b) => b && download(b, `${fileName()}${scale !== 1 ? `@${scale}x` : ''}.png`), 'image/png')
+  await exportEach('png', scale !== 1 ? `@${scale}x` : '', async (id) => {
+    const c = await renderToCanvas(ed, [id], scale)
+    const blob = await new Promise<Blob | null>((r) => c.toBlob(r, 'image/png'))
+    if (!blob) throw new Error('could not encode the image')
+    return new Uint8Array(await blob.arrayBuffer())
+  }).catch((e) => ed.showToast(t('Export failed') + ': ' + String((e as Error).message ?? e)))
 }
 
 export async function exportSelectionSvg(): Promise<void> {
-  if (!ed.selection.length) return ed.showToast('Select layers to export')
-  const svg = await nodesToSvg(ed, ed.selection, false)
-  download(new Blob([svg], { type: 'image/svg+xml' }), `${fileName()}.svg`)
+  await exportEach('svg', '', async (id) => new TextEncoder().encode(await nodesToSvg(ed, [id], false))).catch((e) => ed.showToast(t('Export failed') + ': ' + String((e as Error).message ?? e)))
 }
 
 /** PDF of the given layers, one page each (default: the selection in layer order) */
@@ -83,8 +114,7 @@ export async function exportPdf(ids?: string[], name?: string): Promise<void> {
   try {
     ed.showToast(t('Preparing PDF…'))
     const bytes = await backend.pdf.render(await pdfPages(ed, list))
-    download(new Blob([bytes as BlobPart], { type: 'application/pdf' }), `${name ?? fileName()}.pdf`)
-    ed.hideToast()
+    await saveFiles([{ name: `${name ?? fileName()}.pdf`, bytes }])
   } catch (e) {
     ed.showToast(t('PDF export failed') + ': ' + String((e as Error).message ?? e).replace(/^Error invoking remote method '[^']*': (Error: )?/, ''))
   }

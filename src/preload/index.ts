@@ -97,6 +97,10 @@ const api: GigmaApi = {
     put: (bytes, mime) => ipcRenderer.invoke('blob:put', bytes, mime),
     url: (hash) => `gigma-blob://t${tabId}/${hash}`
   },
+  files: {
+    save: (files) => ipcRenderer.invoke('files:save', files),
+    reveal: (path) => ipcRenderer.invoke('files:reveal', path)
+  },
   pdf: {
     render: (pages) => ipcRenderer.invoke('pdf:render', pages)
   },

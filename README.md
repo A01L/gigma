@@ -82,6 +82,7 @@ Its main feature is a **built-in MCP server**. An AI assistant (Claude Desktop, 
 - Copy **to Figma and from Figma**, images included
 - **PDF import**: drop a PDF on the canvas and every page becomes a frame, with its text, shapes and pictures as separate layers
 - Export to **PNG**, **SVG** and **PDF** (vector, text stays text)
+- Batch export: several selected layers become a file each (named after the layer) in a folder you choose; one layer opens a Save dialog
 - "Export frames to PDF": every frame of a page in one file
 - The `.gigma` format: a project or selected pages in one file, with images
 

@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, protocol, clipboard, session, shell, WebContentsView, type WebContents } from 'electron'
-import { join, extname } from 'node:path'
+import { join, extname, dirname, basename } from 'node:path'
 import { existsSync, readFileSync, statfsSync, writeFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { GigmaFile } from './storage'
@@ -498,6 +498,48 @@ ipcMain.handle('code:render', (_e, html: string, css: string, w: number, h: numb
 })
 
 ipcMain.handle('pdf:render', (_e, pages: PdfPage[]) => renderPdf(pages))
+
+// Exported files. One file: a Save dialog. Several (a batch of frames): a folder is asked for once and every file
+// goes there under its own name. The folder is remembered while the app runs.
+let exportDir: string | null = null
+const safeName = (name: string) => basename(name).replace(/[\\/:*?"<>|]/g, '_') || 'export'
+ipcMain.handle('files:save', async (_e, files: { name: string; bytes: Uint8Array }[]) => {
+  if (!win || !files.length) return null
+  // for the UI test scripts: no dialog can be answered there, the files go straight to this folder
+  const forced = process.env.GIGMA_EXPORT_DIR
+  if (forced && existsSync(forced)) {
+    const paths = files.map((f) => join(forced, safeName(f.name)))
+    files.forEach((f, i) => writeFileSync(paths[i], f.bytes))
+    return { dir: forced, paths }
+  }
+  const start = exportDir && existsSync(exportDir) ? exportDir : app.getPath('downloads')
+  if (files.length === 1) {
+    const name = safeName(files[0].name)
+    const ext = extname(name).slice(1)
+    const r = await dialog.showSaveDialog(win, { defaultPath: join(start, name), filters: ext ? [{ name: ext.toUpperCase(), extensions: [ext] }] : [] })
+    if (r.canceled || !r.filePath) return null
+    writeFileSync(r.filePath, files[0].bytes)
+    exportDir = dirname(r.filePath)
+    return { dir: exportDir, paths: [r.filePath] }
+  }
+  const r = await dialog.showOpenDialog(win, {
+    title: getSettings().language === 'ru' || (getSettings().language === 'system' && app.getLocale().startsWith('ru')) ? `Куда сохранить файлы (${files.length})` : `Where to save the files (${files.length})`,
+    defaultPath: start,
+    properties: ['openDirectory', 'createDirectory']
+  })
+  if (r.canceled || !r.filePaths[0]) return null
+  exportDir = r.filePaths[0]
+  const paths: string[] = []
+  for (const f of files) {
+    const p = join(exportDir, safeName(f.name))
+    writeFileSync(p, f.bytes)
+    paths.push(p)
+  }
+  return { dir: exportDir, paths }
+})
+ipcMain.handle('files:reveal', (_e, path: string) => {
+  if (existsSync(path)) shell.showItemInFolder(path)
+})
 
 // Fetch originals of images referenced by layers pasted from Figma.
 // Figma's clipboard has only image hashes; the Figma REST API maps hash -> download URL.

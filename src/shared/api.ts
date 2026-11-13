@@ -211,6 +211,15 @@ export interface GigmaApi {
     put(bytes: Uint8Array, mime: string): Promise<string>
     url(hash: string): string
   }
+  files: {
+    /**
+     * Save exported files. One file opens a Save dialog; several open a folder picker and every file is written
+     * into the chosen folder under its own name. Null = cancelled.
+     */
+    save(files: { name: string; bytes: Uint8Array }[]): Promise<{ dir: string; paths: string[] } | null>
+    /** show a saved file in the file manager */
+    reveal(path: string): Promise<void>
+  }
   pdf: {
     /** one PDF page per entry: the SVG of a layer on a page of width × height points */
     render(pages: { svg: string; width: number; height: number; background?: string }[]): Promise<Uint8Array>

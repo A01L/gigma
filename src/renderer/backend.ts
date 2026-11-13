@@ -47,6 +47,20 @@ function memoryBackend(): GigmaApi {
     platform: 'web',
     tabId: null,
     pdf: { render: async () => Promise.reject(new Error('PDF export needs the desktop app')) },
+    // the browser has no folder to ask for: every file is offered as a download
+    files: {
+      save: async (files) => {
+        for (const f of files) {
+          const a = document.createElement('a')
+          a.href = URL.createObjectURL(new Blob([f.bytes as BlobPart]))
+          a.download = f.name
+          a.click()
+          setTimeout(() => URL.revokeObjectURL(a.href), 5000)
+        }
+        return { dir: '', paths: [] }
+      },
+      reveal: async () => {}
+    },
     // plugins need the desktop app (packages live on disk, pages are served by the main process)
     plugins: {
       list: async () => [],
