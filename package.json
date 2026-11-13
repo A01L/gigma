@@ -21,7 +21,9 @@
     "installer-art": "electron scripts/make-installer-art.cjs",
     "smoke": "node scripts/mcp-smoke.mjs",
     "dist:win": "electron-vite build && electron-builder --win",
-    "dist:mac": "electron-vite build && electron-builder --mac"
+    "dist:mac": "electron-vite build && electron-builder --mac",
+    "site:css": "tailwindcss -i site/src/input.css -o site/assets/site.css --minify",
+    "site:dev": "tailwindcss -i site/src/input.css -o site/assets/site.css --watch"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
@@ -31,6 +33,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@tailwindcss/cli": "^4.3.5",
     "@types/node": "^24.9.0",
     "@types/rbush": "^4.0.0",
     "@types/react": "^19.3.0",
@@ -42,6 +45,7 @@
     "rbush": "^4.0.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
+    "tailwindcss": "^4.3.5",
     "typescript": "^5.9.3",
     "vite": "^8.3.8"
   },
