@@ -1480,6 +1480,20 @@ function SpecialInspector({ node: n }: { node: GNode }) {
             </>
           )}
         </Section>
+        <Section title={t('Linked frames')}>
+          {(sp.targets ?? []).filter((id) => ed.nodes.has(id)).length === 0 && <div className="row muted hint">{t('Drag the round port on the edge of the card to a frame. The AI will see that this task is about that frame.')}</div>}
+          {(sp.targets ?? [])
+            .filter((id) => ed.nodes.has(id))
+            .map((id) => (
+              <div className="row tight" key={id}>
+                <button className="field" style={{ flex: 1, textAlign: 'left', cursor: 'pointer' }} title={t('Show on the canvas')} onClick={() => ed.zoomToRect(ed.world(id), 1)}>
+                  <span className="lbl">{Icons.frame}</span>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ed.nodes.get(id)!.name}</span>
+                </button>
+                <MinusBtn onClick={() => ed.act(() => set({ targets: (sp.targets ?? []).filter((x) => x !== id) }))} />
+              </div>
+            ))}
+        </Section>
       </>
     )
   }

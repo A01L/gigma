@@ -230,9 +230,9 @@ http://127.0.0.1:7331/mcp
 | Компоненты и стили | `create_component`, `create_instance`, `add_variant`, `set_variant`, `detach_instance`, `list_styles`, `create_style`, `update_style` |
 | Зрение и экспорт | `get_screenshot`, `export_png`, `export_svg`, `export_pdf` |
 | Чтение | `get_document`, `get_selection`, `get_node`, `find_nodes` |
-| Задания | `list_specs`, `update_spec`, `list_annotations`, `resolve_annotation` |
+| Задания | `list_specs`, `create_spec`, `update_spec`, `link_spec`, `list_annotations`, `resolve_annotation` |
 
-> 💡 Оставьте на холсте карточку **Spec** с описанием задачи: ИИ найдёт её через `list_specs`, выполнит и отметит результат.
+> 💡 Оставьте на холсте карточку **Spec** с описанием задачи: ИИ найдёт её через `list_specs`, выполнит и отметит результат. Потяните порт карточки к одному или нескольким фреймам: ИИ увидит, к каким фреймам относится задача, а при работе во фрейме получит напоминание о его спецификации.
 
 ## 🧩 Плагины
 

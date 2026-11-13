@@ -509,60 +509,116 @@ function drawArrowHead(ctx: CanvasRenderingContext2D, n: GNode, r: Rect): void {
   ctx.fill()
 }
 
-/** SPEC: a task card (yellow note) with status, title and description. */
+/** height of the dark title bar of a Spec card */
+export const SPEC_HEAD = 34
+
+/**
+ * SPEC card, drawn like Figma's spec block: a dark shell with the document icon and the name in the
+ * title bar, and a white sheet with the title and the text of the task below.
+ */
 function drawSpecCard(ctx: CanvasRenderingContext2D, n: GNode, r: Rect): void {
-  const sp = n.spec ?? { title: 'Spec', body: '', status: 'TODO' as const }
+  const sp = n.spec ?? { title: '', body: '', status: 'TODO' as const }
   const k = deviceScale(ctx)
+  const pad = 6
+  // shell
   ctx.save()
-  ctx.shadowColor = 'rgba(0,0,0,0.18)'
-  ctx.shadowBlur = 16 * k
-  ctx.shadowOffsetY = 4 * k
-  ctx.fillStyle = '#FFF8DB'
+  ctx.shadowColor = 'rgba(0,0,0,0.35)'
+  ctx.shadowBlur = 18 * k
+  ctx.shadowOffsetY = 6 * k
+  ctx.fillStyle = '#2c2c2c'
   ctx.beginPath()
-  ctx.roundRect(r.x, r.y, r.w, r.h, 12)
+  ctx.roundRect(r.x, r.y, r.w, r.h, 10)
   ctx.fill()
   ctx.restore()
-  ctx.strokeStyle = '#F2C94C'
-  ctx.lineWidth = 1.5
+  ctx.strokeStyle = '#3d3d3d'
+  ctx.lineWidth = 1
   ctx.beginPath()
-  ctx.roundRect(r.x, r.y, r.w, r.h, 12)
+  ctx.roundRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1, 10)
   ctx.stroke()
   ctx.save()
   ctx.beginPath()
-  ctx.roundRect(r.x, r.y, r.w, r.h, 12)
+  ctx.roundRect(r.x, r.y, r.w, r.h, 10)
   ctx.clip()
-  // status chip
-  const chip = { TODO: ['#F2994A', 'TODO'], IN_PROGRESS: ['#2F80ED', 'IN PROGRESS'], DONE: ['#27AE60', 'DONE'] }[sp.status]
-  ctx.font = `700 10px Inter, "Segoe UI", sans-serif`
+
+  // title bar: document icon, name, status
+  const cy = r.y + SPEC_HEAD / 2
+  const BLUE = '#7cb7ff'
+  ctx.strokeStyle = BLUE
+  ctx.lineWidth = 1.3
+  ctx.lineJoin = 'round'
+  const ix = r.x + 13
+  ctx.beginPath()
+  ctx.roundRect(ix, cy - 7, 11, 14, 2)
+  ctx.moveTo(ix + 3, cy - 3)
+  ctx.lineTo(ix + 8, cy - 3)
+  ctx.moveTo(ix + 3, cy)
+  ctx.lineTo(ix + 8, cy)
+  ctx.moveTo(ix + 3, cy + 3)
+  ctx.lineTo(ix + 6.5, cy + 3)
+  ctx.stroke()
+  const chip = { TODO: ['#f2994a', 'TODO'], IN_PROGRESS: ['#2f80ed', 'IN PROGRESS'], DONE: ['#27ae60', 'DONE'] }[sp.status]
   ctx.textBaseline = 'middle'
-  const label = 'SPEC · ' + chip[1]
-  const cw = ctx.measureText(label).width + 14
+  ctx.letterSpacing = '0px'
+  ctx.font = '700 9.5px Inter, "Segoe UI", sans-serif'
+  const cw = ctx.measureText(chip[1]).width + 14
   ctx.fillStyle = chip[0]
   ctx.beginPath()
-  ctx.roundRect(r.x + 14, r.y + 12, cw, 18, 9)
+  ctx.roundRect(r.x + r.w - cw - 10, cy - 9, cw, 18, 9)
   ctx.fill()
   ctx.fillStyle = '#fff'
-  ctx.fillText(label, r.x + 21, r.y + 21)
-  // title + body via the regular text layout
+  ctx.fillText(chip[1], r.x + r.w - cw - 3, cy + 0.5)
+  ctx.font = '600 13px Inter, "Segoe UI", sans-serif'
+  ctx.fillStyle = BLUE
+  let name = n.name || 'Spec'
+  const maxName = r.w - 44 - cw - 16
+  while (name.length > 1 && ctx.measureText(name).width > maxName) name = name.slice(0, -2) + '…'
+  if (maxName > 20) ctx.fillText(name, ix + 19, cy + 0.5)
+
+  // the sheet
+  const sx = r.x + pad
+  const sy = r.y + SPEC_HEAD
+  const sw = Math.max(1, r.w - pad * 2)
+  const sh = Math.max(1, r.h - SPEC_HEAD - pad)
+  ctx.fillStyle = '#ffffff'
+  ctx.beginPath()
+  ctx.roundRect(sx, sy, sw, sh, 5)
+  ctx.fill()
+  ctx.beginPath()
+  ctx.roundRect(sx, sy, sw, sh, 5)
+  ctx.clip()
+  const inner = Math.max(20, sw - 36)
   const title: GNode = {
     ...n,
     type: 'TEXT',
-    characters: sp.title || 'Untitled spec',
-    width: r.w - 28,
+    characters: sp.title || 'Untitled',
+    width: inner,
     textAutoResize: 'HEIGHT',
-    textStyle: { fontFamily: 'Inter', fontSize: 16, fontWeight: 700, align: 'LEFT' }
+    textStyle: { fontFamily: 'Inter', fontSize: 20, fontWeight: 700, align: 'LEFT' }
   }
   const tl = layoutText(title)
-  ctx.fillStyle = '#1E1E1E'
+  // empty fields show grey placeholders, as an empty document does
+  ctx.fillStyle = sp.title ? '#1e1e1e' : '#b3b3b3'
   ctx.font = cssFont(title.textStyle!)
-  ctx.letterSpacing = '0px'
-  tl.lines.forEach((ln) => ctx.fillText(ln.text, r.x + 14, r.y + 40 + ln.y + tl.lineHeight / 2))
-  const body: GNode = { ...title, characters: sp.body, textStyle: { fontFamily: 'Inter', fontSize: 13, fontWeight: 400, align: 'LEFT', lineHeightPercent: 145 } }
+  tl.lines.forEach((ln) => ctx.fillText(ln.text, sx + 18, sy + 20 + ln.y + tl.lineHeight / 2))
+  const body: GNode = { ...title, characters: sp.body || 'Describe the task for the AI…', textStyle: { fontFamily: 'Inter', fontSize: 13, fontWeight: 400, align: 'LEFT', lineHeightPercent: 150 } }
   const bl = layoutText(body)
-  ctx.fillStyle = '#4A4A4A'
+  ctx.fillStyle = sp.body ? '#444444' : '#b3b3b3'
   ctx.font = cssFont(body.textStyle!)
-  const top = r.y + 48 + tl.height
-  bl.lines.forEach((ln) => ctx.fillText((ln.marker ? ln.marker + ' ' : '') + ln.text, r.x + 14, top + ln.y + bl.lineHeight / 2))
+  let top = sy + 30 + tl.height
+  bl.lines.forEach((ln) => ctx.fillText((ln.marker ? ln.marker + ' ' : '') + ln.text, sx + 18, top + ln.y + bl.lineHeight / 2))
+  if (sp.result) {
+    // what was done, written by the AI (or a person) when the task was closed
+    top += bl.height + 16
+    ctx.strokeStyle = '#e6e6e6'
+    ctx.beginPath()
+    ctx.moveTo(sx + 18, top - 8)
+    ctx.lineTo(sx + sw - 18, top - 8)
+    ctx.stroke()
+    const res: GNode = { ...body, characters: '✓ ' + sp.result }
+    const rl = layoutText(res)
+    ctx.fillStyle = '#27ae60'
+    rl.lines.forEach((ln) => ctx.fillText(ln.text, sx + 18, top + ln.y + rl.lineHeight / 2))
+  }
   ctx.restore()
 }
 

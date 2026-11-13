@@ -17,6 +17,8 @@ const PURPLE = '#9747ff'
 const RED = '#f24822'
 /** equal spacing markers */
 const PINK = '#ff24bd'
+/** wires between Spec cards and frames */
+const WIRE = '#7cb7ff'
 /** selection colour of a layer: purple inside components and instances */
 const accentOf = (id: string) => (ed.mainComponentOf(id) || ed.instanceOf(id) || ed.nodes.get(id)?.isComponentSet ? PURPLE : BLUE)
 /** cursor shown just outside the corners of the selection: drag to rotate */
@@ -40,6 +42,8 @@ type Drag =
   | { kind: 'move'; sx: number; sy: number; ids: string[]; orig: Map<string, Rect>; box: Rect; moved: boolean; dup: boolean }
   | { kind: 'resize'; handle: Handle; box: Rect; ids: string[]; orig: Map<string, Rect>; snap?: Map<string, GNode>; rot: number }
   | { kind: 'rotate'; cx: number; cy: number; a0: number; orig: Map<string, { cx: number; cy: number; rot: number }> }
+  /** dragging a wire out of a Spec card towards a frame (world coordinates of the loose end) */
+  | { kind: 'link'; spec: string; side: 'l' | 'r'; x: number; y: number; target: string | null }
   | { kind: 'marquee'; sx: number; sy: number; x: number; y: number; base: string[]; scope: string | null }
   | { kind: 'create'; type: GNode['type']; wx: number; wy: number; id: string | null; parent: string | null; tool: string }
   | { kind: 'pencil'; pts: [number, number][]; parent: string | null }
@@ -421,6 +425,8 @@ export class CanvasController {
       }
     }
 
+    this.drawSpecWires()
+
     // equal spacing while dragging
     for (const g of this.gaps) {
       const a = g.axis === 'x' ? this.toScreen({ x: g.from, y: g.at, w: g.to - g.from, h: 0 }) : this.toScreen({ x: g.at, y: g.from, w: 0, h: g.to - g.from })
@@ -440,6 +446,132 @@ export class CanvasController {
       ctx.fillRect(x, y, Math.abs(d.x - d.sx), Math.abs(d.y - d.sy))
       ctx.strokeRect(x + 0.5, y + 0.5, Math.abs(d.x - d.sx), Math.abs(d.y - d.sy))
     }
+  }
+
+  // ---------------------------------------------------------------- spec wires
+  /** the two ports of a Spec card (left and right edge), in world coordinates */
+  private specPorts(id: string): { l: { x: number; y: number }; r: { x: number; y: number } } {
+    const w = ed.world(id)
+    const y = w.y + Math.min(w.h / 2, 60)
+    return { l: { x: w.x, y }, r: { x: w.x + w.w, y } }
+  }
+  /** the port of the selected Spec card under a screen point */
+  private specPortAt(sx: number, sy: number): { spec: string; side: 'l' | 'r' } | null {
+    if (ed.selection.length !== 1 || ed.tool !== 'move') return null
+    const n = ed.nodes.get(ed.selection[0])
+    if (n?.type !== 'SPEC') return null
+    const ports = this.specPorts(n.id)
+    for (const side of ['l', 'r'] as const) {
+      const p = this.toScreen({ x: ports[side].x, y: ports[side].y, w: 0, h: 0 })
+      if (Math.hypot(sx - (p.x + (side === 'l' ? -14 : 14)), sy - p.y) <= 10) return { spec: n.id, side }
+    }
+    return null
+  }
+  /** a wire from a port to a point: leaves the card sideways and arrives sideways */
+  private wire(x1: number, y1: number, x2: number, y2: number, side: 'l' | 'r', endSide: 'l' | 'r' | 't' | 'b' | null): void {
+    const ctx = this.ctx
+    const k = Math.max(30, Math.min(160, Math.abs(x2 - x1) / 2 + Math.abs(y2 - y1) / 6))
+    const c1x = x1 + (side === 'l' ? -k : k)
+    const c2x = endSide === 'l' ? x2 - k : endSide === 'r' ? x2 + k : x2
+    const c2y = endSide === 't' ? y2 - k : endSide === 'b' ? y2 + k : y2
+    ctx.beginPath()
+    ctx.moveTo(x1, y1)
+    ctx.bezierCurveTo(c1x, y1, c2x, c2y, x2, y2)
+    ctx.stroke()
+  }
+  /** where a wire from (px, py) lands on a frame: the middle of the side that faces the card */
+  private wireEnd(target: Rect, px: number, py: number): { x: number; y: number; side: 'l' | 'r' | 't' | 'b' } {
+    if (px < target.x) return { x: target.x, y: target.y + Math.min(target.h / 2, 60), side: 'l' }
+    if (px > target.x + target.w) return { x: target.x + target.w, y: target.y + Math.min(target.h / 2, 60), side: 'r' }
+    return py < target.y + target.h / 2 ? { x: target.x + target.w / 2, y: target.y, side: 't' } : { x: target.x + target.w / 2, y: target.y + target.h, side: 'b' }
+  }
+  /** wires of every Spec card on the page, the ports of the selected card and the wire being dragged */
+  private drawSpecWires(): void {
+    const ctx = this.ctx
+    const S = (p: { x: number; y: number }) => this.toScreen({ x: p.x, y: p.y, w: 0, h: 0 })
+    ctx.save()
+    ctx.lineWidth = 1.5
+    ctx.lineCap = 'round'
+    for (const n of ed.nodes.values()) {
+      if (n.type !== 'SPEC' || n.pageId !== ed.currentPageId || !n.visible || !n.spec?.targets?.length) continue
+      const selected = ed.selection.includes(n.id)
+      const done = n.spec.status === 'DONE'
+      const color = done ? '#27ae60' : WIRE
+      const ports = this.specPorts(n.id)
+      for (const tid of n.spec.targets) {
+        const t = ed.nodes.get(tid)
+        if (!t || t.pageId !== n.pageId || !t.visible) continue
+        const tw = ed.world(tid)
+        // the wire leaves from the side of the card that faces the frame
+        const side: 'l' | 'r' = tw.x + tw.w / 2 < ports.l.x + (ports.r.x - ports.l.x) / 2 ? 'l' : 'r'
+        const a = S(ports[side])
+        const endW = this.wireEnd(tw, ports[side].x, ports[side].y)
+        const b = S(endW)
+        ctx.globalAlpha = selected || ed.selection.includes(tid) ? 1 : 0.55
+        ctx.strokeStyle = color
+        ctx.setLineDash(done ? [] : [6, 5])
+        this.wire(a.x, a.y, b.x, b.y, side, endW.side)
+        ctx.setLineDash([])
+        ctx.fillStyle = color
+        for (const p of [a, b]) {
+          ctx.beginPath()
+          ctx.arc(p.x, p.y, 4, 0, Math.PI * 2)
+          ctx.fill()
+        }
+        // the linked frame is outlined while the card is selected
+        if (selected) {
+          const f = this.toScreen(tw)
+          ctx.strokeRect(Math.round(f.x) + 0.5, Math.round(f.y) + 0.5, Math.round(f.w), Math.round(f.h))
+        }
+      }
+    }
+    ctx.globalAlpha = 1
+    // ports of the selected card: drag one to a frame
+    const sel = ed.selection.length === 1 ? ed.nodes.get(ed.selection[0]) : undefined
+    if (sel?.type === 'SPEC' && ed.tool === 'move' && !(this.drag?.kind === 'move' && this.drag.moved)) {
+      const ports = this.specPorts(sel.id)
+      for (const side of ['l', 'r'] as const) {
+        const p = S(ports[side])
+        const cx = p.x + (side === 'l' ? -14 : 14)
+        ctx.strokeStyle = WIRE
+        ctx.beginPath()
+        ctx.moveTo(p.x, p.y)
+        ctx.lineTo(cx, p.y)
+        ctx.stroke()
+        ctx.fillStyle = '#fff'
+        ctx.beginPath()
+        ctx.arc(cx, p.y, 6, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.stroke()
+        ctx.fillStyle = WIRE
+        ctx.beginPath()
+        ctx.arc(cx, p.y, 2.5, 0, Math.PI * 2)
+        ctx.fill()
+      }
+    }
+    const d = this.drag
+    if (d?.kind === 'link') {
+      const a = S(this.specPorts(d.spec)[d.side])
+      let end = S({ x: d.x, y: d.y })
+      let endSide: 'l' | 'r' | 't' | 'b' | null = null
+      ctx.strokeStyle = WIRE
+      if (d.target && ed.nodes.has(d.target)) {
+        const tw = ed.world(d.target)
+        const e = this.wireEnd(tw, this.specPorts(d.spec)[d.side].x, this.specPorts(d.spec)[d.side].y)
+        end = S(e)
+        endSide = e.side
+        const f = this.toScreen(tw)
+        ctx.lineWidth = 2
+        ctx.strokeRect(Math.round(f.x) + 0.5, Math.round(f.y) + 0.5, Math.round(f.w), Math.round(f.h))
+        ctx.lineWidth = 1.5
+      }
+      this.wire(a.x, a.y, end.x, end.y, d.side, endSide)
+      ctx.fillStyle = WIRE
+      ctx.beginPath()
+      ctx.arc(end.x, end.y, 4, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    ctx.restore()
   }
 
   /** a measuring line in screen space with end ticks and the value in a pill */
@@ -622,7 +754,8 @@ export class CanvasController {
     else if (e) {
       const p = this.local(e)
       const h = this.handleAt(p.sx, p.sy)
-      if (h) c = CURSORS[h]
+      if (this.drag?.kind === 'link' || this.specPortAt(p.sx, p.sy)) c = 'crosshair'
+      else if (h) c = CURSORS[h]
       else if (this.drag?.kind === 'rotate' || this.rotateZoneAt(p.sx, p.sy)) c = ROTATE_CURSOR
     }
     this.canvas.style.cursor = c
@@ -697,6 +830,12 @@ export class CanvasController {
       return
     }
 
+    // a port of the selected Spec card: pull a wire to a frame
+    const port = this.specPortAt(p.sx, p.sy)
+    if (port) {
+      this.drag = { kind: 'link', spec: port.spec, side: port.side, x: p.x, y: p.y, target: null }
+      return
+    }
     // move tool
     const handle = this.handleAt(p.sx, p.sy)
     if (handle) {
@@ -928,6 +1067,16 @@ export class CanvasController {
         ed.emit('doc')
         break
       }
+      case 'link': {
+        d.x = p.x
+        d.y = p.y
+        // the frame under the cursor (the outermost one: specs are about whole screens)
+        let hit = ed.frameAt(p.x, p.y)
+        while (hit && ed.nodes.get(hit)!.parentId && ed.nodes.get(ed.nodes.get(hit)!.parentId!)?.type === 'FRAME') hit = ed.nodes.get(hit)!.parentId
+        d.target = hit && ed.nodes.get(hit)?.type === 'FRAME' ? hit : null
+        this.invalidate()
+        break
+      }
       case 'rotate': {
         // degrees turned since the drag started (screen clockwise = negative in Figma's convention)
         let delta = (-(Math.atan2(p.y - d.cy, p.x - d.cx) - d.a0) * 180) / Math.PI
@@ -1118,7 +1267,7 @@ export class CanvasController {
       case 'slice':
         return ed.addNode({ type: 'SLICE', name: 'Slice', ...box })
       case 'spec':
-        return ed.addNode({ type: 'SPEC', name: 'Spec', ...box, spec: { title: 'New task', body: 'Describe what should be designed…', status: 'TODO' } })
+        return ed.addNode({ type: 'SPEC', name: 'Spec', ...box, spec: { title: '', body: '', status: 'TODO' } })
       case 'code':
         return ed.addNode({ type: 'CODE', name: 'Code', ...box, code: { ...DEFAULT_CODE } })
       default:
@@ -1232,6 +1381,15 @@ export class CanvasController {
       const p = this.local(e)
       const hit = this.pickAt(p.x, p.y, e.ctrlKey || e.metaKey)
       if (hit) ed.setSelection([hit])
+    } else if (d.kind === 'link') {
+      // dropping the wire on a frame links it; dropping it on an already linked frame removes the link
+      const spec = ed.nodes.get(d.spec)
+      if (spec?.spec && d.target) {
+        const cur = (spec.spec.targets ?? []).filter((t) => ed.nodes.has(t))
+        const targets = cur.includes(d.target) ? cur.filter((t) => t !== d.target) : [...cur, d.target]
+        ed.act(() => ed.updateNode(spec.id, { spec: { ...spec.spec!, targets: targets.length ? targets : undefined } }))
+      }
+      this.invalidate()
     } else if (d.kind === 'resize' || d.kind === 'rotate') ed.commit()
     else if (d.kind === 'create') {
       if (!d.id) {

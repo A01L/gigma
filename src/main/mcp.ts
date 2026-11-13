@@ -98,6 +98,8 @@ function buildServer(run: RunCommand): McpServer {
         '(fills incl. images, strokes with alignment, corner radius, opacity, effects, masks, clip content, full typography); ' +
         'align_nodes / reorder_nodes / duplicate_nodes / group_nodes / ungroup_nodes mirror the inspector and layer actions. ' +
         'The user may leave tasks as Spec cards (list_specs) and notes as annotations (list_annotations): check them, do the work, then update_spec / resolve_annotation. ' +
+        'A Spec card can be wired to one or several frames: such a frame lists its "specs" in get_document / get_node, and a spec lists its "linkedFrames". ' +
+        'Before changing a frame that has an unfinished spec, read that spec and follow it; when handed a spec, do the work in its linked frames. ' +
         'For complex layouts you can use create_code (HTML + CSS rendered as a design block) instead of placing every element by coordinates.'
     }
   )
@@ -415,7 +417,7 @@ function buildServer(run: RunCommand): McpServer {
   })
   tool(
     'list_specs',
-    'List Spec cards — tasks the user left on the canvas for AI. Read them, do the work (design with the other tools), then call update_spec with status DONE and a short result.',
+    'List Spec cards — tasks the user left on the canvas for AI. Each card has linkedFrames: the frames the user wired the task to, so do the work inside those frames (no linked frames = the task is about the page in general). Read them, do the work (design with the other tools), then call update_spec with status DONE and a short result.',
     { status: z.enum(['TODO', 'IN_PROGRESS', 'DONE']).optional(), allPages: z.boolean().default(true) }
   )
   tool('update_spec', 'Update a Spec card (status, result notes, title, description).', {
@@ -423,11 +425,22 @@ function buildServer(run: RunCommand): McpServer {
     status: z.enum(['TODO', 'IN_PROGRESS', 'DONE']).optional(),
     result: z.string().optional().describe('What you did, shown on the card for the user'),
     title: z.string().optional(),
-    body: z.string().optional()
+    body: z.string().optional(),
+    frameIds: z.array(z.string()).optional().describe('Replace the frames this spec is wired to ([] removes every link)')
   })
-  tool('create_spec', 'Create a Spec card (task note) on the canvas.', {
+  tool(
+    'link_spec',
+    'Wire a Spec card to frames (drawn as wires on the canvas), the same as dragging the port of the card onto a frame. A wired frame reports its specs in get_document / get_node, and results of create_* / update_node inside it carry a reminder.',
+    {
+      specId: z.string(),
+      frameIds: z.array(z.string()).min(1),
+      mode: z.enum(['add', 'remove', 'set']).default('add')
+    }
+  )
+  tool('create_spec', 'Create a Spec card (task note) on the canvas, optionally wired to the frames it is about.', {
     title: z.string(),
     body: z.string().default(''),
+    frameIds: z.array(z.string()).optional().describe('Frames the task is about'),
     x: z.number().default(0),
     y: z.number().default(0),
     width: z.number().positive().default(320),

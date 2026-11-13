@@ -31,6 +31,8 @@ export interface SpecData {
   status: 'TODO' | 'IN_PROGRESS' | 'DONE'
   /** what the AI (or a person) did, filled when completing */
   result?: string
+  /** ids of the frames this spec is wired to: the task is about them (drawn as wires on the canvas) */
+  targets?: string[]
 }
 
 export interface CodeData {

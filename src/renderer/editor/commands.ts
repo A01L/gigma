@@ -13,6 +13,32 @@ import { codeBitmapAsync } from './code-render'
 
 type Args = Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
 
+/**
+ * Spec cards wired to a layer or to one of the frames it sits in. `open` leaves out finished tasks.
+ * This is how the AI learns, while working inside a frame, that the user left a task for it there.
+ */
+function specsFor(n: GNode, open = false): { id: string; title: string; status: string; body: string }[] {
+  const chain = new Set<string>([n.id, ...ed.ancestors(n.id).map((a) => a.id)])
+  const out: { id: string; title: string; status: string; body: string }[] = []
+  for (const s of ed.nodes.values()) {
+    if (s.type !== 'SPEC' || !s.spec?.targets?.some((t) => chain.has(t))) continue
+    if (open && s.spec.status === 'DONE') continue
+    out.push({ id: s.id, title: s.spec.title, status: s.spec.status, body: s.spec.body })
+  }
+  return out
+}
+/** the frames a Spec card is wired to (deleted ones are skipped) */
+const framesOf = (s: GNode) =>
+  (s.spec?.targets ?? []).flatMap((id) => {
+    const f = ed.nodes.get(id)
+    return f ? [{ id: f.id, name: f.name, pageId: f.pageId, width: Math.round(f.width), height: Math.round(f.height) }] : []
+  })
+function setTargets(specId: string, frameIds: string[]): void {
+  const s = requireNode(specId)
+  for (const id of frameIds) if (requireNode(id).type !== 'FRAME') throw new Error(`"${id}" is not a frame: a spec can only be linked to frames`)
+  ed.act(() => ed.updateNode(s.id, { spec: { ...(s.spec ?? { title: '', body: '', status: 'TODO' }), targets: frameIds.length ? [...new Set(frameIds)] : undefined } }))
+}
+
 function summarize(n: GNode, depth: number): Record<string, unknown> {
   const out: Record<string, unknown> = {
     id: n.id,
@@ -27,6 +53,15 @@ function summarize(n: GNode, depth: number): Record<string, unknown> {
   const solid = n.fills.find((f) => f.type === 'SOLID')
   if (solid && solid.type === 'SOLID') out.fill = '#' + [solid.color.r, solid.color.g, solid.color.b].map((v) => Math.round(v * 255).toString(16).padStart(2, '0')).join('')
   if (!n.visible) out.visible = false
+  if (n.type === 'FRAME') {
+    const specs = specsFor(n).filter((s) => ed.nodes.get(s.id)!.spec!.targets!.includes(n.id))
+    if (specs.length) out.specs = specs.map((s) => ({ id: s.id, title: s.title, status: s.status }))
+  }
+  if (n.type === 'SPEC') {
+    out.spec = { title: n.spec?.title, status: n.spec?.status }
+    const frames = framesOf(n)
+    if (frames.length) out.linkedFrames = frames.map((f) => ({ id: f.id, name: f.name }))
+  }
   const kids = ed.children(n.id, n.pageId)
   if (kids.length) {
     if (depth > 1) out.children = kids.map((c) => summarize(ed.nodes.get(c)!, depth - 1))
@@ -119,7 +154,16 @@ export function alignNodes(ids: string[], how: string): void {
 }
 
 function created(n: GNode) {
-  return { id: n.id, type: n.type, name: n.name, x: n.x, y: n.y, width: n.width, height: n.height, parentId: n.parentId }
+  const out: Record<string, unknown> = { id: n.id, type: n.type, name: n.name, x: n.x, y: n.y, width: n.width, height: n.height, parentId: n.parentId }
+  // working inside a frame that has an unfinished spec: say so, the task describes what is wanted here
+  if (n.type !== 'SPEC') {
+    const specs = specsFor(n, true)
+    if (specs.length) {
+      out.specs = specs.map((s) => ({ id: s.id, title: s.title, status: s.status }))
+      out.note = 'The user left a spec (task) for this frame. Read it with list_specs and follow it; when done call update_spec with status DONE.'
+    }
+  }
+  return out
 }
 
 const mainOnly = () => {
@@ -156,7 +200,20 @@ const handlers: Record<CommandName, (a: Args) => unknown | Promise<unknown>> = {
     ed.setSelection(a.ids)
     return { selected: ed.selection }
   },
-  get_node: (a) => requireNode(a.id),
+  get_node: (a) => {
+    const n = requireNode(a.id)
+    if (n.type === 'SPEC') return { ...n, linkedFrames: framesOf(n) }
+    const specs = specsFor(n)
+    return specs.length ? { ...n, specs } : n
+  },
+  link_spec: (a) => {
+    const s = requireNode(a.specId)
+    if (s.type !== 'SPEC') throw new Error('specId is not a Spec card')
+    const cur = (s.spec?.targets ?? []).filter((id) => ed.nodes.has(id))
+    const ids: string[] = a.frameIds
+    setTargets(s.id, a.mode === 'set' ? ids : a.mode === 'remove' ? cur.filter((id) => !ids.includes(id)) : [...cur, ...ids])
+    return { id: s.id, title: s.spec?.title, linkedFrames: framesOf(ed.nodes.get(s.id)!) }
+  },
   find_nodes: (a) => {
     const q = (a.name ?? '').toLowerCase()
     const res: unknown[] = []
@@ -448,6 +505,9 @@ const handlers: Record<CommandName, (a: Args) => unknown | Promise<unknown>> = {
         page: ed.pages.get(n.pageId)?.name,
         parentId: n.parentId,
         ...n.spec,
+        targets: undefined,
+        // the frames the task is about: do the work there
+        linkedFrames: framesOf(n),
         x: n.x,
         y: n.y,
         width: n.width,
@@ -467,23 +527,26 @@ const handlers: Record<CommandName, (a: Args) => unknown | Promise<unknown>> = {
         }
       })
     )
-    return { id: n.id, ...ed.nodes.get(n.id)!.spec }
+    if (Array.isArray(a.frameIds)) setTargets(n.id, a.frameIds)
+    const now = ed.nodes.get(n.id)!
+    return { id: n.id, ...now.spec, targets: undefined, linkedFrames: framesOf(now) }
   },
-  create_spec: (a) =>
-    created(
-      ed.act(() =>
-        ed.addNode({
-          type: 'SPEC',
-          name: a.title.slice(0, 40) || 'Spec',
-          parentId: checkParent(a.parentId),
-          x: a.x,
-          y: a.y,
-          width: a.width ?? 320,
-          height: a.height ?? 220,
-          spec: { title: a.title, body: a.body ?? '', status: 'TODO' }
-        })
-      )
-    ),
+  create_spec: (a) => {
+    const n = ed.act(() =>
+      ed.addNode({
+        type: 'SPEC',
+        name: a.title.slice(0, 40) || 'Spec',
+        parentId: checkParent(a.parentId),
+        x: a.x,
+        y: a.y,
+        width: a.width ?? 320,
+        height: a.height ?? 220,
+        spec: { title: a.title, body: a.body ?? '', status: 'TODO' }
+      })
+    )
+    if (Array.isArray(a.frameIds) && a.frameIds.length) setTargets(n.id, a.frameIds)
+    return { ...created(ed.nodes.get(n.id)!), linkedFrames: framesOf(ed.nodes.get(n.id)!) }
+  },
   create_code: async (a) => {
     const n = ed.act(() =>
       ed.addNode({

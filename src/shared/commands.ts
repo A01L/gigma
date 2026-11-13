@@ -36,6 +36,7 @@ export type CommandName =
   | 'create_annotation'
   | 'resolve_annotation'
   | 'ungroup_nodes'
+  | 'link_spec'
   | 'add_variant'
   | 'set_variant'
   | 'list_styles'
