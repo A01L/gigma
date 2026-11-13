@@ -79,26 +79,22 @@
         </div>
       </div>
 
-      <!-- the real window of Gigma: Home on the left, the task board on the right, a line of light between them -->
+      <!-- the real window of Gigma, its Home screen. Only the upper 70% is shown: the rest goes below the edge of this block -->
       <div class="relative mx-auto mt-[64px] max-w-[1264px] px-4 sm:mt-[88px] sm:px-6">
-        <div class="app-window reveal" id="hero-box" style="--d: 0.2s">
-          <div class="fit overflow-hidden rounded-[6px] sm:rounded-[12px]" data-w="1440" data-h="860">
-            <div class="fit-inner">
-              <img src="assets/img/app-home.jpg" width="1440" height="860" alt="Gigma home screen: recent projects, starred ones and the counter of Spec tasks" class="absolute left-0 top-0 block h-[860px] w-[1440px] max-w-none" />
-              <div class="absolute left-[720px] top-[40px] h-[820px] w-[720px] overflow-hidden">
-                <img src="assets/img/app-tasks.jpg" width="720" height="820" alt="Gigma task board: Spec tasks in progress, in the queue and done, with the assistant working on each" class="block h-[820px] w-[720px] max-w-none" />
+        <div class="app-crop relative" style="aspect-ratio: 1440 / 602">
+          <div class="app-window reveal absolute inset-x-0 top-0" id="hero-box" style="--d: 0.2s">
+            <div class="fit overflow-hidden rounded-[6px] sm:rounded-[12px]" data-w="1440" data-h="860">
+              <div class="fit-inner">
+                <img src="assets/img/app-home.jpg" width="1440" height="860" alt="Gigma home screen: recent projects, starred ones and the counter of Spec tasks" class="absolute left-0 top-0 block h-[860px] w-[1440px] max-w-none" />
               </div>
             </div>
           </div>
-          <div class="seam" aria-hidden="true">
-            <span class="seam-line"></span>
-            <canvas id="stream"></canvas>
-          </div>
+          <!-- the lower part sinks into the dark, and the closing lines stand on it -->
+          <div class="app-shade"></div>
         </div>
       </div>
-
-      <div class="relative mx-auto max-w-[1216px] px-6 pb-[110px] pt-[72px] text-center">
-        <p class="text-[15px] text-white/70">Everything you need to design with AI:</p>
+      <div class="relative z-10 mx-auto max-w-[1216px] px-6 pb-10 pt-6 text-center sm:-mt-[112px] sm:pb-[56px] sm:pt-0">
+        <p class="text-[15px] text-white/75">Everything you need to design with AI:</p>
         <p class="mt-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[16px] font-semibold">Vector editing<span class="text-white/40">·</span>Auto layout<span class="text-white/40">·</span>Components<span class="text-white/40">·</span>Spec nodes<span class="text-white/40">·</span>Guidelines<span class="text-white/40">·</span>MCP server</p>
       </div>
     </section>

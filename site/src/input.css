@@ -133,72 +133,33 @@ body {
 }
 /* the window of the app on the first screen */
 .app-window {
-  position: relative;
   border-radius: 12px;
   box-shadow:
     0 0 0 1px rgba(255, 255, 255, 0.16),
     0 50px 140px -30px rgba(70, 90, 255, 0.55),
     0 0 90px -10px rgba(130, 100, 255, 0.28);
 }
-/* the line of light that splits it in two; it never reaches past the edges of the window */
-.seam {
+/* only the top 70% of the window is shown: whatever is lower is cut off (the glow at the sides is kept) */
+.app-crop {
+  clip-path: inset(-300px -300px 0 -300px);
+}
+/* the lower part of what is shown sinks into the colour of the page */
+.app-shade {
   position: absolute;
-  left: 50%;
-  top: -2px;
-  bottom: -2px;
-  width: 72px;
-  translate: -50% 0;
+  left: -60px;
+  right: -60px;
+  bottom: -1px;
+  height: 52%;
+  background: linear-gradient(to bottom, rgba(9, 10, 12, 0), rgba(9, 10, 12, 0.6) 52%, rgba(9, 10, 12, 0.93) 84%, #090a0c);
+  /* no hard edges at the sides, where it lies over the glow of the window */
+  -webkit-mask: linear-gradient(90deg, transparent, #000 60px, #000 calc(100% - 60px), transparent);
+  mask: linear-gradient(90deg, transparent, #000 60px, #000 calc(100% - 60px), transparent);
   pointer-events: none;
-  z-index: 4;
-}
-.seam-line {
-  position: absolute;
-  left: 50%;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  translate: -50% 0;
-  overflow: hidden;
-  background: linear-gradient(to bottom, transparent, #cfe0ff 6%, #f4f8ff 50%, #cfe0ff 94%, transparent);
-  box-shadow:
-    0 0 6px 1px rgba(156, 200, 255, 0.9),
-    0 0 20px 3px rgba(90, 130, 255, 0.6),
-    0 0 46px 8px rgba(120, 90, 255, 0.25);
-}
-/* a slow wave of brighter light runs down the line */
-.seam-line::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 34%;
-  background: linear-gradient(to bottom, transparent, #fff, transparent);
-  animation: seam 7s ease-in-out infinite;
-}
-@keyframes seam {
-  from {
-    top: -34%;
-  }
-  to {
-    top: 100%;
-  }
-}
-/* the sparks that drift along it (drawn by app.js) */
-.seam canvas {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
 }
 @media (max-width: 640px) {
-  .seam {
-    width: 36px;
-  }
-  .seam-line {
-    width: 1.5px;
-    box-shadow:
-      0 0 4px 0 #9cc8ff,
-      0 0 12px 2px rgba(90, 130, 255, 0.6);
+  .app-shade {
+    height: 45%;
+    background: linear-gradient(to bottom, rgba(9, 10, 12, 0), #090a0c 92%);
   }
 }
 
