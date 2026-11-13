@@ -58,7 +58,7 @@ Its main feature is a **built-in MCP server**. An AI assistant (Claude Desktop, 
 - The name over a frame turns with the frame; a double click on it renames the frame in place
 - Effects: shadows, inner shadows, layer and background blur, 16 blend modes
 - Linked colour and text **styles**
-- Distances on Alt, smart guides, equal spacing
+- Distances on Alt, smart guides, equal spacing as in Figma: the gaps between the layers around are a pattern, a dragged layer snaps where its own gap repeats one of them, and every gap of that size is marked with its value
 - Project tabs, trash, light and dark theme, English and Russian interface
 - The layers panel and the inspector can be widened by dragging their edge
 

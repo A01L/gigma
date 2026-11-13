@@ -523,7 +523,7 @@ export class CanvasController {
     // equal spacing while dragging
     for (const g of this.gaps) {
       const a = g.axis === 'x' ? this.toScreen({ x: g.from, y: g.at, w: g.to - g.from, h: 0 }) : this.toScreen({ x: g.at, y: g.from, w: 0, h: g.to - g.from })
-      this.measureLine(a.x, a.y, a.x + a.w, a.y + a.h, round2(g.to - g.from), PINK)
+      this.measureLine(a.x, a.y, a.x + a.w, a.y + a.h, Math.round(g.to - g.from), RED)
     }
 
     // Alt: distances from the selection to the hovered layer (or to the parent frame)
@@ -2130,52 +2130,82 @@ export class CanvasController {
           if (Math.abs(dd) < tol && (!bestY || Math.abs(dd) < Math.abs(bestY.d))) bestY = { d: dd, pos: ty, r }
         }
     }
-    // equal spacing: between two neighbours, or continuing the gap of the two layers next to it
+    // Equal spacing, as in Figma: the layers around form a pattern of gaps (between every two neighbours in a row or a
+    // column, anywhere among the siblings, not only beside the dragged layer). The dragged layer snaps where its own gap
+    // to a neighbour repeats one of them, or where it sits exactly between two neighbours; every gap of that size lights up.
     const parent = ed.nodes.get(moving[0])?.parentId ?? null
     const sibs = ed
       .children(parent)
-      .filter((id) => !skip.has(id) && ed.nodes.get(id)!.visible)
-      .slice(0, 300)
+      .filter((id) => {
+        const n = ed.nodes.get(id)!
+        return !skip.has(id) && n.visible && n.type !== 'ANNOTATION' && n.type !== 'SLICE' && n.type !== 'GUIDE'
+      })
       .map((id) => ed.world(id))
-    const spacing = (axis: 'x' | 'y'): { d: number; marks: { from: number; to: number; at: number }[] } | null => {
+      .filter((r) => rectsIntersect(r, view))
+      .slice(0, 200)
+    type Mark = { from: number; to: number; at: number }
+    const spacing = (axis: 'x' | 'y'): { d: number; marks: Mark[] } | null => {
       const P = axis === 'x' ? 'x' : 'y'
       const S = axis === 'x' ? 'w' : 'h'
       const CP = axis === 'x' ? 'y' : 'x'
       const CS = axis === 'x' ? 'h' : 'w'
-      // only layers that share the row (or the column) with the dragged box
-      const row = sibs.filter((r) => r[CP] < box[CP] + box[CS] && r[CP] + r[CS] > box[CP])
-      const before = row.filter((r) => r[P] + r[S] <= box[P] + tol).sort((a, b) => b[P] + b[S] - (a[P] + a[S]))
-      const after = row.filter((r) => r[P] >= box[P] + box[S] - tol).sort((a, b) => a[P] - b[P])
-      const at = (a: Rect) => Math.max(a[CP], box[CP]) + (Math.min(a[CP] + a[CS], box[CP] + box[CS]) - Math.max(a[CP], box[CP])) / 2
-      const L = before[0]
-      const R = after[0]
-      const tries: { pos: number; marks: { from: number; to: number; at: number }[] }[] = []
+      const shares = (p: Rect, q: Rect) => p[CP] < q[CP] + q[CS] && p[CP] + p[CS] > q[CP]
+      // where a gap between two layers is drawn: the middle of what they share across the axis
+      const mid = (p: Rect, q: Rect) => (Math.max(p[CP], q[CP]) + Math.min(p[CP] + p[CS], q[CP] + q[CS])) / 2
+      // the gaps of the pattern: each layer and the nearest layer after it in its row (or column)
+      const pattern: (Mark & { size: number })[] = []
+      for (const p of sibs) {
+        let near: Rect | null = null
+        for (const q of sibs) {
+          if (q === p || !shares(p, q) || q[P] < p[P] + p[S] - 0.01) continue
+          if (!near || q[P] < near[P]) near = q
+        }
+        if (!near) continue
+        const size = near[P] - (p[P] + p[S])
+        if (size > 0.5) pattern.push({ from: p[P] + p[S], to: near[P], at: mid(p, near), size })
+      }
+      // the neighbours of the dragged layer in its row (or column)
+      const row = sibs.filter((r) => shares(r, box))
+      const L = row.filter((r) => r[P] + r[S] <= box[P] + tol).sort((p, q) => q[P] + q[S] - (p[P] + p[S]))[0]
+      const R = row.filter((r) => r[P] >= box[P] + box[S] - tol).sort((p, q) => p[P] - q[P])[0]
+      // the gap between L and R belongs to the pattern only while nothing stands in it
+      const own = (m: Mark) => !(L && R && Math.abs(m.from - (L[P] + L[S])) < 0.01 && Math.abs(m.to - R[P]) < 0.01)
+      const sizes = [...new Set(pattern.filter(own).map((m) => Math.round(m.size * 100) / 100))]
+      const tries: { pos: number; size: number }[] = []
       if (L && R) {
         const g = (R[P] - (L[P] + L[S]) - box[S]) / 2
-        if (g > 0) tries.push({ pos: L[P] + L[S] + g, marks: [{ from: L[P] + L[S], to: L[P] + L[S] + g, at: at(L) }, { from: R[P] - g, to: R[P], at: at(R) }] })
+        if (g > 0) tries.push({ pos: L[P] + L[S] + g, size: g })
       }
-      if (L && before[1]) {
-        const g = L[P] - (before[1][P] + before[1][S])
-        if (g > 0) tries.push({ pos: L[P] + L[S] + g, marks: [{ from: before[1][P] + before[1][S], to: L[P], at: at(L) }, { from: L[P] + L[S], to: L[P] + L[S] + g, at: at(L) }] })
+      for (const g of sizes) {
+        if (L) tries.push({ pos: L[P] + L[S] + g, size: g })
+        if (R) tries.push({ pos: R[P] - g - box[S], size: g })
       }
-      if (R && after[1]) {
-        const g = after[1][P] - (R[P] + R[S])
-        if (g > 0) tries.push({ pos: R[P] - g - box[S], marks: [{ from: R[P] + R[S], to: after[1][P], at: at(R) }, { from: R[P] - g, to: R[P], at: at(R) }] })
-      }
-      let best: { d: number; marks: { from: number; to: number; at: number }[] } | null = null
+      let best: { d: number; size: number } | null = null
       for (const t of tries) {
         const d = t.pos - box[P]
-        if (Math.abs(d) < tol && (!best || Math.abs(d) < Math.abs(best.d))) best = { d, marks: t.marks }
+        if (Math.abs(d) < tol && (!best || Math.abs(d) < Math.abs(best.d))) best = { d, size: t.size }
       }
-      return best
+      if (!best) return null
+      const at = box[P] + best.d
+      const marks: Mark[] = []
+      // the gaps of the dragged layer itself that have this size
+      if (L && Math.abs(at - (L[P] + L[S]) - best.size) < 0.01) marks.push({ from: L[P] + L[S], to: at, at: mid(L, box) })
+      if (R && Math.abs(R[P] - (at + box[S]) - best.size) < 0.01) marks.push({ from: at + box[S], to: R[P], at: mid(R, box) })
+      // and every gap of the pattern that is as large
+      for (const m of pattern) if (own(m) && Math.abs(m.size - best.size) < 0.01 && marks.length < 14) marks.push({ from: m.from, to: m.to, at: m.at })
+      return { d: best.d, marks }
     }
     const gx = spacing('x')
     const gy = spacing('y')
-    // an edge / centre match wins; spacing is used on an axis that has none
-    const dx = bestX?.d ?? gx?.d ?? 0
-    const dy = bestY?.d ?? gy?.d ?? 0
-    if (!bestX && gx) for (const m of gx.marks) this.gaps.push({ axis: 'x', ...m })
-    if (!bestY && gy) for (const m of gy.marks) this.gaps.push({ axis: 'y', ...m })
+    // on each axis the closer of the two wins: an edge or a centre that lines up, or a gap that repeats
+    const useGx = !!gx && (!bestX || Math.abs(gx.d) <= Math.abs(bestX.d) + 0.01)
+    const useGy = !!gy && (!bestY || Math.abs(gy.d) <= Math.abs(bestY.d) + 0.01)
+    if (useGx && bestX && Math.abs(gx!.d - bestX.d) > 0.01) bestX = null
+    if (useGy && bestY && Math.abs(gy!.d - bestY.d) > 0.01) bestY = null
+    const dx = useGx ? gx!.d : (bestX?.d ?? 0)
+    const dy = useGy ? gy!.d : (bestY?.d ?? 0)
+    if (useGx) for (const m of gx!.marks) this.gaps.push({ axis: 'x', ...m })
+    if (useGy) for (const m of gy!.marks) this.gaps.push({ axis: 'y', ...m })
     const nb = { ...box, x: box.x + dx, y: box.y + dy }
     if (bestX) {
       const u = unionRects([nb, bestX.r])!
