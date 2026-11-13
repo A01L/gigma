@@ -307,6 +307,26 @@ body {
   color: #fff;
   isolation: isolate;
 }
+/* a tile that shows a close-up of the app: the picture fills it, from the top */
+.tile.shot {
+  background: #404040;
+}
+.tile.shot img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 0;
+  transition: scale 0.9s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.tile.shot:hover img {
+  scale: 1.03;
+}
+.tile.shot .tile-shade {
+  height: 38%;
+  background: linear-gradient(to top, #0b0b0e 42%, rgba(11, 11, 14, 0.7) 66%, transparent);
+}
 .tile-cap {
   position: absolute;
   left: 1.25rem;

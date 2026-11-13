@@ -105,94 +105,31 @@
       <div class="pointer-events-none absolute -right-40 top-[20%] h-[700px] w-[700px] rounded-full bg-[radial-gradient(closest-side,rgba(255,190,150,0.25),transparent)]"></div>
       <div class="relative mx-auto max-w-[1216px] px-6">
         <h2 class="h-display reveal text-[52px] sm:text-[80px] lg:text-[88px]">Built for flow</h2>
-        <p class="reveal lead mt-5 max-w-[680px] text-[#3f3f46]" style="--d: 0.08s">Gigma is a vector design editor with auto layout, components, styles and a command palette, tuned to stay fast on your own machine, with no account and no network.</p>
+        <p class="reveal lead mt-5 max-w-[680px] text-[#3f3f46]" style="--d: 0.08s">Gigma is a vector design editor with auto layout, components, styles and a command palette. On top of that it has things made for working with an AI: tasks as nodes, shared guidelines and live cursors.</p>
 
+        <!-- every tile is a close-up of the app itself -->
         <div class="mt-12 grid gap-4 md:grid-cols-[356fr_640fr]">
-          <!-- actions palette -->
-          <article class="tile reveal h-[420px]">
-            <div class="absolute left-1/2 top-[-60px] h-[300px] w-[360px] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(255,120,40,0.85),rgba(255,90,20,0.25)_55%,transparent)] blur-[10px]"></div>
-            <div class="dots-warm mask-radial absolute left-1/2 top-[-40px] h-[260px] w-[420px] -translate-x-1/2 opacity-70"></div>
-            <div class="absolute inset-x-6 bottom-[100px] grid grid-cols-10 gap-[5px] opacity-40">
-              <script>document.currentScript.parentNode.innerHTML = 'QWERTYUIOPASDFGHJKL;ZXCVBNM,./'.split('').map((k) => `<span class="flex h-[26px] items-center justify-center rounded-[5px] border border-white/15 bg-white/[0.04] text-[9px] text-white/60">${k}</span>`).join('')</script>
-            </div>
-            <div class="absolute left-1/2 top-[86px] w-[250px] -translate-x-1/2 overflow-hidden rounded-[10px] border border-white/15 bg-[#1b1b1f]/95 shadow-[0_20px_50px_rgba(0,0,0,0.6)]">
-              <div class="flex items-center gap-2 border-b border-white/10 px-3 py-2.5 text-[12px] text-white/90"><svg class="h-3.5 w-3.5 text-white/60"><use href="#i-search" /></svg>auto<span class="caret h-[13px] text-white"></span></div>
-              <div class="px-3 pb-1 pt-2 text-[9px] uppercase tracking-wider text-white/40">Commands</div>
-              <div class="mx-1.5 flex items-center rounded-[6px] bg-white/10 px-2 py-[7px] text-[11.5px]">Add auto layout<span class="ml-auto rounded bg-white/10 px-1.5 text-[9px] text-white/70">Shift A</span></div>
-              <div class="mx-1.5 flex items-center px-2 py-[7px] text-[11.5px] text-white/70">Remove auto layout<span class="ml-auto rounded bg-white/5 px-1.5 text-[9px] text-white/40">Alt Shift A</span></div>
-              <div class="mx-1.5 mb-1.5 flex items-center px-2 py-[7px] text-[11.5px] text-white/70">Layers: Autoplay banner<span class="ml-auto rounded bg-white/5 px-1.5 text-[9px] text-white/40">Frame</span></div>
-            </div>
+          <article class="tile shot reveal h-[420px]">
+            <img src="assets/img/flow-guideline.jpg" width="712" height="840" loading="lazy" alt="An open guideline card in Gigma: colours, fonts and rules of the Sunrise brand" />
             <div class="tile-shade"></div>
-            <p class="tile-cap"><b>Actions palette.</b> Ctrl+K reaches every tool, command and layer by name.</p>
+            <p class="tile-cap"><b>Guidelines.</b> The colours, fonts, logos and rules of a brand, shared by every project.</p>
           </article>
-
-          <!-- components -->
-          <article class="tile reveal h-[420px]" style="--d: 0.06s">
-            <div class="absolute left-1/2 top-[-120px] h-[340px] w-[520px] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(120,140,255,0.55),rgba(150,110,255,0.2)_55%,transparent)] blur-[16px]"></div>
-            <div class="absolute left-[3%] top-[100px] h-[190px] w-[200px] rounded-[12px] border border-white/10 bg-white/[0.04] p-3 opacity-60 blur-[0.5px]">
-              <div class="flex items-center text-[11px] text-white/60">Card / Product<span class="ml-auto flex h-4 w-4 items-center justify-center rounded-full border border-white/30 text-[8px]">✓</span></div>
-              <div class="mt-3 h-[70px] rounded-[8px] bg-white/[0.06]"></div>
-              <div class="mt-2 h-2 w-[70%] rounded bg-white/10"></div><div class="mt-1.5 h-2 w-[45%] rounded bg-white/10"></div>
-            </div>
-            <div class="absolute right-[3%] top-[100px] h-[190px] w-[200px] rounded-[12px] border border-white/10 bg-white/[0.04] p-3 opacity-60">
-              <div class="text-[13px] font-semibold text-white/40">Instance</div>
-              <div class="mt-3 h-[70px] rounded-[8px] border border-white/10 bg-black/30 p-2 text-[10px] text-white/30">Its own text and colours stay when the main component changes</div>
-              
-            </div>
-            <div class="absolute left-1/2 top-[48px] w-[236px] -translate-x-1/2 rounded-[14px] bg-gradient-to-b from-[#f5f3ff] to-[#e9e9f2] p-2.5 text-[#18181b] shadow-[0_30px_60px_rgba(0,0,0,0.55)]">
-              <div class="flex items-center px-1.5 pb-2 pt-1 text-[15px] font-semibold">Button<span class="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-white text-[13px] text-[#8b5cf6] shadow">+</span></div>
-              <div class="rounded-[9px] bg-white p-2.5 shadow-sm">
-                <div class="flex items-center"><span class="rounded bg-[#ede9fe] px-1.5 py-[1px] text-[9px] font-semibold text-[#7c3aed]">State=Default</span><span class="ml-auto text-[13px] text-[#a1a1aa]">···</span></div>
-                <div class="mt-2 flex h-[30px] items-center justify-center rounded-[8px] bg-[#f97316] text-[11px] font-semibold text-white">Order breakfast</div>
-                
-              </div>
-              <div class="mt-2 rounded-[9px] bg-white p-2.5 shadow-sm">
-                <div class="flex items-center"><span class="rounded bg-[#fee2e2] px-1.5 py-[1px] text-[9px] font-semibold text-[#dc2626]">State=Hover</span><span class="ml-auto text-[13px] text-[#a1a1aa]">···</span></div>
-                <div class="mt-2 flex h-[30px] items-center justify-center rounded-[8px] bg-[#ea580c] text-[11px] font-semibold text-white">Order breakfast</div>
-              </div>
-              <div class="mt-2 h-[30px] rounded-[9px] bg-white/80 p-2"><span class="rounded bg-[#dcfce7] px-1.5 py-[1px] text-[9px] font-semibold text-[#16a34a]">State=Pressed</span></div>
-            </div>
+          <article class="tile shot reveal h-[420px]" style="--d: 0.06s">
+            <img src="assets/img/flow-nodes.jpg" width="1280" height="840" loading="lazy" alt="A Spec card in Gigma wired to a UI kit and a guideline on the left and to the Landing frame on the right, with a card of rules below" />
             <div class="tile-shade"></div>
-            <p class="tile-cap"><b>Components and variants.</b> Change the main component, and every instance follows. Overrides stay.</p>
+            <p class="tile-cap"><b>Spec nodes.</b> A task takes materials in on the left and points at the frames to work in on the right. A card of rules sits next to it.</p>
           </article>
-
         </div>
         <div class="mt-4 grid gap-4 md:grid-cols-[640fr_356fr]">
-          <article class="tile reveal h-[420px]">
-            <div class="absolute left-[30%] top-[-80px] h-[320px] w-[520px] rounded-full bg-[radial-gradient(closest-side,rgba(150,120,255,0.35),transparent)] blur-[10px]"></div>
-            <div class="absolute left-5 top-[34px] flex flex-col gap-[33px] text-[10px] text-white/30"><span>0</span><span>16</span><span>32</span><span>48</span><span>64</span><span>80</span><span>96</span></div>
-            <div class="absolute left-[70px] right-0 top-[40px] flex flex-col gap-[42px]"><span class="h-px bg-white/5"></span><span class="h-px bg-white/5"></span><span class="h-px bg-white/5"></span><span class="h-px bg-white/5"></span><span class="h-px bg-white/5"></span><span class="h-px bg-white/5"></span></div>
-            <div class="absolute left-[19%] top-[36px] w-[236px] rounded-[14px] bg-gradient-to-b from-white to-[#ececf3] p-3 text-[#18181b] shadow-[0_30px_60px_rgba(0,0,0,0.6)]">
-              <div class="flex items-center text-[14px] font-semibold">Card / Product<span class="ml-auto text-[13px] text-[#a1a1aa]">···</span></div>
-              <div class="mt-2 flex items-center gap-2 text-[10px] text-[#52525b]"><span class="rounded bg-[#f4f4f5] px-1.5 py-[2px]">↓ Vertical</span><span class="rounded bg-[#f4f4f5] px-1.5 py-[2px]">Gap 16</span><span class="rounded bg-[#f4f4f5] px-1.5 py-[2px]">Pad 24</span></div>
-              <div class="relative mt-3 rounded-[10px] border border-dashed border-[#c4b5fd] bg-[#faf5ff] p-[10px]">
-                <div class="h-[54px] rounded-[7px] bg-gradient-to-br from-orange-300 to-amber-100"></div>
-                <div class="my-[5px] h-[6px] rounded-sm bg-[#f9a8d4]/70"></div>
-                <div class="h-[9px] w-[70%] rounded bg-[#27272a]"></div>
-                <div class="my-[5px] h-[6px] rounded-sm bg-[#f9a8d4]/70"></div>
-                <div class="h-[7px] w-[88%] rounded bg-[#d4d4d8]"></div>
-                <div class="my-[5px] h-[6px] rounded-sm bg-[#f9a8d4]/70"></div>
-                <div class="flex h-[24px] items-center justify-center rounded-[7px] bg-[#f97316] text-[10px] font-semibold text-white">Add to box</div>
-              </div>
-              <div class="mt-2.5 flex items-center justify-between text-[10px] text-[#71717a]"><span>W Fill</span><span>H Hug</span><span class="rounded-full bg-[#ede9fe] px-2 text-[#7c3aed]">Wrap</span></div>
-            </div>
-            <div class="absolute left-[60%] top-[118px] hidden sm:block w-[150px] rounded-[10px] border-l-[3px] border-[#f472b6] bg-white/[0.07] p-3 text-[12px] text-white/90 shadow-[0_10px_30px_rgba(0,0,0,0.4)]">Hug contents<div class="mt-1 text-[10px] text-white/50">Height follows the children</div><div class="mt-2 flex -space-x-1.5"><span class="h-4 w-4 rounded-full bg-orange-300 ring-2 ring-[#1a1a1f]"></span><span class="h-4 w-4 rounded-full bg-violet-300 ring-2 ring-[#1a1a1f]"></span><span class="h-4 w-4 rounded-full bg-sky-300 ring-2 ring-[#1a1a1f]"></span></div></div>
-            <div class="absolute left-[67%] top-[24px] hidden sm:block w-[110px] rounded-[10px] border-l-[3px] border-[#6366f1]/60 bg-white/[0.04] p-2 text-[11px] text-white/45">Fill container<div class="text-[9px] text-white/30">W 100%</div></div>
-            <div class="absolute left-[58%] top-[262px] hidden sm:block w-[130px] rounded-[10px] border border-white/10 bg-white/[0.03] p-2 text-[11px] text-white/45">Constraints<div class="text-[9px] text-white/30">Left and right</div></div>
-            <div class="absolute right-[3%] top-[150px] hidden sm:block h-[80px] w-[60px] rounded-[10px] border-l-[3px] border-[#6366f1]/50 bg-white/[0.04] p-2 text-[10px] text-white/30">Absolute</div>
+          <article class="tile shot reveal h-[420px]">
+            <img src="assets/img/flow-palette.jpg" width="1420" height="972" loading="lazy" alt="The actions palette of Gigma open over a page: a tool, two commands and two layers found by the letters fr" />
             <div class="tile-shade"></div>
-            <p class="tile-cap"><b>Auto layout.</b> Frames arrange, hug and fill by themselves, with wrapping and absolute children.</p>
+            <p class="tile-cap"><b>Actions palette.</b> Ctrl+K finds every tool, command and layer by name.</p>
           </article>
-          <article class="tile reveal h-[420px]" style="--d: 0.06s">
-            <div class="vortex b left-1/2 top-[44%] h-[420px] w-[420px] -translate-x-1/2 -translate-y-1/2"></div>
-            <div class="vortex left-1/2 top-[44%] h-[300px] w-[300px] -translate-x-1/2 -translate-y-1/2"></div>
-            <div class="dots mask-radial absolute left-1/2 top-[44%] h-[360px] w-[360px] -translate-x-1/2 -translate-y-1/2 opacity-25"></div>
-            <div class="absolute left-1/2 top-[44%] flex h-[96px] w-[96px] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-[#0b0b0e] shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_10px_40px_rgba(0,0,0,0.8)]">
-              <div class="cur cur-ai relative" style="position: relative; left: -2px; top: -2px; width: 34px; height: 34px"><span class="halo"></span><svg width="34" height="34"><use href="#a-ai" /></svg></div>
-              <span class="absolute right-[16px] top-[16px] flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#ff4d6d] px-1 text-[10px] font-bold">2</span>
-            </div>
+          <article class="tile shot reveal h-[420px]" style="--d: 0.06s">
+            <img src="assets/img/flow-cursors.jpg" width="712" height="840" loading="lazy" alt="The cursors of Claude and Codex on a page in Gigma while a button is selected by the person" />
             <div class="tile-shade"></div>
-            <p class="tile-cap"><b>AI cursors.</b> See which assistant is working and on which layer, live.</p>
+            <p class="tile-cap"><b>AI cursors.</b> See which assistant is working, and on which layer.</p>
           </article>
         </div>
       </div>
@@ -334,11 +271,12 @@
                 <svg class="absolute bottom-0 left-0" width="226" height="120" viewBox="0 0 226 120"><path d="M30 100C60 30 120 20 150 60S200 90 210 40" stroke="#fff" stroke-width="2" fill="none" /><path d="M120 22L180 98" stroke="#0d99ff" /><rect x="116" y="18" width="8" height="8" fill="#fff" stroke="#0d99ff" transform="rotate(45 120 22)" /><rect x="176" y="94" width="8" height="8" fill="#fff" stroke="#0d99ff" transform="rotate(45 180 98)" /><circle cx="150" cy="60" r="5" fill="#0d99ff" stroke="#fff" stroke-width="1.5" /><circle cx="30" cy="100" r="4" fill="#fff" stroke="#0d99ff" stroke-width="1.5" /><circle cx="210" cy="40" r="4" fill="#fff" stroke="#0d99ff" stroke-width="1.5" /></svg>
               </div>
               <div class="mos left-[454px] top-0 h-[208px] w-[220px]">
-                <p class="mos-cap"><b>Constraints.</b> Children follow when the frame resizes.</p>
-                <div class="absolute left-[24px] top-[86px] w-[150px] rounded-[10px] border border-white/15 bg-white/[0.06] p-3">
-                  <div class="relative mx-auto h-[62px] w-[62px] rounded-[8px] border border-white/20"><span class="absolute left-1/2 top-0 h-[16px] w-[2px] -translate-x-1/2 bg-[#0d99ff]"></span><span class="absolute left-0 top-1/2 h-[2px] w-[16px] -translate-y-1/2 bg-[#0d99ff]"></span><span class="absolute right-0 top-1/2 h-[2px] w-[16px] -translate-y-1/2 bg-[#0d99ff]"></span><span class="absolute bottom-0 left-1/2 h-[16px] w-[2px] -translate-x-1/2 bg-white/25"></span><span class="absolute left-1/2 top-1/2 h-[18px] w-[18px] -translate-x-1/2 -translate-y-1/2 rounded-[3px] border border-white/40"></span></div>
+                <p class="mos-cap"><b>Export.</b> PNG, SVG and PDF, at the scale you need.</p>
+                <div class="absolute left-[18px] right-[18px] top-[104px] rounded-[10px] border border-white/15 bg-white/[0.06] p-2.5">
+                  <div class="text-[10px] font-semibold text-white/80">Export</div>
+                  <div class="mt-2 grid grid-cols-4 gap-1.5 text-[10px] text-white/85"><span class="rounded-[5px] bg-white/10 py-1 text-center">2x</span><span class="rounded-[5px] bg-[#0d99ff] py-1 text-center font-semibold text-white">PNG</span><span class="rounded-[5px] bg-white/10 py-1 text-center">SVG</span><span class="rounded-[5px] bg-white/10 py-1 text-center">PDF</span></div>
                 </div>
-                <div class="absolute left-[60px] top-[166px] flex -space-x-1"><span class="rounded-full bg-white/10 px-2 py-[2px] text-[9px] text-white/60">Left &amp; right</span></div>
+                <div class="absolute bottom-[14px] left-[18px] text-[9.5px] text-white/40">Frames go to one PDF, page by page</div>
               </div>
               <div class="absolute left-[688px] top-[2px] flex h-[204px] w-[204px] flex-col items-center justify-center rounded-full text-white shadow-[0_0_0_5px_#f4f4f5,0_30px_60px_-20px_rgba(0,0,0,0.5)]" style="background: radial-gradient(circle at 50% 35%, #5c5c66, #1a1a1f 62%)">
                 <div class="dots mask-radial absolute inset-0 rounded-full opacity-25"></div>
@@ -347,10 +285,12 @@
                 <span class="absolute bottom-[14px] right-[10px] flex h-[46px] w-[46px] items-center justify-center rounded-full bg-[#0b0b0e] text-[26px] shadow-[0_0_0_4px_#f4f4f5]">↓</span>
               </div>
               <div class="mos left-[906px] top-0 h-[208px] w-[220px]">
-                <p class="mos-cap"><b>Annotations.</b> Leave notes on the canvas, for people and for AI.</p>
-                <div class="absolute right-[24px] top-[78px] rounded-[8px] bg-white/85 px-2 py-1.5 text-[10px] text-[#18181b]">Warmer header,<br />please</div>
-                <div class="absolute left-[22px] top-[124px] rounded-[8px] bg-black/50 px-2 py-1.5 text-[10px] text-white/85 ring-1 ring-white/10"><b class="text-[#14ae5c]">✓</b> Resolved by Claude</div>
-                <div class="absolute bottom-[14px] left-[14px] right-[14px] rounded-full bg-white/10 px-3 py-[7px] text-[10px] text-white/40">Type a note…</div>
+                <p class="mos-cap"><b>Storage.</b> See what takes space on the disk and clear it.</p>
+                <div class="absolute bottom-[16px] left-[18px] right-[18px] space-y-[9px] text-[9.5px] text-white/70">
+                  <div><div class="flex justify-between"><span>Projects</span><span class="text-white/45">48.2 MB</span></div><div class="mt-1 h-[5px] rounded bg-white/10"><i class="block h-full w-[72%] rounded bg-[#0d99ff]"></i></div></div>
+                  <div><div class="flex justify-between"><span>Trash</span><span class="text-white/45">12.6 MB</span></div><div class="mt-1 h-[5px] rounded bg-white/10"><i class="block h-full w-[19%] rounded bg-[#f5a524]"></i></div></div>
+                  <div><div class="flex justify-between"><span>Plugins and guidelines</span><span class="text-white/45">1.4 MB</span></div><div class="mt-1 h-[5px] rounded bg-white/10"><i class="block h-full w-[4%] rounded bg-[#a98bff]"></i></div></div>
+                </div>
               </div>
               <!-- row 2 -->
               <div class="mos left-0 top-[222px] h-[196px] w-[226px]">
@@ -359,21 +299,20 @@
                 <div class="absolute -bottom-16 -right-10 h-[160px] w-[160px] rounded-full bg-[radial-gradient(closest-side,rgba(70,120,255,0.7),transparent)]"></div>
               </div>
               <div class="mos left-[240px] top-[222px] h-[196px] w-[434px]" style="background: radial-gradient(70% 90% at 50% 120%, #6c4bff, #261b5c 45%, #0c0c10 75%)">
-                <p class="mos-cap"><b>Many AIs at once.</b> Each client gets its own cursor and name on the canvas.</p>
-                <div class="absolute left-1/2 top-[118px] flex h-[70px] w-[70px] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-[#0b0b10] shadow-[0_0_0_1.5px_rgba(150,180,255,0.6),0_0_40px_rgba(110,120,255,0.9)]"><svg width="30" height="30"><use href="#a-ai" /></svg></div>
-                <span class="absolute left-[78px] top-[100px] flex h-[38px] w-[38px] items-center justify-center rounded-full bg-[#202028] text-[12px] font-semibold ring-1 ring-white/15">Cx</span>
-                <span class="absolute left-[128px] top-[140px] h-[44px] w-[44px] rounded-full bg-gradient-to-br from-orange-300 to-rose-400 ring-2 ring-white/20"></span>
-                <span class="absolute left-[268px] top-[132px] h-[46px] w-[46px] rounded-full bg-gradient-to-br from-sky-300 to-indigo-500 ring-2 ring-white/20"></span>
-                <span class="absolute left-[328px] top-[94px] flex h-[34px] w-[34px] items-center justify-center rounded-full bg-[#202028] text-[11px] ring-1 ring-white/15">Cu</span>
-                <span class="absolute left-[178px] top-[76px] h-[22px] w-[22px] rounded-full bg-white/20 blur-[1px]"></span>
-                <span class="absolute left-[38px] top-[150px] h-[26px] w-[26px] rounded-full bg-white/10 blur-[2px]"></span>
-                <span class="absolute right-[24px] top-[150px] h-[28px] w-[28px] rounded-full bg-white/10 blur-[2px]"></span>
+                <p class="mos-cap"><b>Works with Figma.</b> Copy layers there and back with a plain copy and paste. A token brings the images along.</p>
+                <div class="absolute bottom-[22px] left-0 right-0 flex items-center justify-center gap-3 text-[12px] font-semibold">
+                  <span class="rounded-[10px] bg-white/10 px-4 py-2.5 ring-1 ring-white/15">Figma</span>
+                  <span class="flex flex-col items-center gap-1 text-[9px] font-medium text-white/70"><span class="rounded bg-black/40 px-1.5 py-[1px] ring-1 ring-white/15">Ctrl C</span><span class="text-[13px] leading-none text-white/60">⇄</span><span class="rounded bg-black/40 px-1.5 py-[1px] ring-1 ring-white/15">Ctrl V</span></span>
+                  <span class="flex items-center gap-2 rounded-[10px] bg-[#0b0b10] px-4 py-2.5 shadow-[0_0_0_1.5px_rgba(150,180,255,0.6),0_0_30px_rgba(110,120,255,0.8)]"><img src="assets/img/icon.png" alt="" class="h-4 w-4 rounded" />Gigma</span>
+                </div>
               </div>
               <div class="mos left-[688px] top-[222px] h-[196px] w-[352px]">
-                <p class="mos-cap"><b>Pages and projects.</b> Tabs, trash and one .gigma file per project.</p>
-                <div class="absolute left-[30px] top-[96px] h-[110px] w-[90px] rounded-[10px] border border-white/10 bg-white/[0.04] p-2 text-[10px] text-white/35">Checkout</div>
-                <div class="absolute right-[24px] top-[96px] h-[110px] w-[80px] rounded-[10px] border border-white/10 bg-white/[0.04] p-2 text-[10px] text-white/35">Trash</div>
-                <div class="absolute left-[100px] top-[74px] w-[150px] rounded-[10px] bg-white p-2.5 text-[#18181b] shadow-[0_20px_40px_rgba(0,0,0,0.5)]"><div class="flex items-center text-[12px] font-semibold">Sunrise Bakery<span class="ml-auto text-[#f43f5e]">★</span></div><div class="mt-1 text-[9px] text-[#71717a]">Edited 2 minutes ago</div><div class="mt-2 space-y-1 text-[9.5px] text-[#3f3f46]"><div>▤ Landing</div><div>▤ Cart</div><div>▤ Checkout</div></div></div>
+                <p class="mos-cap"><b>Share as a file.</b> Projects, guidelines and plugins travel in formats of their own.</p>
+                <div class="absolute bottom-[18px] left-0 right-0 flex items-end justify-center gap-7 text-[10.5px] font-medium text-white/75">
+                  <span class="flex flex-col items-center gap-1.5"><span class="rounded-[14px] bg-white/[0.09] p-2 ring-1 ring-white/10"><img src="assets/img/file-gigma.svg" alt="" class="h-[46px] w-auto" /></span>.gigma</span>
+                  <span class="flex flex-col items-center gap-1.5"><span class="rounded-[14px] bg-white/[0.09] p-2 ring-1 ring-white/10"><img src="assets/img/file-gguide.svg" alt="" class="h-[46px] w-auto" /></span>.gguide</span>
+                  <span class="flex flex-col items-center gap-1.5"><span class="rounded-[14px] bg-white/[0.09] p-2 ring-1 ring-white/10"><img src="assets/img/file-gplug.svg" alt="" class="h-[46px] w-auto" /></span>.gplug</span>
+                </div>
               </div>
             </div>
           </div>
@@ -410,11 +349,11 @@
         </div>
 
         <div class="doc max-w-[600px]">
-          <h2 class="h-display reveal text-[52px] sm:text-[76px] lg:text-[84px]">Plugins in one<br />HTML file<span class="relative ml-1 inline-block h-[0.82em] w-[3px] translate-y-[0.08em] bg-[#4f7cff] align-baseline"><span class="absolute bottom-[-10px] left-1/2 h-[9px] w-[9px] -translate-x-1/2 rounded-full bg-[#4f7cff]"></span><span class="absolute bottom-[-46px] left-[10px] flex h-[34px] items-center rounded-full bg-[#0c8ce9] px-3 font-sans text-[13px] font-semibold tracking-normal text-white shadow-[0_6px_16px_rgba(12,140,233,0.45)] ring-[3px] ring-white">Claude</span></span></h2>
+          <h2 class="h-display reveal text-[52px] sm:text-[76px] lg:text-[84px]">Plugins in one<br />HTML file<span class="relative ml-1 inline-block h-[0.82em] w-[3px] translate-y-[0.08em] bg-[#4f7cff] align-baseline"><span class="absolute bottom-[-10px] left-1/2 h-[9px] w-[9px] -translate-x-1/2 rounded-full bg-[#4f7cff]"></span><span class="absolute bottom-[-46px] left-[10px] flex h-[34px] items-center rounded-full bg-[#0c8ce9] px-3 font-sans text-[13px] font-semibold tracking-normal text-white shadow-[0_6px_16px_rgba(12,140,233,0.45)] ring-[3px] ring-white">index.html</span></span></h2>
           <p class="reveal mt-16">A plugin is a web page with a manifest, zipped into a .gplug file. It runs in a sandbox and talks to Gigma through the very commands the AI uses.</p>
           <div class="reveal relative mt-20">
             <div class="absolute left-[170px] top-[-52px] z-10 hidden items-center sm:flex gap-1 rounded-[8px] bg-[#2a2a30] p-1 text-[13px] text-white shadow-[0_10px_30px_rgba(0,0,0,0.3)]">
-              <span class="rounded-[6px] bg-[#4f7cff] px-2 py-1 font-semibold">+ Link</span><span class="px-2 font-bold">B</span><span class="px-2 italic">I</span><span class="px-2 underline">U</span><span class="px-2 line-through">S</span><span class="px-2 text-white/60">@</span>
+              <span class="rounded-[6px] bg-[#4f7cff] px-2 py-1 font-semibold">Ctrl K</span><span class="px-2 text-white/55">Plugins</span><span class="rounded-[6px] bg-white/10 px-2 py-1">Phone frame</span><span class="px-2">Neon</span><span class="px-2">Web2Graph</span>
             </div>
             <p><span class="absolute left-[-6px] top-[2px] h-[1.2em] w-[2px] bg-[#1c1c20]"><span class="absolute left-[-3px] top-[-6px] h-[8px] w-[8px] rounded-full bg-[#1c1c20]"></span></span><span class="hl"><b>Plugins in Gigma</b> can put a screen into a phone frame, give layers a neon glow or bring a snapshot of a whole website onto the canvas.</span><span class="relative ml-1 inline-block h-[1.2em] w-[2px] align-[-0.2em] bg-[#1c1c20]"><span class="absolute bottom-[-6px] left-[-3px] h-[8px] w-[8px] rounded-full bg-[#1c1c20]"></span></span></p>
           </div>
@@ -425,7 +364,7 @@
               <div class="relative text-center"><div class="flex items-center justify-center gap-2 text-[14px] font-semibold text-white/80"><img src="assets/img/icon.png" alt="" class="h-5 w-5 rounded" />gigma</div><div class="mt-2 font-display text-[88px] font-bold leading-none tracking-[-0.05em]" style="background: linear-gradient(120deg, #fff, #c7d2fe 40%, #f0abfc 70%, #fff); -webkit-background-clip: text; background-clip: text; color: transparent">Plugins</div><div class="mt-2 text-[15px] text-white/75">The tools you need, written by you</div></div>
             </div>
           </div>
-          <p class="reveal relative mt-10">With <s class="text-[#a1a1aa]">a few</s> one HTML file, a plugin can read the selection, create layers, use fetch with permission and keep its own settings, <s class="text-[#a1a1aa]">same tools</s> <span class="text-[#f05a3c]">the very commands</span><span class="relative inline-block h-[1.1em] w-[2px] align-[-0.18em] bg-[#f05a3c]"><span class="absolute bottom-[-7px] left-[-3px] h-[8px] w-[8px] rounded-full bg-[#f05a3c]"></span><span class="absolute left-[-3px] top-[calc(100%+8px)] rounded-[3px_10px_10px_10px] bg-[#a98bff] px-2 py-[1px] text-[12px] font-semibold leading-[1.5] text-white shadow-[0_4px_12px_rgba(169,139,255,0.5)]">Codex</span></span> an assistant calls over MCP.</p>
+          <p class="reveal relative mt-10">With one HTML file, a plugin can read the selection, create layers, use fetch with permission and keep its own settings, through <span class="text-[#f05a3c]">the very commands</span> an assistant calls over MCP.</p>
           <div class="reveal code relative mt-10 rounded-[10px] bg-[#1c1c20] px-5 py-6 text-[#e9e9ee] sm:px-7 sm:py-7">
             <span class="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-[7px] bg-white/10 text-[13px]">⧉</span>
 <pre class="overflow-x-auto whitespace-pre"><span class="c">&lt;!-- index.html of a plugin --&gt;</span>
@@ -443,8 +382,8 @@
 <span class="k">&lt;/script&gt;</span></pre>
           </div>
           <p class="reveal mt-10">Write it by hand or give the plugin docs to an AI along with your idea. Drop the .gplug file into Settings, Plugins, and it is ready to run from Ctrl+K.</p>
-          <div class="reveal mt-10 flex items-center gap-1.5 text-[1.32rem] text-[#a1a1aa]"><span class="h-[1.3em] w-[2px] bg-[#1c1c20]"></span>Tap here to continue…</div>
-          <div class="reveal mt-3 flex w-max items-center gap-1 rounded-full bg-white p-1 shadow-[0_8px_24px_rgba(0,0,0,0.12)]"><span class="flex h-9 w-9 items-center justify-center rounded-full bg-[#1c1c20] text-white">+</span><span class="flex h-9 w-9 items-center justify-center rounded-full text-[#52525b]">◎</span><span class="flex h-9 w-9 items-center justify-center rounded-full text-[#52525b]">✎</span></div>
+          <div class="reveal mt-10 flex items-center gap-1.5 text-[1.32rem] text-[#a1a1aa]"><span class="h-[1.3em] w-[2px] bg-[#1c1c20]"></span>Start from the template in Settings, Plugins.</div>
+          <div class="reveal mt-4 flex w-max items-center gap-1 rounded-full bg-white p-1 shadow-[0_8px_24px_rgba(0,0,0,0.12)]"><a href="https://github.com/A01L/gigma/blob/main/docs/PLUGINS.md" class="flex h-9 items-center rounded-full bg-[#1c1c20] px-4 text-[13px] font-semibold text-white">Read the plugin docs</a><a href="https://github.com/A01L/gigma" class="flex h-9 items-center rounded-full px-4 text-[13px] font-semibold text-[#52525b]">Source on GitHub</a></div>
         </div>
       </div>
     </section>
