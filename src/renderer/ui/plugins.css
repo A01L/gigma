@@ -120,6 +120,155 @@
   color: #e0a030;
 }
 
+/* settings → storage (after Windows "System → Storage") */
+.stor-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 15px;
+  margin-bottom: 8px;
+}
+.stor-total .muted {
+  font-size: 12px;
+}
+.stor-bar {
+  display: flex;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--panel-2);
+  overflow: hidden;
+}
+.stor-bar.big {
+  height: 10px;
+  border-radius: 5px;
+  margin-bottom: 14px;
+}
+.stor-bar.thin {
+  height: 4px;
+}
+.stor-bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.stor-bar i.trash,
+.stor-bar.trash i {
+  background: #f59e0b;
+}
+.stor-bar i.plugins,
+.stor-bar.plugins i {
+  background: #9b5cff;
+}
+.stor-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.stor-cat {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  overflow: hidden;
+}
+.stor-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 12px 14px;
+  text-align: left;
+}
+.stor-row:hover {
+  background: var(--hover);
+}
+.stor-icon {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  flex: none;
+  color: var(--text-2);
+}
+.stor-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.stor-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+.stor-line b,
+.stor-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stor-line .muted {
+  flex: none;
+}
+.stor-hint {
+  font-size: 11px;
+}
+.stor-chev {
+  flex: none;
+  color: var(--text-3);
+}
+.stor-items {
+  border-top: 1px solid var(--border);
+  padding: 6px 14px 10px;
+  max-height: 340px;
+  overflow-y: auto;
+}
+.stor-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+}
+.stor-item + .stor-item {
+  border-top: 1px solid var(--border);
+}
+.stor-thumb {
+  width: 44px;
+  height: 32px;
+  flex: none;
+  border-radius: 6px;
+  background: var(--panel-2);
+  overflow: hidden;
+}
+.stor-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.stor-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 6px 0 8px;
+}
+.stor-empty {
+  padding: 10px 0;
+}
+.pill.small {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 8px;
+  flex: none;
+}
+.pill.danger {
+  color: var(--danger, #f24822);
+}
+
 /* settings → about */
 .about-head {
   display: flex;

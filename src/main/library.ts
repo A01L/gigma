@@ -37,7 +37,11 @@ function readProjects(dir: string): ProjectInfo[] {
       const doc = rows.find((r) => r.key === 'doc')
       const meta = doc ? JSON.parse(doc.value) : {}
       const st = statSync(path)
+      // the write-ahead log and its index belong to the project too
+      let size = st.size
+      for (const ext of ['-wal', '-shm']) if (existsSync(path + ext)) size += statSync(path + ext).size
       out.push({
+        size,
         path,
         name: meta.name ?? basename(f, '.gigma'),
         updatedAt: meta.updatedAt ?? st.mtimeMs,

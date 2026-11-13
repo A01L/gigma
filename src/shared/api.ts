@@ -8,6 +8,18 @@ export interface ProjectInfo {
   createdAt: number
   thumb: string | null
   trashedAt?: number
+  /** size of the project file on disk, bytes */
+  size?: number
+}
+
+/** what Gigma keeps on disk, for Settings → Storage (sizes in bytes) */
+export interface StorageStats {
+  projects: number
+  trash: number
+  plugins: { id: string; name: string; size: number }[]
+  /** the disk that holds the library */
+  diskFree: number
+  diskTotal: number
 }
 
 export type ThemePref = 'dark' | 'light' | 'system'
@@ -122,6 +134,7 @@ export interface GigmaApi {
     dir(): Promise<string>
     reveal(): Promise<void>
     listTrash(): Promise<ProjectInfo[]>
+    stats(): Promise<StorageStats>
     restore(path: string): Promise<string>
     deleteForever(path: string): Promise<void>
     emptyTrash(): Promise<void>

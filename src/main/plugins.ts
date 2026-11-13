@@ -134,6 +134,14 @@ export function removePlugin(id: string): void {
   rmSync(dataFile(id), { force: true })
 }
 
+/** disk space of every installed plugin (developer folders are not ours, they are not counted) */
+export function pluginSizes(): { id: string; name: string; size: number }[] {
+  const sizeOf = (d: string): number => readdirSync(d).reduce((s, n) => s + (statSync(join(d, n)).isDirectory() ? sizeOf(join(d, n)) : statSync(join(d, n)).size), 0)
+  return listPlugins()
+    .filter((p) => !p.devPath)
+    .map((p) => ({ id: p.id, name: p.name, size: sizeOf(join(pluginsDir(), p.id)) }))
+}
+
 /** Pack a plugin folder into a .plug.gigma archive. */
 export function packFolder(dir: string): Buffer {
   const entries: ZipEntry[] = []

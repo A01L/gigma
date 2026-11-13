@@ -90,6 +90,7 @@ function memoryBackend(): GigmaApi {
       dir: async () => '(browser memory)',
       reveal: async () => {},
       listTrash: async () => [],
+      stats: async () => ({ projects: 0, trash: 0, plugins: [], diskFree: 0, diskTotal: 0 }),
       restore: async (p: string) => p,
       deleteForever: async () => {},
       emptyTrash: async () => {},

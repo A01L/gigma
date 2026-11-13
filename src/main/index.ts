@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, protocol, clipboard, session, shell, WebContentsView, type WebContents } from 'electron'
 import { join, extname } from 'node:path'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, statfsSync, writeFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { GigmaFile } from './storage'
 import {
@@ -17,11 +17,11 @@ import {
 } from './library'
 import { getSettings, setSettings } from './settings'
 import { startMcpServer, type McpHandle } from './mcp'
-import { handlePluginRequest, installPackage, isPluginFile, registerPlugins } from './plugins'
+import { handlePluginRequest, installPackage, isPluginFile, pluginSizes, registerPlugins } from './plugins'
 import { renderPdf, type PdfPage } from './pdf'
 import type { CommandName, CommandResponse } from '../shared/commands'
 import type { DocChanges } from '../shared/types'
-import type { AppSettings, McpStatus, TabInfo, TabsState } from '../shared/api'
+import type { AppSettings, McpStatus, StorageStats, TabInfo, TabsState } from '../shared/api'
 
 const MCP_PORT = Number(process.env.GIGMA_MCP_PORT || 7331)
 export const TAB_BAR_H = 40
@@ -304,6 +304,19 @@ ipcMain.handle('trash:list', () => listTrash())
 ipcMain.handle('trash:restore', (_e, path: string) => restoreProject(path))
 ipcMain.handle('trash:delete', (_e, path: string) => deleteForever(path))
 ipcMain.handle('trash:empty', () => emptyTrash())
+ipcMain.handle('library:stats', (): StorageStats => {
+  const sum = (list: { size?: number }[]) => list.reduce((s, p) => s + (p.size ?? 0), 0)
+  let diskFree = 0
+  let diskTotal = 0
+  try {
+    const d = statfsSync(libraryDir())
+    diskFree = Number(d.bavail) * Number(d.bsize)
+    diskTotal = Number(d.blocks) * Number(d.bsize)
+  } catch {
+    /* unknown disk: the page simply hides that line */
+  }
+  return { projects: sum(listProjects()), trash: sum(listTrash()), plugins: pluginSizes(), diskFree, diskTotal }
+})
 ipcMain.handle('library:dir', () => libraryDir())
 ipcMain.handle('library:reveal', () => shell.openPath(libraryDir()))
 

@@ -6,6 +6,7 @@ import logoUrl from '../assets/logo.svg'
 import { greetingFor, setSettings, useSettings, useT } from './i18n'
 import { Select } from './Select'
 import { PluginsSection } from './PluginsSettings'
+import { StorageSection } from './StorageSettings'
 
 interface Props {
   onOpen: (p: string) => void
@@ -394,16 +395,7 @@ function SettingsView() {
 
       <PluginsSection />
 
-      <section>
-        <h2>{t('Storage')}</h2>
-        <div className="set-row">
-          <span>{t('Projects folder')}</span>
-          <code className="path">{dir}</code>
-          <button className="pill" onClick={() => backend.library.reveal()}>
-            {t('Open folder')}
-          </button>
-        </div>
-      </section>
+      <StorageSection />
 
       <section>
         <h2>{t('About')}</h2>

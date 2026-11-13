@@ -37,6 +37,7 @@ const api: GigmaApi = {
     dir: () => ipcRenderer.invoke('library:dir'),
     reveal: () => ipcRenderer.invoke('library:reveal'),
     listTrash: () => ipcRenderer.invoke('trash:list'),
+    stats: () => ipcRenderer.invoke('library:stats'),
     restore: (path) => ipcRenderer.invoke('trash:restore', path),
     deleteForever: (path) => ipcRenderer.invoke('trash:delete', path),
     emptyTrash: () => ipcRenderer.invoke('trash:empty')
