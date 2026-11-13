@@ -6,6 +6,7 @@ import { rgbaToCss } from '@shared/types'
 import { editor as ed } from './editor'
 import { guides, placeGuide, newGuide, saveGuide, setGuideOpen } from './guides'
 import { guideAccent } from './guide-render'
+import { VectorEdit } from './vector-edit'
 import { applyNodeTransform, drawScene, hasTransform, outlineShape, setImageLoadedCallback } from './render'
 import { rectsIntersect, round2, unionRects, type Rect } from './util'
 import { polygonPath, smoothPath, starPath } from './shapes'
@@ -98,6 +99,8 @@ export class CanvasController {
   private dropTarget: string | null = null
   private disposers: (() => void)[] = []
   /** Pen tool: points of the path being drawn (world coordinates) */
+  /** point editing of a vector (double click), as in Figma */
+  private vedit = new VectorEdit(() => this.invalidate())
   private pen: { pts: PenPoint[]; parent: string | null; hover: { x: number; y: number } | null } | null = null
   onEditText: (id: string) => void = () => {}
   onEditAnnotation: (id: string) => void = () => {}
@@ -123,6 +126,12 @@ export class CanvasController {
     on(canvas, 'dblclick', (e) => this.dbl(e))
     on(canvas, 'wheel', (e) => this.wheel(e), { passive: false })
     on(window, 'keydown', (e) => {
+      // editing the points of a vector: Enter / Escape leave, Delete removes points, arrows nudge them
+      if (this.vedit.active && !isTyping() && this.vedit.key(e)) {
+        e.preventDefault()
+        e.stopImmediatePropagation()
+        return
+      }
       // finish the pen path with Enter / Escape (Escape on the first point cancels)
       if (this.pen && (e.key === 'Enter' || e.key === 'Escape') && !isTyping()) {
         e.preventDefault()
@@ -386,7 +395,7 @@ export class CanvasController {
 
     // selection
     const sel = ed.selection.filter((id) => ed.nodes.has(id) && ed.nodes.get(id)!.pageId === ed.currentPageId)
-    if (sel.length && ed.editingTextId === null) {
+    if (sel.length && ed.editingTextId === null && !this.vedit.active) {
       const accent = sel.every((id) => accentOf(id) === PURPLE) ? PURPLE : BLUE
       ctx.strokeStyle = accent
       ctx.lineWidth = 1
@@ -429,6 +438,9 @@ export class CanvasController {
       ctx.fillText(text, px + tw / 2, py + 9)
       ctx.textAlign = 'left'
     }
+
+    // points, handles and the hatch of the vector being edited
+    this.vedit.draw(ctx)
 
     // snapping guides
     if (this.guides.length) {
@@ -832,6 +844,10 @@ export class CanvasController {
 
   private updateCursor(e?: PointerEvent): void {
     let c = ARROW_CURSOR
+    if (this.vedit.active && !this.spaceDown && ed.tool === 'move') {
+      this.canvas.style.cursor = this.vedit.cursor() ?? ARROW_CURSOR
+      return
+    }
     if (this.spaceDown || ed.tool === 'hand') c = this.drag?.kind === 'pan' ? 'grabbing' : 'grab'
     else if (ed.tool !== 'move' && ed.tool !== 'scale') c = ed.tool === 'text' ? 'text' : ed.tool === 'annotation' ? 'cell' : 'crosshair'
     else if (e) {
@@ -891,6 +907,9 @@ export class CanvasController {
       this.drag = { kind: 'pencil', pts: [[p.x, p.y]], parent: ed.frameAt(p.x, p.y) }
       return
     }
+    if (this.vedit.active && ed.tool === 'move' && e.button === 0 && this.vedit.down(p.x, p.y, e)) return
+    // another tool ends the point editing
+    if (this.vedit.active && ed.tool !== 'move') this.vedit.stop()
     if (ed.tool === 'guide') {
       let id = ed.pendingGuide
       const fresh = id === 'new' || !id || !guides.has(id)
@@ -1097,6 +1116,10 @@ export class CanvasController {
   private move(e: PointerEvent): void {
     const p = this.local(e)
     const d = this.drag
+    if (!d && this.vedit.active && ed.tool === 'move' && !this.spaceDown && this.vedit.move(p.x, p.y, e)) {
+      this.updateCursor(e)
+      return
+    }
     if (!d) {
       if (this.pen) {
         this.pen.hover = { x: p.x, y: p.y }
@@ -1465,6 +1488,11 @@ export class CanvasController {
   }
 
   private up(e: PointerEvent): void {
+    if (!this.drag && this.vedit.active) {
+      if (this.canvas.hasPointerCapture(e.pointerId)) this.canvas.releasePointerCapture(e.pointerId)
+      this.vedit.up()
+      return
+    }
     const d = this.drag
     this.drag = null
     this.guides = []
@@ -1529,9 +1557,18 @@ export class CanvasController {
 
   private dbl(e: MouseEvent): void {
     const p = this.local(e)
+    // inside the point editing a double click turns a corner into a curve, or leaves the mode
+    if (this.vedit.active) {
+      this.vedit.dbl(p.x, p.y)
+      return
+    }
     const deep = ed.hitTest(p.x, p.y, true)
     if (!deep) return
     const n = ed.nodes.get(deep)!
+    // a vector (or a plain shape) that is selected, or can be selected with one click, opens for point editing
+    if (ed.tool === 'move' && VectorEdit.editable(n) && !n.locked && (ed.selection[0] === n.id || ed.hitTest(p.x, p.y, false) === n.id)) {
+      if (this.vedit.start(n.id)) return
+    }
     // a guideline dot opens into its card
     if (n.type === 'GUIDE') {
       setGuideOpen(n.id, true)
