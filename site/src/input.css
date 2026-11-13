@@ -1011,6 +1011,10 @@ body {
   justify-self: center;
   margin: 4px 0;
 }
+.fit.flow .mo-0 {
+  order: 0;
+  min-height: 176px;
+}
 .fit.flow .mo-1 {
   order: 1;
 }
