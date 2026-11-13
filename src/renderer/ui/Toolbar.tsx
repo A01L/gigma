@@ -128,7 +128,7 @@ function GroupButton({ group }: { group: (typeof TOOL_GROUPS)[number] }) {
   )
 }
 
-export function Toolbar({ onActions }: { onActions: () => void }) {
+export function Toolbar({ onActions, onGuides }: { onActions: () => void; onGuides: () => void }) {
   useEditor('ui')
   const t = useT()
   return (
@@ -141,6 +141,10 @@ export function Toolbar({ onActions }: { onActions: () => void }) {
       </button>
       <button className="icon-btn tip" data-tip={t('Actions') + '  Ctrl+K'} onClick={onActions}>
         {Icons.actions}
+      </button>
+      <span className="tool-sep" />
+      <button className={'icon-btn tip' + (ed.tool === 'guide' ? ' active' : '')} data-tip={t('Guidelines') + '  Ctrl+Shift+U'} onClick={onGuides}>
+        {Icons.guide}
       </button>
     </div>
   )

@@ -14,6 +14,7 @@ import { ContextMenu } from './ContextMenu'
 import { useT } from './i18n'
 import { AnnotationEditor } from './AnnotationEditor'
 import { ActionsPalette } from './ActionsPalette'
+import { GuidesPalette } from './GuidesPalette'
 import { PluginHost } from './PluginHost'
 import { backend } from '../backend'
 import { imageFillOf, replaceImageFill } from '../editor/figma-images'
@@ -26,6 +27,7 @@ export function EditorView({ onHome }: { onHome: () => void }) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [annotationId, setAnnotationId] = useState<string | null>(null)
   const [actionsOpen, setActionsOpen] = useState(false)
+  const [guidesOpen, setGuidesOpen] = useState(false)
   const [ctx, setCtx] = useState<{ x: number; y: number } | null>(null)
   useEffect(() => {
     // the layers panel opens the same menu
@@ -49,6 +51,12 @@ export function EditorView({ onHome }: { onHome: () => void }) {
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyK' && !e.shiftKey && !e.altKey) {
         e.preventDefault()
         setActionsOpen(true)
+        return
+      }
+      // Ctrl+Shift+U: the guideline library
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.code === 'KeyU') {
+        e.preventDefault()
+        setGuidesOpen(true)
         return
       }
       handleKey(e)
@@ -151,10 +159,11 @@ export function EditorView({ onHome }: { onHome: () => void }) {
             {Icons.sidebarR}
           </button>
         )}
-        <Toolbar onActions={() => setActionsOpen(true)} />
+        <Toolbar onActions={() => setActionsOpen(true)} onGuides={() => setGuidesOpen(true)} />
         <ZoomChip />
         {annotationId && <AnnotationEditor id={annotationId} onClose={() => setAnnotationId(null)} />}
         {actionsOpen && <ActionsPalette onClose={() => setActionsOpen(false)} />}
+        {guidesOpen && <GuidesPalette onClose={() => setGuidesOpen(false)} />}
         <PluginHost />
         {ed.toast && (
           <div className="toast">

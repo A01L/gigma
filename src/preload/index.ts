@@ -24,6 +24,16 @@ const api: GigmaApi = {
     storageGet: (pluginId, key) => ipcRenderer.invoke('plugins:storageGet', pluginId, key),
     storageSet: (pluginId, key, value) => ipcRenderer.invoke('plugins:storageSet', pluginId, key, value)
   },
+  guides: {
+    list: () => ipcRenderer.invoke('guides:list'),
+    save: (data) => ipcRenderer.invoke('guides:save', data),
+    remove: (id) => ipcRenderer.invoke('guides:remove', id),
+    exportFile: (id) => ipcRenderer.invoke('guides:export', id),
+    importFile: () => ipcRenderer.invoke('guides:import'),
+    onChanged: (handler) => {
+      ipcRenderer.on('guides:changed', () => handler())
+    }
+  },
   platform: process.platform,
   tabId,
   library: {

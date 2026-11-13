@@ -4,6 +4,8 @@
 import type { GNode } from '@shared/types'
 import { rgbaToCss } from '@shared/types'
 import { editor as ed } from './editor'
+import { guides, placeGuide, newGuide, saveGuide, setGuideOpen } from './guides'
+import { guideAccent } from './guide-render'
 import { applyNodeTransform, drawScene, hasTransform, outlineShape, setImageLoadedCallback } from './render'
 import { rectsIntersect, round2, unionRects, type Rect } from './util'
 import { polygonPath, smoothPath, starPath } from './shapes'
@@ -31,6 +33,15 @@ const ROTATE_CURSOR =
 export const ARROW_PATH = 'M4.5 3.5 20 10.2 12.6 12.7 10.2 20Z'
 const ARROW_CURSOR =
   `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="${ARROW_PATH}" fill="#000" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg>`)}") 4 3, default`
+
+/** Spec cards and guidelines are wired to frames: what a node links to, or null for other layers */
+function linksOf(n: GNode | undefined): { targets: string[]; sources: string[] } | null {
+  if (n?.type === 'SPEC' && n.spec) return { targets: n.spec.targets ?? [], sources: n.spec.sources ?? [] }
+  if (n?.type === 'GUIDE' && n.guide) return { targets: n.guide.targets ?? [], sources: [] }
+  return null
+}
+/** ports a linking node has: a guideline only gives (right), a spec also takes materials (left) */
+const portSides = (n: GNode): readonly ('l' | 'r')[] => (n.type === 'GUIDE' ? ['r'] : ['l', 'r'])
 
 /** rotate a point around c by deg (Figma direction: positive = counter-clockwise on screen) */
 function turn(x: number, y: number, c: { x: number; y: number }, deg: number): { x: number; y: number } {
@@ -472,9 +483,9 @@ export class CanvasController {
   private specPortAt(sx: number, sy: number): { spec: string; side: 'l' | 'r' } | null {
     if (ed.selection.length !== 1 || ed.tool !== 'move') return null
     const n = ed.nodes.get(ed.selection[0])
-    if (n?.type !== 'SPEC') return null
+    if (!n || !linksOf(n)) return null
     const ports = this.specPorts(n.id)
-    for (const side of ['l', 'r'] as const) {
+    for (const side of portSides(n)) {
       const p = this.toScreen({ x: ports[side].x, y: ports[side].y, w: 0, h: 0 })
       if (Math.hypot(sx - (p.x + (side === 'l' ? -14 : 14)), sy - p.y) <= 10) return { spec: n.id, side }
     }
@@ -541,11 +552,14 @@ export class CanvasController {
     ctx.save()
     ctx.lineCap = 'round'
     for (const n of ed.nodes.values()) {
-      if (n.type !== 'SPEC' || n.pageId !== ed.currentPageId || !n.visible || !n.spec) continue
-      const rules = n.spec.kind === 'RULES'
-      const done = !rules && n.spec.status === 'DONE'
+      const links = linksOf(n)
+      if (!links || n.pageId !== ed.currentPageId || !n.visible) continue
+      // a guideline is a standing rule too; its wires carry its accent colour
+      const rules = n.type === 'GUIDE' || n.spec?.kind === 'RULES'
+      const done = !rules && n.spec?.status === 'DONE'
+      const own = n.type === 'GUIDE' ? guideAccent(guides.get(n.guide!.id)) : null
       const ports = this.specPorts(n.id)
-      for (const [side, ids] of [['r', n.spec.targets ?? []], ['l', n.spec.sources ?? []]] as const) {
+      for (const [side, ids] of [['r', links.targets], ['l', links.sources]] as const) {
         for (const tid of ids) {
           const t = ed.nodes.get(tid)
           if (!t || t.pageId !== n.pageId || !t.visible) continue
@@ -554,7 +568,7 @@ export class CanvasController {
           const endW = this.wireEnd(tw, ports[side].x, ports[side].y)
           const b = S(endW)
           const lit = this.wireLit(n.id, tid)
-          const color = side === 'l' ? WIRE_IN : done ? '#27ae60' : WIRE
+          const color = own ?? (side === 'l' ? WIRE_IN : done ? '#27ae60' : WIRE)
           ctx.globalAlpha = lit ? 1 : 0.28
           ctx.lineWidth = lit ? 2 : 1.5
           ctx.strokeStyle = color
@@ -583,8 +597,9 @@ export class CanvasController {
     ctx.lineWidth = 1.5
     ctx.lineCap = 'round'
     const sel = ed.selection.length === 1 ? ed.nodes.get(ed.selection[0]) : undefined
-    if (sel?.type === 'SPEC') {
-      for (const [color, ids] of [[WIRE, sel.spec?.targets ?? []], [WIRE_IN, sel.spec?.sources ?? []]] as const) {
+    const selLinks = linksOf(sel)
+    if (sel && selLinks) {
+      for (const [color, ids] of [[WIRE, selLinks.targets], [WIRE_IN, selLinks.sources]] as const) {
         ctx.strokeStyle = color
         for (const id of ids) {
           if (!ed.nodes.has(id) || ed.nodes.get(id)!.pageId !== sel.pageId) continue
@@ -594,9 +609,9 @@ export class CanvasController {
       }
     }
     // ports of the selected card: drag one to a frame (left = materials in, right = where to work)
-    if (sel?.type === 'SPEC' && ed.tool === 'move' && !(this.drag?.kind === 'move' && this.drag.moved)) {
+    if (sel && selLinks && ed.tool === 'move' && !(this.drag?.kind === 'move' && this.drag.moved)) {
       const ports = this.specPorts(sel.id)
-      for (const side of ['l', 'r'] as const) {
+      for (const side of portSides(sel)) {
         const color = side === 'l' ? WIRE_IN : WIRE
         const p = S(ports[side])
         const cx = p.x + (side === 'l' ? -14 : 14)
@@ -876,6 +891,20 @@ export class CanvasController {
       this.drag = { kind: 'pencil', pts: [[p.x, p.y]], parent: ed.frameAt(p.x, p.y) }
       return
     }
+    if (ed.tool === 'guide') {
+      let id = ed.pendingGuide
+      const fresh = id === 'new' || !id || !guides.has(id)
+      if (fresh) {
+        const g = newGuide()
+        saveGuide(g)
+        id = g.id
+      }
+      const n = placeGuide(id!, { x: p.x, y: p.y }, fresh)
+      ed.pendingGuide = null
+      ed.setTool('move')
+      ed.setSelection([n.id])
+      return
+    }
     const CREATE: Partial<Record<string, GNode['type']>> = {
       frame: 'FRAME',
       section: 'SECTION',
@@ -1148,6 +1177,9 @@ export class CanvasController {
         let hit = ed.frameAt(p.x, p.y)
         while (hit && ed.nodes.get(hit)!.parentId && ed.nodes.get(ed.nodes.get(hit)!.parentId!)?.type === 'FRAME') hit = ed.nodes.get(hit)!.parentId
         d.target = hit && !ed.isAncestor(hit, d.spec) ? hit : null
+        // the left port of a spec also takes a guideline: its dot is a material like any frame
+        const dot = d.side === 'l' ? ed.hitTest(p.x, p.y, true) : null
+        if (dot && dot !== d.spec && ed.nodes.get(dot)?.type === 'GUIDE' && ed.nodes.get(d.spec)?.type === 'SPEC') d.target = dot
         this.invalidate()
         break
       }
@@ -1459,7 +1491,11 @@ export class CanvasController {
       // dropping the wire on a frame links it; dropping it on an already linked frame removes the link.
       // The left port takes materials, the right one points at the frames to work in.
       const spec = ed.nodes.get(d.spec)
-      if (spec?.spec && d.target) {
+      if (spec?.guide && d.target) {
+        const cur = (spec.guide.targets ?? []).filter((t) => ed.nodes.has(t))
+        const next = cur.includes(d.target) ? cur.filter((t) => t !== d.target) : [...cur, d.target]
+        ed.act(() => ed.updateNode(spec.id, { guide: { ...spec.guide!, targets: next.length ? next : undefined } }))
+      } else if (spec?.spec && d.target) {
         const mine = d.side === 'l' ? 'sources' : 'targets'
         const other = d.side === 'l' ? 'targets' : 'sources'
         const cur = (spec.spec[mine] ?? []).filter((t) => ed.nodes.has(t))
@@ -1496,6 +1532,12 @@ export class CanvasController {
     const deep = ed.hitTest(p.x, p.y, true)
     if (!deep) return
     const n = ed.nodes.get(deep)!
+    // a guideline dot opens into its card
+    if (n.type === 'GUIDE') {
+      setGuideOpen(n.id, true)
+      ed.setSelection([n.id])
+      return
+    }
     const sel = ed.selection[0] ? ed.nodes.get(ed.selection[0]) : null
     if (n.type === 'TEXT' && (sel?.id === n.id || ed.isAncestor(sel?.id ?? '', n.id) || !sel)) {
       ed.setSelection([n.id])

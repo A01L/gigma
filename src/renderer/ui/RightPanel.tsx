@@ -18,6 +18,7 @@ import { t, useT } from './i18n'
 import { Select } from './Select'
 import { ColorPicker } from './ColorPicker'
 import { TypeSettings } from './TypeSettings'
+import { GuideInspector } from './GuideInspector'
 
 type Mixed = number | 'mixed'
 
@@ -241,6 +242,8 @@ export function RightPanel() {
       </div>
       {nodes.length === 0 ? (
         <PageInspector />
+      ) : nodes.length === 1 && nodes[0].type === 'GUIDE' ? (
+        <GuideInspector node={nodes[0]} />
       ) : nodes.length === 1 && ['SPEC', 'CODE', 'ANNOTATION', 'SLICE'].includes(nodes[0].type) ? (
         <SpecialInspector node={nodes[0]} />
       ) : (
@@ -1455,7 +1458,7 @@ function SpecialInspector({ node: n }: { node: GNode }) {
         .map((id) => (
           <div className="row tight" key={id}>
             <button className="field" style={{ flex: 1, textAlign: 'left', cursor: 'pointer' }} title={t('Show on the canvas')} onClick={() => ed.zoomToRect(ed.world(id), 1)}>
-              <span className="lbl">{ed.nodes.get(id)!.type === 'SECTION' ? Icons.section : Icons.frame}</span>
+              <span className="lbl">{ed.nodes.get(id)!.type === 'GUIDE' ? Icons.guide : ed.nodes.get(id)!.type === 'SECTION' ? Icons.section : Icons.frame}</span>
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ed.nodes.get(id)!.name}</span>
             </button>
             <MinusBtn onClick={() => ed.act(() => set({ [role]: (sp[role] ?? []).filter((x) => x !== id) }))} />

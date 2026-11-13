@@ -2,7 +2,7 @@
 // When the UI runs in a plain browser (`npm run web`) we fall back to an
 // in-memory backend so the editor can be developed and tested without Electron.
 import type { AppSettings, GigmaApi, ProjectInfo } from '@shared/api'
-import type { DocChanges, DocSnapshot, GNode, Page } from '@shared/types'
+import type { DocChanges, DocSnapshot, GNode, GuideData, Page } from '@shared/types'
 import { DEFAULT_PAGE_BG, FORMAT_VERSION } from '@shared/types'
 
 declare global {
@@ -26,7 +26,24 @@ function memoryBackend(): GigmaApi {
     })
     return id
   }
+  const guides = new Map<string, GuideData>()
+  const guideSubs: (() => void)[] = []
   return {
+    guides: {
+      list: async () => ({ guides: [...guides.values()], deleted: [] }),
+      save: async (g) => {
+        guides.set(g.id, { ...g, updatedAt: Date.now() })
+        guideSubs.forEach((f) => f())
+        return guides.get(g.id)!
+      },
+      remove: async (id) => {
+        guides.delete(id)
+        guideSubs.forEach((f) => f())
+      },
+      exportFile: async () => false,
+      importFile: async () => null,
+      onChanged: (f) => void guideSubs.push(f)
+    },
     platform: 'web',
     tabId: null,
     pdf: { render: async () => Promise.reject(new Error('PDF export needs the desktop app')) },
@@ -90,7 +107,7 @@ function memoryBackend(): GigmaApi {
       dir: async () => '(browser memory)',
       reveal: async () => {},
       listTrash: async () => [],
-      stats: async () => ({ projects: 0, trash: 0, plugins: [], diskFree: 0, diskTotal: 0 }),
+      stats: async () => ({ projects: 0, trash: 0, plugins: [], guides: [], diskFree: 0, diskTotal: 0 }),
       restore: async (p: string) => p,
       deleteForever: async () => {},
       emptyTrash: async () => {},

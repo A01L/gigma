@@ -368,3 +368,8 @@
   color: var(--text-2);
   font-weight: 600;
 }
+
+.stor-bar i.guides,
+.stor-bar.guides i {
+  background: #b99bff;
+}

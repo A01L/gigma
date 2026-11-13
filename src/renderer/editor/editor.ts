@@ -25,6 +25,8 @@ export type Tool =
   | 'pencil'
   | 'text'
   | 'spec'
+  /** place a guideline from the library (see pendingGuide) */
+  | 'guide'
   | 'code'
   | 'annotation'
 export type Topic = 'doc' | 'selection' | 'camera' | 'ui' | 'pages'
@@ -962,6 +964,27 @@ export class Editor {
     this.emit('doc')
   }
 
+  /** id of the guideline the next click on the canvas places; 'new' = create one */
+  pendingGuide: string | null = null
+
+  /** Copies of the guidelines used in this document (the library stays the source of truth). */
+  setGuideCopies(guides: NonNullable<DocMeta['guides']>): void {
+    this.meta = { ...this.meta, guides }
+    this.pendingMeta = { ...(this.pendingMeta ?? {}), guides }
+    this.scheduleFlush()
+  }
+
+  /** Change a layer without an undo step: for values the app derives itself (the size of a guideline card). */
+  patchQuietly(id: string, patch: Partial<GNode>): void {
+    const n = this.nodes.get(id)
+    if (!n) return
+    Object.assign(n, patch)
+    this.invalidateGeometry(id)
+    this.pendingNodes.add(id)
+    this.scheduleFlush()
+    this.emit('doc')
+  }
+
   setTextStyles(textStyles: NonNullable<DocMeta['textStyles']>): void {
     this.meta = { ...this.meta, textStyles }
     this.pendingMeta = { ...(this.pendingMeta ?? {}), textStyles }
@@ -1558,7 +1581,8 @@ export function defaultName(t: GNode['type']): string {
     SLICE: 'Slice',
     SPEC: 'Spec',
     CODE: 'Code',
-    ANNOTATION: 'Annotation'
+    ANNOTATION: 'Annotation',
+    GUIDE: 'Guideline'
   }
   return names[t]
 }

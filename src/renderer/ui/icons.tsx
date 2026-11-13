@@ -55,6 +55,7 @@ export const Icons = {
   // curly braces, like Figma's code tool
   code: S(<path d="M6 2.5c-1.6 0-2 .7-2 2v1.6c0 1-.5 1.6-1.5 1.9 1 .3 1.5.9 1.5 1.9v1.6c0 1.3.4 2 2 2M10 2.5c1.6 0 2 .7 2 2v1.6c0 1 .5 1.6 1.5 1.9-1 .3-1.5.9-1.5 1.9v1.6c0 1.3-.4 2-2 2" />, 18),
   annotation: S(<path d="M8 2.5a5.5 5.5 0 010 11H3.2a.7.7 0 01-.7-.7V8A5.5 5.5 0 018 2.5z" strokeLinejoin="round" />, 18),
+  guide: S([<circle key="a" cx="8" cy="8" r="5.5" />, <circle key="b" cx="8" cy="8" r="2" fill="currentColor" stroke="none" />], 18),
   actions: S([<rect key="a" x="2.5" y="2.5" width="4.3" height="4.3" rx="1.2" />, <rect key="b" x="2.5" y="9.2" width="4.3" height="4.3" rx="1.2" />, <rect key="c" x="9.2" y="2.5" width="4.3" height="4.3" rx="1.2" />, <path key="d" d="M11.35 9.2v4.3M9.2 11.35h4.3" />], 18),
   chevDown: S(<path d="M4.5 6.5L8 10l3.5-3.5" strokeWidth="1.6" />, 10),
   tJustify:S(<path d="M3 4h10M3 8h10M3 12h10" />),
@@ -106,6 +107,8 @@ export function TypeIcon({ type }: { type: string }) {
       return S([<rect key="a" x="2" y="2.5" width="12" height="11" rx="1.5" />, <rect key="b" x="3.8" y="4.2" width="5" height="2.2" rx="0.6" fill="currentColor" stroke="none" />], 14)
     case 'SLICE':
       return S(<path d="M3 13L13 3M9.5 3H13v3.5M3 9.5V13h3.5" />, 14)
+    case 'GUIDE':
+      return S([<circle key="a" cx="8" cy="8" r="5" />, <circle key="b" cx="8" cy="8" r="1.8" fill="currentColor" stroke="none" />], 14)
     case 'SPEC':
       return S([<rect key="a" x="3" y="2" width="10" height="12" rx="1.5" />, <path key="b" d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3" />], 14)
     case 'CODE':

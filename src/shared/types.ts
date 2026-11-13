@@ -21,6 +21,8 @@ export type NodeType =
   | 'CODE'
   /** canvas note (Figma comments, but local) */
   | 'ANNOTATION'
+  /** a guideline (design system) from the shared library: a glowing dot, or an open card while it is edited */
+  | 'GUIDE'
 
 export const CONTAINER_TYPES: NodeType[] = ['FRAME', 'GROUP', 'SECTION']
 export const isContainerType = (t: NodeType) => t === 'FRAME' || t === 'GROUP' || t === 'SECTION'
@@ -37,6 +39,58 @@ export interface SpecData {
   sources?: string[]
   /** RULES = not a task with a status but standing rules for the linked frames (style guide, constraints) */
   kind?: 'TASK' | 'RULES'
+}
+
+// ---- guidelines: design systems shared by every project (kept in the app library, not in the document) ----
+export interface GuideColor {
+  id: string
+  name: string
+  /** what the colour is for: "Primary", "Background", "Text on dark"… */
+  role?: string
+  hex: string
+}
+export interface GuideFont {
+  id: string
+  /** "Heading", "Body", "Caption"… */
+  role: string
+  family: string
+  weight: number
+  size: number
+  lineHeightPercent?: number
+}
+export interface GuideImage {
+  id: string
+  name: string
+  /** the picture itself, as a data: URL (a guideline is one self-contained file) */
+  dataUrl: string
+}
+export interface GuideSection {
+  id: string
+  title: string
+  text: string
+  images: GuideImage[]
+}
+export interface GuideData {
+  id: string
+  name: string
+  description?: string
+  /** hex; the dot on the canvas glows with it */
+  accent?: string
+  colors: GuideColor[]
+  fonts: GuideFont[]
+  logos: GuideImage[]
+  patterns: GuideImage[]
+  /** free text: tone, do / don't, spacing rules… */
+  rules: string
+  sections: GuideSection[]
+  updatedAt: number
+  formatVersion: 1
+}
+/** GUIDE node payload: which guideline, shown open or as a dot, and the frames / sections it is wired to */
+export interface GuideRef {
+  id: string
+  open?: boolean
+  targets?: string[]
 }
 
 export interface CodeData {
@@ -237,6 +291,8 @@ export interface BaseNode {
   spec?: SpecData
   /** CODE node payload */
   code?: CodeData
+  /** GUIDE node payload */
+  guide?: GuideRef
   /** ANNOTATION: resolved notes are hidden from the canvas */
   resolved?: boolean
   // TEXT
@@ -269,6 +325,8 @@ export interface DocMeta {
   colorStyles?: ColorStyle[]
   /** saved text styles of this document */
   textStyles?: TextStyleDef[]
+  /** copies of the guidelines used in this document, so the file still shows them on another computer */
+  guides?: Record<string, GuideData>
 }
 
 export interface TextStyleDef {

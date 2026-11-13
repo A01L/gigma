@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { backend } from '../backend'
 import { editor } from '../editor/editor'
 import { installCommandBus } from '../editor/commands'
+import { initGuides } from '../editor/guides'
 import { EditorView } from './EditorView'
 import { saveThumbnail } from './actions'
 
@@ -21,6 +22,8 @@ export function DocApp({ path }: { path: string }) {
       .open(path)
       .then((snap) => {
         editor.load(snap)
+        // the shared guideline library: load it and keep this document in step with it
+        initGuides()
         setLoaded(true)
       })
       .catch((e) => setError(String(e?.message ?? e)))

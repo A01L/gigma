@@ -20,7 +20,7 @@ export function formatBytes(bytes: number, lang: string): string {
   return (ru ? text.replace('.', ',') : text) + ' ' + units[i]
 }
 
-type Kind = 'projects' | 'trash' | 'plugins'
+type Kind = 'projects' | 'trash' | 'plugins' | 'guides'
 
 export function StorageSection() {
   const t = useT()
@@ -39,20 +39,23 @@ export function StorageSection() {
     load()
     backend.library.dir().then(setDir)
     backend.library.onChanged(load)
+    backend.guides.onChanged(load)
   }, [])
   if (!stats) return null
   const fmt = (n: number) => formatBytes(n, lang)
   const pluginsSize = stats.plugins.reduce((s, p) => s + p.size, 0)
-  const total = stats.projects + stats.trash + pluginsSize
+  const guidesSize = stats.guides.reduce((s, p) => s + p.size, 0)
+  const total = stats.projects + stats.trash + pluginsSize + guidesSize
   const share = (n: number, of = total) => (of > 0 ? Math.max(n > 0 ? 1.5 : 0, (n / of) * 100) : 0)
 
   const rows: { kind: Kind; icon: React.ReactNode; title: string; hint: string; size: number }[] = [
     { kind: 'projects', icon: Icons.frame, title: t('Projects'), hint: t('{n} in the library', { n: String(projects.length) }), size: stats.projects },
     { kind: 'trash', icon: Icons.trash, title: t('Trash'), hint: t('{n} deleted, kept for 30 days', { n: String(trash.length) }), size: stats.trash },
-    { kind: 'plugins', icon: Icons.actions ?? Icons.plus, title: t('Plugins'), hint: t('{n} installed', { n: String(stats.plugins.length) }), size: pluginsSize }
+    { kind: 'plugins', icon: Icons.actions ?? Icons.plus, title: t('Plugins'), hint: t('{n} installed', { n: String(stats.plugins.length) }), size: pluginsSize },
+    { kind: 'guides', icon: Icons.guide, title: t('Guidelines'), hint: t('{n} in the shared library', { n: String(stats.guides.length) }), size: guidesSize }
   ]
   const items = (kind: Kind): { key: string; name: string; size: number; thumb?: string | null; path?: string }[] =>
-    (kind === 'projects' ? projects : kind === 'trash' ? trash : stats.plugins.map((p) => ({ path: p.id, name: p.name, size: p.size, thumb: null })))
+    (kind === 'projects' ? projects : kind === 'trash' ? trash : (kind === 'guides' ? stats.guides : stats.plugins).map((p) => ({ path: p.id, name: p.name, size: p.size, thumb: null })))
       .map((p) => ({ key: p.path, name: p.name, size: p.size ?? 0, thumb: p.thumb, path: p.path }))
       .sort((a, b) => b.size - a.size)
 
@@ -68,6 +71,7 @@ export function StorageSection() {
         <i style={{ width: share(stats.projects) + '%' }} />
         <i className="trash" style={{ width: share(stats.trash) + '%' }} />
         <i className="plugins" style={{ width: share(pluginsSize) + '%' }} />
+        <i className="guides" style={{ width: share(guidesSize) + '%' }} />
       </div>
 
       <div className="stor-list">
@@ -126,6 +130,19 @@ export function StorageSection() {
                         <button className="pill small" onClick={() => backend.tabs.open(it.path!)}>
                           {t('Open')}
                         </button>
+                      )}
+                      {r.kind === 'guides' && (
+                        <>
+                          <button className="pill small" onClick={() => void backend.guides.exportFile(it.path!)}>
+                            {t('Export')}
+                          </button>
+                          <button
+                            className="pill small danger"
+                            onClick={() => confirm(t('Delete “{name}” from the library? It will disappear from every project.', { name: it.name })) && backend.guides.remove(it.path!).then(load)}
+                          >
+                            {t('Delete')}
+                          </button>
+                        </>
                       )}
                       {r.kind === 'trash' && (
                         <>

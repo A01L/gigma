@@ -11,6 +11,8 @@ import { framesInReadingOrder, pdfPages } from './pdf'
 import { polygonPath, starPath } from './shapes'
 import { codeBitmapAsync } from './code-render'
 import { aiCursor } from './ai-cursor'
+import { guides, newGuide, newGuideId, placeGuide, saveGuide } from './guides'
+import type { GuideData } from '@shared/types'
 
 type Args = Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -35,10 +37,53 @@ const brief = (s: SpecRef) => ({ id: s.id, kind: s.kind, title: s.title, ...(s.s
 const materialFor = (n: GNode) => [...ed.nodes.values()].filter((s) => s.type === 'SPEC' && s.spec?.sources?.includes(n.id)).map((s) => ({ id: s.id, title: s.spec!.title }))
 /** the frames a Spec card is wired to (deleted ones are skipped): `targets` = where to work, `sources` = materials */
 const framesOf = (s: GNode, role: 'targets' | 'sources' = 'targets') =>
-  (s.spec?.[role] ?? []).flatMap((id) => {
+  (s.spec?.[role] ?? []).flatMap((id): Record<string, unknown>[] => {
     const f = ed.nodes.get(id)
+    // a guideline wired in as a material is read with get_guideline, not looked at as a frame
+    if (f?.type === 'GUIDE') return [{ id: f.id, type: f.type, name: f.name, pageId: f.pageId, guidelineId: f.guide?.id }]
     return f ? [{ id: f.id, type: f.type, name: f.name, pageId: f.pageId, width: Math.round(f.width), height: Math.round(f.height) }] : []
   })
+/** guidelines (design systems) wired to a layer or to a frame / section it sits in */
+function guidelinesFor(n: GNode, own = false): { id: string; name: string }[] {
+  const chain = new Set<string>(own ? [n.id] : [n.id, ...ed.ancestors(n.id).map((a) => a.id)])
+  const out = new Map<string, { id: string; name: string }>()
+  for (const d of ed.nodes.values()) {
+    if (d.type !== 'GUIDE' || !d.guide?.targets?.some((t) => chain.has(t))) continue
+    const g = guides.get(d.guide.id)
+    if (g) out.set(g.id, { id: g.id, name: g.name })
+  }
+  return [...out.values()]
+}
+/** a guideline as the AI reads it: every value, pictures by name only (they are large) */
+const guidelineView = (g: GuideData) => ({
+  id: g.id,
+  name: g.name,
+  description: g.description || undefined,
+  accent: g.accent,
+  colors: g.colors.map((c) => ({ name: c.name, role: c.role || undefined, hex: c.hex, styleId: `guide:${g.id}:${c.id}` })),
+  fonts: g.fonts.map((f) => ({ role: f.role, family: f.family, weight: f.weight, size: f.size, lineHeightPercent: f.lineHeightPercent, styleId: `guide:${g.id}:${f.id}` })),
+  logos: g.logos.map((i) => i.name),
+  patterns: g.patterns.map((i) => i.name),
+  rules: g.rules,
+  sections: g.sections.map((s) => ({ title: s.title, text: s.text, images: s.images.map((i) => i.name) }))
+})
+function requireGuideline(id: string): GuideData {
+  const g = guides.get(id)
+  if (!g) throw new Error('Unknown guideline id; use list_guidelines')
+  return g
+}
+const withIds = <T extends object>(list: T[] | undefined, old: (T & { id: string })[]): (T & { id: string })[] | undefined =>
+  // keep the ids of entries that stay in place, so styles linked to them survive the edit
+  list?.map((x, i) => ({ ...x, id: old[i]?.id ?? newGuideId() }))
+function setGuideTargets(nodeId: string, frameIds: string[]): void {
+  const n = requireNode(nodeId)
+  if (n.type !== 'GUIDE' || !n.guide) throw new Error('nodeId is not a guideline on the canvas')
+  for (const id of frameIds) {
+    const t = requireNode(id).type
+    if (t !== 'FRAME' && t !== 'SECTION') throw new Error(`"${id}" is not a frame or a section`)
+  }
+  ed.act(() => ed.updateNode(n.id, { guide: { ...n.guide!, targets: frameIds.length ? [...new Set(frameIds)] : undefined } }))
+}
 /** what a spec says about itself to the AI */
 const specView = (s: GNode) => ({
   ...s.spec,
@@ -55,6 +100,8 @@ function setLinks(specId: string, frameIds: string[], role: 'targets' | 'sources
   const s = requireNode(specId)
   for (const id of frameIds) {
     const t = requireNode(id).type
+    // a guideline dot can be wired into a spec as a material
+    if (t === 'GUIDE' && role === 'sources') continue
     if (t !== 'FRAME' && t !== 'SECTION') throw new Error(`"${id}" is not a frame or a section: a spec can only be linked to those`)
   }
   const other = role === 'targets' ? 'sources' : 'targets'
@@ -83,13 +130,21 @@ function summarize(n: GNode, depth: number): Record<string, unknown> {
     if (specs.length) out.specs = specs.map(brief)
     const mat = materialFor(n)
     if (mat.length) out.materialForSpecs = mat
+    const gl = guidelinesFor(n, true)
+    if (gl.length) out.guidelines = gl
+  }
+  if (n.type === 'GUIDE') {
+    const g = guides.get(n.guide?.id ?? '')
+    out.guideline = g ? { id: g.id, name: g.name } : null
+    const frames = (n.guide?.targets ?? []).flatMap((id) => (ed.nodes.has(id) ? [{ id, name: ed.nodes.get(id)!.name }] : []))
+    if (frames.length) out.linkedFrames = frames
   }
   if (n.type === 'SPEC') {
     out.spec = { kind: n.spec?.kind ?? 'TASK', title: n.spec?.title, ...(n.spec?.kind !== 'RULES' && { status: n.spec?.status }) }
     const frames = framesOf(n)
     if (frames.length) out.linkedFrames = frames.map((f) => ({ id: f.id, name: f.name }))
     const src = framesOf(n, 'sources')
-    if (src.length) out.sourceFrames = src.map((f) => ({ id: f.id, name: f.name }))
+    if (src.length) out.sourceFrames = src.map((f) => ({ id: f.id, name: f.name, type: f.type }))
   }
   const kids = ed.children(n.id, n.pageId)
   if (kids.length) {
@@ -196,6 +251,12 @@ function created(n: GNode) {
         (rules ? 'RULES are standing rules: every change in this frame must follow them. ' : '') +
         (tasks ? 'A TASK says what to do here; when it is done call update_spec with status DONE.' : '')
     }
+    // a guideline wired to this frame: the design system to follow here
+    const gl = guidelinesFor(n)
+    if (gl.length) {
+      out.guidelines = gl
+      out.note = (out.note ? out.note + ' ' : '') + 'A guideline (design system) is wired to this frame: read it with get_guideline and use its colours, fonts and rules.'
+    }
   }
   return out
 }
@@ -237,9 +298,72 @@ const handlers: Record<CommandName, (a: Args) => unknown | Promise<unknown>> = {
   get_node: (a) => {
     const n = requireNode(a.id)
     if (n.type === 'SPEC') return { ...n, spec: undefined, ...specView(n) }
+    if (n.type === 'GUIDE') {
+      const g = guides.get(n.guide?.id ?? '')
+      return { ...n, guideline: g ? guidelineView(g) : null, linkedFrames: (n.guide?.targets ?? []).flatMap((id) => (ed.nodes.has(id) ? [{ id, name: ed.nodes.get(id)!.name }] : [])) }
+    }
     const specs = specsFor(n)
     const mat = materialFor(n)
-    return specs.length || mat.length ? { ...n, ...(specs.length && { specs }), ...(mat.length && { materialForSpecs: mat }) } : n
+    const gl = guidelinesFor(n)
+    return specs.length || mat.length || gl.length ? { ...n, ...(specs.length && { specs }), ...(mat.length && { materialForSpecs: mat }), ...(gl.length && { guidelines: gl }) } : n
+  },
+  list_guidelines: () =>
+    [...guides.values()].map((g) => ({
+      id: g.id,
+      name: g.name,
+      description: g.description || undefined,
+      accent: g.accent,
+      colors: g.colors.length,
+      fonts: g.fonts.length,
+      // where it sits in this document and which frames it is wired to
+      onCanvas: [...ed.nodes.values()]
+        .filter((n) => n.type === 'GUIDE' && n.guide?.id === g.id)
+        .map((n) => ({ nodeId: n.id, pageId: n.pageId, linkedFrames: (n.guide?.targets ?? []).flatMap((id) => (ed.nodes.has(id) ? [{ id, name: ed.nodes.get(id)!.name }] : [])) }))
+    })),
+  get_guideline: (a) => guidelineView(requireGuideline(a.id)),
+  create_guideline: (a) => {
+    const g: GuideData = {
+      ...newGuide(a.name || 'Guideline'),
+      description: a.description ?? '',
+      accent: a.accent ?? a.colors?.[0]?.hex ?? '#0c8ce9',
+      ...(a.colors && { colors: withIds(a.colors, []) }),
+      ...(a.fonts && { fonts: withIds(a.fonts, []) }),
+      rules: a.rules ?? '',
+      sections: withIds((a.sections ?? []).map((s: Args) => ({ title: s.title ?? '', text: s.text ?? '', images: [] })), []) ?? []
+    }
+    saveGuide(g)
+    const n = placeGuide(g.id, { x: a.x ?? 0, y: a.y ?? 0 }, false)
+    if (Array.isArray(a.frameIds) && a.frameIds.length) setGuideTargets(n.id, a.frameIds)
+    return { id: g.id, nodeId: n.id, name: g.name, note: 'Saved to the shared library: the guideline is available in every project.' }
+  },
+  update_guideline: (a) => {
+    const g = requireGuideline(a.id)
+    const next: GuideData = {
+      ...g,
+      ...(a.name !== undefined && { name: a.name }),
+      ...(a.description !== undefined && { description: a.description }),
+      ...(a.accent !== undefined && { accent: a.accent }),
+      ...(a.colors && { colors: withIds(a.colors, g.colors) }),
+      ...(a.fonts && { fonts: withIds(a.fonts, g.fonts) }),
+      ...(a.rules !== undefined && { rules: a.rules }),
+      ...(a.sections && { sections: (a.sections as Args[]).map((s, i) => ({ id: g.sections[i]?.id ?? newGuideId(), title: s.title ?? '', text: s.text ?? '', images: g.sections[i]?.images ?? [] })) }),
+      updatedAt: Date.now()
+    }
+    saveGuide(next)
+    return { ...guidelineView(next), note: 'The guideline is shared: this edit applies in every project that uses it.' }
+  },
+  place_guideline: (a) => {
+    const g = requireGuideline(a.id)
+    const n = placeGuide(g.id, { x: a.x ?? 0, y: a.y ?? 0 }, !!a.open)
+    if (Array.isArray(a.frameIds) && a.frameIds.length) setGuideTargets(n.id, a.frameIds)
+    return { ...created(ed.nodes.get(n.id)!), guideline: { id: g.id, name: g.name } }
+  },
+  link_guideline: (a) => {
+    const n = requireNode(a.nodeId)
+    const cur = (n.guide?.targets ?? []).filter((id) => ed.nodes.has(id))
+    const ids: string[] = a.frameIds
+    setGuideTargets(n.id, a.mode === 'set' ? ids : a.mode === 'remove' ? cur.filter((id) => !ids.includes(id)) : [...cur, ...ids])
+    return { nodeId: n.id, linkedFrames: (ed.nodes.get(n.id)!.guide?.targets ?? []).map((id) => ({ id, name: ed.nodes.get(id)?.name })) }
   },
   link_spec: (a) => {
     const s = requireNode(a.specId)

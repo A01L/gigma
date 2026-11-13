@@ -113,6 +113,8 @@ function buildServer(run: RunCommand, client = 'AI'): McpServer {
         'A Spec card can be wired to frames or sections: such a frame lists its "specs" in get_document / get_node, and a spec lists its "linkedFrames" (where to work) and "sourceFrames" (materials). ' +
         'A spec is either a TASK (do it, then mark DONE) or RULES (standing rules for its frames, follow them in every change). ' +
         'Before changing a frame, read the specs wired to it; when handed a spec, take the materials from its sourceFrames and do the work in its linkedFrames. ' +
+        'Guidelines are design systems kept in a library shared by every project (list_guidelines / get_guideline): colours with roles, fonts, rules. ' +
+        'A frame that lists "guidelines" must be designed with them; a spec may also carry a guideline among its sourceFrames (type GUIDE, guidelineId). ' +
         'For complex layouts you can use create_code (HTML + CSS rendered as a design block) instead of placing every element by coordinates.'
     }
   )
@@ -467,6 +469,58 @@ function buildServer(run: RunCommand, client = 'AI'): McpServer {
     width: z.number().positive().default(320),
     height: z.number().positive().default(220),
     parentId: parent
+  })
+  // ---- guidelines: design systems shared by every project ----
+  const gColor = z.object({ name: z.string(), role: z.string().optional().describe('What the colour is for: "Primary buttons", "Page background"…'), hex: z.string().regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/) })
+  const gFont = z.object({ role: z.string().describe('"Heading", "Body", "Caption"…'), family: z.string(), weight: z.number().int().min(100).max(900).default(400), size: z.number().positive(), lineHeightPercent: z.number().positive().optional() })
+  const gSection = z.object({ title: z.string(), text: z.string().default('') })
+  tool(
+    'list_guidelines',
+    'List the guidelines (design systems) of the shared library: every project on this computer can use them. onCanvas says where a guideline sits in this document and which frames it is wired to.',
+    {}
+  )
+  tool(
+    'get_guideline',
+    'Read a guideline: its colours with their roles, fonts, rules and extra sections. When a guideline is wired to a frame (the frame lists it under "guidelines"), read it before designing there and use exactly these values. A colour or font can be applied as a linked style: pass its styleId as fillStyleId / strokeStyleId / textStyleId in update_node.',
+    { id: z.string() }
+  )
+  tool(
+    'create_guideline',
+    'Create a guideline (design system) in the shared library and put its dot on the canvas. Use it to record a brand: colours with roles, fonts, rules. Optionally wire it to the frames it applies to.',
+    {
+      name: z.string(),
+      description: z.string().optional(),
+      accent: z.string().optional().describe('Hex; the dot on the canvas glows with it'),
+      colors: z.array(gColor).optional(),
+      fonts: z.array(gFont).optional(),
+      rules: z.string().optional().describe('Free text: tone, spacing, do and do not'),
+      sections: z.array(gSection).optional(),
+      x: z.number().default(0),
+      y: z.number().default(0),
+      frameIds: z.array(z.string()).optional().describe('Frames / sections the guideline applies to')
+    }
+  )
+  tool('update_guideline', 'Change a guideline. It is shared: the edit applies in every project that uses it, and layers linked to its colours and fonts follow. Lists (colors, fonts, sections) are replaced as a whole.', {
+    id: z.string(),
+    name: z.string().optional(),
+    description: z.string().optional(),
+    accent: z.string().optional(),
+    colors: z.array(gColor).optional(),
+    fonts: z.array(gFont).optional(),
+    rules: z.string().optional(),
+    sections: z.array(gSection).optional()
+  })
+  tool('place_guideline', 'Put the dot of a library guideline on the canvas of this document, optionally wired to frames / sections. Its colours and fonts become styles of the document.', {
+    id: z.string(),
+    x: z.number().default(0),
+    y: z.number().default(0),
+    open: z.boolean().default(false).describe('Show it as an open card instead of a dot'),
+    frameIds: z.array(z.string()).optional()
+  })
+  tool('link_guideline', 'Wire a guideline on the canvas (nodeId from place_guideline / list_guidelines) to frames or sections: the design system applies there. To hand it to a spec as a material use link_spec with role "source" and the nodeId.', {
+    nodeId: z.string(),
+    frameIds: z.array(z.string()).min(1),
+    mode: z.enum(['add', 'remove', 'set']).default('add')
   })
   tool(
     'create_code',

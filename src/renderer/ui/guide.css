@@ -1,0 +1,202 @@
+/* guideline editor (right panel) and the guidelines menu */
+.g-block {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.g-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 600;
+  min-height: 24px;
+}
+.g-hint {
+  font-size: 11px;
+  line-height: 1.45;
+}
+.g-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.g-row > .g-in {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.g-grow {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.g-in {
+  width: 100%;
+  box-sizing: border-box;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: var(--field, rgba(128, 128, 128, 0.16));
+  color: inherit;
+  font: inherit;
+  outline: none;
+}
+textarea.g-in {
+  height: auto;
+  padding: 6px 8px;
+  line-height: 1.45;
+  resize: vertical;
+}
+.g-in:focus {
+  border-color: var(--accent, #0c8ce9);
+}
+.g-font > .g-in:nth-child(2),
+.g-font > .g-in:nth-child(3) {
+  flex: 0 0 48px;
+}
+.g-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.g-item:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.g-item .g-row > .g-in:nth-child(3) {
+  flex: 0 0 76px;
+}
+.g-swatch {
+  flex: 0 0 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid rgba(128, 128, 128, 0.4);
+  overflow: hidden;
+  cursor: pointer;
+}
+.g-swatch input {
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+}
+.g-gallery {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+.g-thumb {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.g-thumb img {
+  width: 100%;
+  height: 52px;
+  object-fit: contain;
+  background: #fff;
+  border-radius: 6px;
+}
+.g-thumb > button {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  line-height: 16px;
+  text-align: center;
+  opacity: 0;
+}
+.g-thumb:hover > button {
+  opacity: 1;
+}
+.g-thumb .g-in {
+  height: 22px;
+  padding: 0 5px;
+  font-size: 11px;
+}
+.g-add-img {
+  height: 52px;
+  border: 1px dashed rgba(128, 128, 128, 0.5);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
+  opacity: 0.7;
+}
+.g-add-img:hover {
+  opacity: 1;
+}
+.g-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 5px;
+  background: var(--field, rgba(128, 128, 128, 0.16));
+  text-align: left;
+  overflow: hidden;
+}
+.g-link span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.guide-ins .btn.primary {
+  background: var(--accent, #0c8ce9);
+  color: #fff;
+  border-color: transparent;
+}
+.guide-ins .btn.danger {
+  color: #f24822;
+}
+
+/* the guidelines menu: the Ctrl+K palette with a coloured dot per guideline */
+.guide-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: block;
+}
+.palette-item .pi-tools {
+  display: none;
+  gap: 4px;
+  margin-left: 8px;
+}
+.palette-item:hover .pi-tools,
+.palette-item.active .pi-tools {
+  display: flex;
+}
+.palette-item .pi-tools span {
+  padding: 1px 7px;
+  border-radius: 4px;
+  font-size: 11px;
+  background: rgba(128, 128, 128, 0.25);
+}
+.palette-item .pi-tools span:hover {
+  background: rgba(128, 128, 128, 0.45);
+}
+.palette-empty {
+  padding: 22px 16px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+}
+.toolbar .tool-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+  margin: 0 4px;
+}

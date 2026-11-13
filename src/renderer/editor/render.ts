@@ -17,6 +17,7 @@ import { arrowHeadPoints } from './shapes'
 import { parsePath, transformSegs } from './svgpath'
 import { getCodeBitmap, codeBitmapAsync } from './code-render'
 import { booleanAsVector, isBooleanGroup } from './boolean'
+import { drawGuide, guideStore } from './guide-render'
 
 // ---------------- image cache ----------------
 type ImgEntry = { bmp: ImageBitmap | null; missing: boolean; promise: Promise<ImageBitmap | null> }
@@ -211,7 +212,7 @@ export function outlineShape(ed: Editor, id: string): Path2D | null {
     }
     return p
   }
-  if (n.type === 'SPEC' || n.type === 'CODE' || n.type === 'SLICE' || n.type === 'ANNOTATION') return null
+  if (n.type === 'SPEC' || n.type === 'CODE' || n.type === 'SLICE' || n.type === 'ANNOTATION' || n.type === 'GUIDE') return null
   return worldShape(n, r)
 }
 
@@ -375,6 +376,15 @@ function drawNodeInner(ctx: CanvasRenderingContext2D, ed: Editor, id: string, o:
   const r = ed.world(id)
   const clips = n.type === 'FRAME' && n.clipsContent !== false
   const isContainer = n.type === 'FRAME' || n.type === 'GROUP' || n.type === 'SECTION'
+  if (n.type === 'GUIDE') {
+    // the glow and the name reach outside the dot
+    if (!rectsIntersect({ x: r.x - 90, y: r.y - 60, w: r.w + 180, h: r.h + 120 }, o.view)) return
+    ctx.save()
+    if (n.opacity < 1) ctx.globalAlpha *= n.opacity
+    drawGuide(ctx, n, r, guideStore.get(n.guide?.id ?? ''), deviceScale(ctx))
+    ctx.restore()
+    return
+  }
   if (n.type === 'SPEC' || n.type === 'CODE') {
     if (!rectsIntersect(r, o.view)) return
     ctx.save()

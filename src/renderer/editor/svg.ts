@@ -463,6 +463,7 @@ async function nodeSvgInner(ed: Editor, id: string, ox: number, oy: number, defs
     }
     case 'SLICE':
     case 'ANNOTATION':
+    case 'GUIDE':
       return ''
     case 'CODE': {
       // rasterized so Figma (which ignores <foreignObject>) gets the exact look

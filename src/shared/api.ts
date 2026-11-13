@@ -1,4 +1,4 @@
-import type { DocChanges, DocSnapshot, GNode, Page } from './types'
+import type { DocChanges, DocSnapshot, GNode, GuideData, Page } from './types'
 import type { CommandRequest, CommandResponse } from './commands'
 
 export interface ProjectInfo {
@@ -17,6 +17,8 @@ export interface StorageStats {
   projects: number
   trash: number
   plugins: { id: string; name: string; size: number }[]
+  /** the guideline library, one entry per guideline */
+  guides: { id: string; name: string; size: number }[]
   /** the disk that holds the library */
   diskFree: number
   diskTotal: number
@@ -121,6 +123,18 @@ export interface GigmaApi {
     capture(pluginId: string, opts: { url: string; width: number; mobile?: boolean; maxHeight?: number }): Promise<PageCapture>
     storageGet(pluginId: string, key: string): Promise<unknown>
     storageSet(pluginId: string, key: string, value: unknown): Promise<void>
+  }
+  /** the guideline library, shared by every project */
+  guides: {
+    list(): Promise<{ guides: GuideData[]; deleted: string[] }>
+    save(data: GuideData): Promise<GuideData>
+    /** delete from the library and from every project */
+    remove(id: string): Promise<void>
+    /** save as a .guide.gigma file; false = cancelled */
+    exportFile(id: string): Promise<boolean>
+    /** pick a .guide.gigma file and add it to the library; null = cancelled */
+    importFile(): Promise<GuideData | null>
+    onChanged(handler: () => void): void
   }
   platform: string
   /** id of the project tab this renderer belongs to (null in the shell / web mode) */

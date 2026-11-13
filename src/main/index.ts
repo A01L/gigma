@@ -19,6 +19,8 @@ import { getSettings, setSettings } from './settings'
 import { startMcpServer, type McpHandle } from './mcp'
 import { handlePluginRequest, installPackage, isPluginFile, pluginSizes, registerPlugins } from './plugins'
 import { renderPdf, type PdfPage } from './pdf'
+import { deletedGuides, exportGuide, guideSizes, importGuide, importGuideFile, isGuideFile, listGuides, removeGuide, saveGuide } from './guides'
+import type { GuideData } from '../shared/types'
 import type { CommandName, CommandResponse } from '../shared/commands'
 import type { DocChanges } from '../shared/types'
 import type { AppSettings, McpStatus, StorageStats, TabInfo, TabsState } from '../shared/api'
@@ -315,7 +317,24 @@ ipcMain.handle('library:stats', (): StorageStats => {
   } catch {
     /* unknown disk: the page simply hides that line */
   }
-  return { projects: sum(listProjects()), trash: sum(listTrash()), plugins: pluginSizes(), diskFree, diskTotal }
+  return { projects: sum(listProjects()), trash: sum(listTrash()), plugins: pluginSizes(), guides: guideSizes(), diskFree, diskTotal }
+})
+// ---------- guideline library ----------
+ipcMain.handle('guides:list', () => ({ guides: listGuides(), deleted: deletedGuides() }))
+ipcMain.handle('guides:save', (_e, data: GuideData) => {
+  const g = saveGuide(data)
+  broadcast('guides:changed')
+  return g
+})
+ipcMain.handle('guides:remove', async (_e, id: string) => {
+  await removeGuide(id)
+  broadcast('guides:changed')
+})
+ipcMain.handle('guides:export', (_e, id: string) => exportGuide(win, id))
+ipcMain.handle('guides:import', async () => {
+  const g = await importGuide(win)
+  if (g) broadcast('guides:changed')
+  return g
 })
 ipcMain.handle('library:dir', () => libraryDir())
 ipcMain.handle('library:reveal', () => shell.openPath(libraryDir()))
@@ -685,6 +704,19 @@ async function openExternalFile(file: string): Promise<void> {
       await dialog.showMessageBox(win, { type: 'info', message: (ru ? 'Плагин установлен: ' : 'Plugin installed: ') + info.name })
     } catch (e) {
       dialog.showErrorBox('Gigma', `Could not install ${file}:\n${(e as Error).message}`)
+    }
+    return
+  }
+  // a double-clicked .guide.gigma goes into the guideline library
+  if (isGuideFile(file)) {
+    try {
+      const g = importGuideFile(file)
+      broadcast('guides:changed')
+      const ru = effectiveLang(getSettings()) === 'ru'
+      await dialog.showMessageBox(win, { type: 'info', message: (ru ? 'Гайдлайн добавлен в библиотеку: ' : 'Guideline added to the library: ') + g.name })
+    } catch (e) {
+      dialog.showErrorBox('Gigma', `Could not import ${file}:
+${(e as Error).message}`)
     }
     return
   }
