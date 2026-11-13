@@ -4,274 +4,615 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Gigma: design offline, build with AI</title>
-    <meta name="description" content="Gigma is a free, open-source, offline design editor that feels like Figma and has a built-in MCP server, so AI assistants can draw right on your canvas." />
+    <meta name="description" content="Gigma is a free, open-source design editor that works like Figma without the internet and lets AI assistants draw on the same canvas over MCP." />
     <meta property="og:title" content="Gigma: design offline, build with AI" />
     <meta property="og:description" content="A free, open-source, offline design editor with a built-in MCP server for AI." />
     <meta property="og:image" content="assets/img/poster.jpg" />
     <meta name="theme-color" content="#090a0c" />
     <link rel="icon" href="assets/img/icon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="assets/site.css" />
   </head>
   <body class="bg-ink font-sans text-white">
-    <!-- ================================================================ navigation -->
-    <header id="nav" class="fixed inset-x-0 top-0 z-50 transition-colors duration-300">
-      <div class="mx-auto flex h-16 max-w-6xl items-center gap-8 px-5">
-        <a href="#top" class="flex items-center gap-2.5 text-lg font-semibold tracking-tight">
-          <img src="assets/img/icon.png" alt="" class="h-7 w-7 rounded-md" />
-          Gigma
+    <!-- icons used by the mockups -->
+    <svg width="0" height="0" class="absolute" aria-hidden="true">
+      <symbol id="i-frame" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M5 2.5v11M11 2.5v11M2.5 5h11M2.5 11h11" /></symbol>
+      <symbol id="i-rect" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="3" y="3" width="10" height="10" rx="0.5" /></symbol>
+      <symbol id="i-ellipse" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="8" cy="8" r="5" /></symbol>
+      <symbol id="i-text" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M4 4h8M8 4v9" /></symbol>
+      <symbol id="i-group" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="2 1.6"><rect x="2.5" y="2.5" width="11" height="11" rx="1" /></symbol>
+      <symbol id="i-vector" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M3 12c2-6 5-7 10-8" /><circle cx="3" cy="12" r="1.3" /><circle cx="13" cy="4" r="1.3" /></symbol>
+      <symbol id="i-spec" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="3" y="2" width="10" height="12" rx="1.5" /><path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3" /></symbol>
+      <symbol id="i-guide" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="8" cy="8" r="5" /><circle cx="8" cy="8" r="1.8" fill="currentColor" stroke="none" /></symbol>
+      <symbol id="i-chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M6 4l4 4-4 4" /></symbol>
+      <symbol id="i-chevd" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M4 6l4 4 4-4" /></symbol>
+      <symbol id="i-plus" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M8 3v10M3 8h10" /></symbol>
+      <symbol id="i-minus" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M3 8h10" /></symbol>
+      <symbol id="i-eye" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8z" /><circle cx="8" cy="8" r="2" /></symbol>
+      <symbol id="i-home" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M2.5 7.5L8 3l5.5 4.5V13H9.5V9.5h-3V13h-4z" /></symbol>
+      <symbol id="i-side" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="2" y="3" width="12" height="10" rx="1.5" /><path d="M6 3v10" /></symbol>
+      <symbol id="i-share" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M8 10V2.5M5 5.5l3-3 3 3M3 9v4.5h10V9" /></symbol>
+      <symbol id="i-move" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"><path d="M3.5 2.5l9 4.4-4 1.4-1.6 4.2z" /></symbol>
+      <symbol id="i-pen" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"><path d="M8 2l4 6-4 6-4-6z" /><circle cx="8" cy="9" r="1" /></symbol>
+      <symbol id="i-comment" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M3 12.5V4a1.5 1.5 0 011.5-1.5h7A1.5 1.5 0 0113 4v5.5A1.5 1.5 0 0111.5 11H5z" /></symbol>
+      <symbol id="i-actions" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="2.5" y="2.5" width="4" height="4" rx="1" /><rect x="9.5" y="2.5" width="4" height="4" rx="1" /><rect x="2.5" y="9.5" width="4" height="4" rx="1" /><path d="M11.5 9.5v4M9.5 11.5h4" /></symbol>
+      <symbol id="i-al-l" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M3 2.5v11M5.5 5h7M5.5 9h4" /></symbol>
+      <symbol id="i-al-c" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M8 2.5v11M4 5h8M5.5 9h5" /></symbol>
+      <symbol id="i-al-r" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M13 2.5v11M3.5 5h7M6.5 9h4" /></symbol>
+      <symbol id="i-al-t" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M2.5 3h11M5 5.5v7M9 5.5v4" /></symbol>
+      <symbol id="i-al-m" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M2.5 8h11M5 4v8M9 5.5v5" /></symbol>
+      <symbol id="i-al-b" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M2.5 13h11M5 3.5v7M9 6.5v4" /></symbol>
+      <symbol id="i-search" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="7" cy="7" r="4.5" /><path d="M10.5 10.5L14 14" /></symbol>
+      <symbol id="i-gh" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5a11.5 11.5 0 00-3.64 22.41c.58.11.79-.25.79-.56v-2c-3.2.7-3.88-1.36-3.88-1.36-.52-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.18-3.09-.12-.29-.51-1.46.11-3.04 0 0 .97-.31 3.16 1.18a10.9 10.9 0 015.76 0c2.2-1.49 3.16-1.18 3.16-1.18.62 1.58.23 2.75.11 3.04.74.81 1.18 1.83 1.18 3.09 0 4.41-2.69 5.38-5.25 5.67.41.36.78 1.06.78 2.14v3.17c0 .31.21.68.8.56A11.5 11.5 0 0012 .5z" /></symbol>
+      <symbol id="a-user" viewBox="0 0 24 24"><path d="M4.5 3.5 20 10.2 12.6 12.7 10.2 20Z" fill="#000" stroke="#fff" stroke-width="1.5" stroke-linejoin="round" /></symbol>
+      <symbol id="a-ai" viewBox="0 0 24 24" fill="#0c8ce9" stroke-linejoin="round" stroke-linecap="round"><path d="M6.5 5.5 18.2 10.4 12.6 12.4 10.6 18Z" stroke="#fff" stroke-width="6.5" /><path d="M6.5 5.5 18.2 10.4 12.6 12.4 10.6 18Z" stroke="#0c8ce9" stroke-width="3.2" /></symbol>
+    </svg>
+
+    <!-- ================================================================ first screen -->
+    <section class="sky relative overflow-hidden">
+      <div class="sky-clouds"></div>
+      <header class="relative z-30 mx-auto flex h-[72px] max-w-[1216px] items-center px-6">
+        <a href="#top" class="flex items-center gap-2 font-display text-[22px] font-bold tracking-tight" id="top">
+          <img src="assets/img/icon.png" alt="" class="h-7 w-7 rounded-[7px]" />
+          gigma
         </a>
-        <nav class="hidden items-center gap-7 text-sm font-medium text-white/80 md:flex">
-          <a href="#features" class="transition hover:text-white">Features</a>
-          <a href="#ai" class="transition hover:text-white">AI</a>
-          <a href="#guidelines" class="transition hover:text-white">Guidelines</a>
-          <a href="#figma" class="transition hover:text-white">Figma</a>
-          <a href="#video" class="transition hover:text-white">Video</a>
+        <nav class="ml-[72px] hidden items-center gap-7 text-[15px] font-medium text-white/90 lg:flex">
+          <a href="#features" class="hover:text-white">Features</a>
+          <a href="#ai" class="hover:text-white">AI</a>
+          <a href="#plugins" class="flex items-center gap-1 hover:text-white">Plugins</a>
+          <a href="https://github.com/A01L/gigma/releases/latest" class="hover:text-white">Download</a>
         </nav>
-        <div class="ml-auto flex items-center gap-3">
-          <a href="https://github.com/A01L/gigma" class="hidden items-center gap-2 text-sm font-semibold sm:flex">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 00-3.64 22.41c.58.11.79-.25.79-.56v-2c-3.2.7-3.88-1.36-3.88-1.36-.52-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.18-3.09-.12-.29-.51-1.46.11-3.04 0 0 .97-.31 3.16 1.18a10.9 10.9 0 015.76 0c2.2-1.49 3.16-1.18 3.16-1.18.62 1.58.23 2.75.11 3.04.74.81 1.18 1.83 1.18 3.09 0 4.41-2.69 5.38-5.25 5.67.41.36.78 1.06.78 2.14v3.17c0 .31.21.68.8.56A11.5 11.5 0 0012 .5z"/></svg>
-            Star us
-          </a>
-          <a href="https://github.com/A01L/gigma/releases/latest" class="pill">Download</a>
+        <div class="ml-auto flex items-center gap-4">
+          <a href="https://github.com/A01L/gigma" class="hidden items-center gap-2 text-[15px] font-medium sm:flex"><svg class="h-[18px] w-[18px]"><use href="#i-gh" /></svg>Star Us</a>
+          <a href="https://github.com/A01L/gigma" class="btn-ghost hidden sm:inline-flex">GitHub</a>
+          <a href="https://github.com/A01L/gigma/releases/latest" class="btn-ghost">Download</a>
+        </div>
+      </header>
+
+      <div class="relative mx-auto max-w-[1216px] px-6 pt-[104px]">
+        <h1 class="h-display reveal max-w-[720px] text-[56px] text-white sm:text-[80px] lg:text-[92px]" style="background: linear-gradient(90deg, #fff 55%, #dfe3f5); -webkit-background-clip: text; background-clip: text; color: transparent">Design offline.<br />Build with AI.</h1>
+        <p class="reveal mt-6 max-w-[470px] text-[18px] font-medium leading-[1.33] text-white/90 sm:text-[19px]" style="--d: 0.08s">Gigma, an open-source design editor, works like Figma without the internet and lets your AI assistant draw on the same canvas.</p>
+        <div class="reveal mt-12" style="--d: 0.16s">
+          <button type="button" data-video class="btn-hot">See in action <svg width="16" height="10" viewBox="0 0 16 10" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M0 5h14M10 1l4 4-4 4" /></svg></button>
         </div>
       </div>
-    </header>
 
-    <main id="top">
-      <!-- ================================================================ first screen -->
-      <section class="relative overflow-hidden bg-ink pt-36">
-        <div class="pointer-events-none absolute inset-0">
-          <div class="absolute -top-40 left-[45%] h-[900px] w-[900px] rounded-full bg-[radial-gradient(closest-side,rgba(40,70,140,0.5),transparent)]"></div>
-        </div>
-        <div class="relative mx-auto max-w-6xl px-5">
-          <h1 class="display fade-text max-w-3xl text-6xl sm:text-7xl lg:text-[5.4rem]">Design offline.<br />Build with AI.</h1>
-          <p class="mt-7 max-w-xl text-lg leading-snug text-white/85 sm:text-xl">Gigma is an open-source design editor that feels like Figma, works without the internet and lets AI assistants draw right on your canvas.</p>
-          <div class="mt-9 flex flex-wrap items-center gap-5">
-            <a href="https://github.com/A01L/gigma/releases/latest" class="cta">
-              Download for Windows
-              <svg width="18" height="10" viewBox="0 0 18 10" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M0 5h16M12 1l4 4-4 4" /></svg>
-            </a>
-            <a href="#video" class="text-sm font-semibold text-white/80 underline decoration-white/30 underline-offset-4 transition hover:text-white">Watch the 1 minute video</a>
+      <!-- the product, lit from above -->
+      <div class="relative mx-auto mt-[150px] max-w-[1216px] px-6 sm:mt-[190px]">
+        <div class="relative w-full lg:w-[88%]" id="hero-box">
+          <div class="beam [--beam-h:300px] sm:[--beam-h:700px] lg:[--beam-h:1100px]" style="--beam-x: 70%; bottom: 100%; top: auto">
+            <div class="beam-cone"></div>
+            <div class="beam-dots"></div>
+            <div class="beam-line"></div>
           </div>
-        </div>
+          <div class="beam-flare-wrap pointer-events-none absolute left-[70%] top-0 h-0 w-0"><div class="beam-flare"></div></div>
+          <div class="rim hidden lg:block"></div>
+          <div class="fit overflow-hidden rounded-t-[10px]" data-w="1100" data-h="640">
+            <div class="fit-inner ui" id="hero-ui">
+              <div class="absolute inset-0 grid grid-cols-[230px_1fr_236px] overflow-hidden rounded-t-[10px] bg-[#2c2c2c] ring-1 ring-inset ring-white/15">
+                <!-- layers -->
+                <div class="ui-panel flex flex-col border-r border-[#2e2e2e]">
+                  <div class="flex h-[42px] items-center gap-2 border-b border-[#2e2e2e] px-3"><svg class="ui-ico"><use href="#i-home" /></svg><span class="font-semibold text-[12px]">Sunrise Bakery</span><svg class="ui-ico ml-auto"><use href="#i-side" /></svg></div>
+                  <div class="flex items-center px-3 pb-1 pt-3 font-semibold text-[11.5px]">Pages<svg class="ui-ico ml-auto"><use href="#i-share" /></svg><svg class="ui-ico ml-2"><use href="#i-plus" /></svg></div>
+                  <div class="ui-row-sel mx-0 flex h-[26px] items-center px-3">Page 1</div>
+                  <div class="mt-2 border-t border-[#2e2e2e] px-3 pb-1 pt-3 font-semibold text-[11.5px]">Layers</div>
+                  <div class="flex flex-col text-[11px] leading-none">
+                    <div class="flex h-[25px] items-center gap-2 px-3"><svg class="ui-ico"><use href="#i-spec" /></svg>Landing hero</div>
+                    <div class="flex h-[25px] items-center gap-2 px-3"><svg class="ui-ico"><use href="#i-guide" /></svg>Sunrise</div>
+                    <div class="flex h-[25px] items-center gap-2 px-1"><svg class="h-3 w-3 text-[#8c8c8c]"><use href="#i-chevd" /></svg><svg class="ui-ico"><use href="#i-frame" /></svg>Landing</div>
+                    <div class="flex h-[25px] items-center gap-2 pl-[38px]"><svg class="ui-ico"><use href="#i-rect" /></svg>Price card</div>
+                    <div class="flex h-[25px] items-center gap-2 pl-[26px]"><svg class="h-3 w-3 text-[#8c8c8c]"><use href="#i-chev" /></svg><svg class="ui-ico"><use href="#i-group" /></svg>Collage</div>
+                    <div class="flex h-[25px] items-center gap-2 pl-[38px]"><svg class="ui-ico"><use href="#i-text" /></svg>4.9 from 2,300 neighbours</div>
+                    <div class="flex h-[25px] items-center gap-2 pl-[38px]"><svg class="ui-ico"><use href="#i-vector" /></svg>Stars</div>
+                    <div class="flex h-[25px] items-center gap-2 pl-[38px]"><svg class="ui-ico"><use href="#i-text" /></svg>See the menu</div>
+                    <div class="flex h-[25px] items-center gap-2 pl-[38px]"><svg class="ui-ico"><use href="#i-rect" /></svg>Ghost</div>
+                    <div class="flex h-[25px] items-center gap-2 pl-[38px]"><svg class="ui-ico"><use href="#i-text" /></svg>Order breakfast</div>
+                    <div class="ui-row-sel flex h-[25px] items-center gap-2 pl-[38px]"><svg class="ui-ico text-white"><use href="#i-rect" /></svg>Primary</div>
+                    <div class="flex h-[25px] items-center gap-2 pl-[38px]"><svg class="ui-ico"><use href="#i-text" /></svg>Fresh pastry and coffee at…</div>
+                    <div class="flex h-[25px] items-center gap-2 pl-[38px]"><svg class="ui-ico"><use href="#i-text" /></svg>Breakfast, delivered warm.</div>
+                    <div class="flex h-[25px] items-center gap-2 pl-[38px]"><svg class="ui-ico"><use href="#i-rect" /></svg>Order now</div>
+                    <div class="flex h-[25px] items-center gap-2 pl-[38px]"><svg class="ui-ico"><use href="#i-text" /></svg>Sunrise</div>
+                    <div class="flex h-[25px] items-center gap-2 pl-[38px]"><svg class="ui-ico"><use href="#i-ellipse" /></svg>Logo</div>
+                  </div>
+                </div>
 
-        <!-- the product, lit by the beam -->
-        <div class="relative mx-auto mt-24 max-w-6xl px-5">
-          <div class="beam"></div>
-          <div class="beam-pool" style="top: 0"></div>
-          <div id="hero-shot" class="relative overflow-hidden rounded-t-2xl border border-white/20 border-b-0 shadow-[0_-30px_120px_-20px_rgba(12,140,233,0.55)]">
-            <img src="assets/img/editor.jpg" alt="The Gigma editor: layers on the left, the canvas with a landing page built by an AI, the inspector on the right" class="block w-full" width="2400" height="1350" />
-            <!-- the pair that works on the canvas -->
-            <svg class="cur cur-user" id="hero-user" viewBox="0 0 24 24" style="left: 52%; top: 80%"><path d="M4.5 3.5 20 10.2 12.6 12.7 10.2 20Z" fill="#000" stroke="#fff" stroke-width="1.5" stroke-linejoin="round" /></svg>
-            <div class="cur cur-ai" id="hero-ai" style="left: 40%; top: 40%">
-              <span class="cur-glow"></span>
-              <svg viewBox="0 0 24 24" width="26" height="26" fill="#0c8ce9" stroke-linejoin="round" stroke-linecap="round"><path d="M6.5 5.5 18.2 10.4 12.6 12.4 10.6 18Z" stroke="#fff" stroke-width="6.5" /><path d="M6.5 5.5 18.2 10.4 12.6 12.4 10.6 18Z" stroke="#0c8ce9" stroke-width="3.2" /></svg>
-              <span class="cur-name">Claude</span>
+                <!-- canvas -->
+                <div class="relative overflow-hidden" id="hero-canvas">
+                  <!-- wires behind everything -->
+                  <svg class="absolute inset-0 h-full w-full" viewBox="0 0 634 640" preserveAspectRatio="none">
+                    <path d="M24 108 C -10 108, 40 250, 64 262" stroke="#a98bff" stroke-width="1.6" fill="none" opacity="0.85" />
+                    <path d="M178 108 C 214 108, 200 196, 232 196" stroke="#7cb7ff" stroke-width="1.6" stroke-dasharray="5 4" fill="none" />
+                    <circle cx="232" cy="196" r="3" fill="#7cb7ff" /><circle cx="64" cy="262" r="3" fill="#a98bff" />
+                  </svg>
+                  <!-- spec card -->
+                  <div class="absolute left-[24px] top-[52px] h-[112px] w-[154px] rounded-[8px] bg-[#2c2c2c] p-[4px] shadow-[0_10px_24px_rgba(0,0,0,0.45)] ring-1 ring-[#3d3d3d]">
+                    <div class="flex h-[20px] items-center gap-1 px-1 text-[8.5px] font-semibold text-[#7cb7ff]"><svg class="h-[10px] w-[10px]"><use href="#i-spec" /></svg>Landing hero<span class="ml-auto rounded-full bg-[#2f80ed] px-1.5 py-[1px] text-[6.5px] font-bold text-white">IN PROGRESS</span></div>
+                    <div class="h-[80px] rounded-[5px] bg-white px-2.5 py-2">
+                      <div class="text-[10px] font-bold text-[#1e1e1e]">Landing hero</div>
+                      <div class="mt-1 text-[6.5px] leading-[1.45] text-[#555]">Navigation, a warm headline, one orange button, a collage with an order card.</div>
+                      <div class="mt-1.5 h-[4px] w-[70%] rounded bg-[#e6e6e6]"></div>
+                    </div>
+                  </div>
+                  <!-- guideline dot -->
+                  <div class="absolute left-[46px] top-[244px] h-[36px] w-[36px] rounded-full" style="background: radial-gradient(circle at 35% 30%, #ffd9b0, #f97316 62%); box-shadow: 0 0 10px #f97316; outline: 1.5px solid rgba(255, 255, 255, 0.6)"></div>
+                  <div class="absolute left-[42px] top-[284px] w-[44px] text-center text-[8px] font-semibold text-white/85">Sunrise</div>
+
+                  <!-- the frame -->
+                  <div class="absolute left-[232px] top-[118px] text-[9px] text-[#9a9a9a]">Landing</div>
+                  <div class="absolute left-[232px] top-[132px] h-[294px] w-[380px] overflow-hidden rounded-[12px] bg-[#fff7ed] text-[#1c1917] shadow-[0_0_0_1px_rgba(0,0,0,0.2)]">
+                    <div class="absolute left-[18px] top-[14px] flex items-center gap-1.5"><span class="h-[12px] w-[12px] rounded-full bg-[#f97316]"></span><span class="text-[9.5px] font-bold">Sunrise</span></div>
+                    <div class="absolute right-[18px] top-[13px] flex items-center gap-3 text-[6.5px] text-[#57534e]">Menu<span>Bakers</span><span>Delivery</span><span class="rounded-full bg-[#1c1917] px-2.5 py-[3px] font-semibold text-white">Order now</span></div>
+                    <div class="absolute left-[18px] top-[52px] font-['Georgia'] text-[25px] font-bold leading-[1.02] tracking-[-0.01em]">Breakfast,<br />delivered warm.</div>
+                    <div class="absolute left-[18px] top-[116px] text-[7px] leading-[1.45] text-[#57534e]">Fresh pastry and coffee at your door<br />in 20 minutes.</div>
+                    <div class="absolute left-[18px] top-[146px] flex h-[22px] w-[78px] items-center justify-center rounded-[7px] bg-[#f97316] text-[6.5px] font-semibold text-white">Order breakfast</div>
+                    <div class="absolute left-[102px] top-[146px] flex h-[22px] w-[62px] items-center justify-center rounded-[7px] bg-[#ffedd5] text-[6.5px] font-semibold text-[#9a3412]">See the menu</div>
+                    <div class="absolute left-[18px] top-[180px] flex items-center gap-1 text-[6px] text-[#78716c]"><span class="tracking-[1px] text-[#f59e0b]">★★★★★</span>4.9 from 2,300 neighbours</div>
+                    <div class="absolute left-[18px] top-[204px] flex gap-[6px]">
+                      <div class="h-[58px] w-[66px] rounded-[8px] bg-white p-2 shadow-[0_4px_10px_rgba(28,25,23,0.08)]"><span class="block h-[11px] w-[11px] rounded-full bg-[#ffedd5]"></span><b class="mt-2 block text-[8px]">20 min</b><span class="text-[5.5px] text-[#78716c]">Average delivery</span></div>
+                      <div class="h-[58px] w-[66px] rounded-[8px] bg-white p-2 shadow-[0_4px_10px_rgba(28,25,23,0.08)]"><span class="block h-[11px] w-[11px] rounded-full bg-[#fef3c7]"></span><b class="mt-2 block text-[8px]">5 am</b><span class="text-[5.5px] text-[#78716c]">Baked every morning</span></div>
+                      <div class="h-[58px] w-[66px] rounded-[8px] bg-white p-2 shadow-[0_4px_10px_rgba(28,25,23,0.08)]"><span class="block h-[11px] w-[11px] rounded-full bg-[#dcfce7]"></span><b class="mt-2 block text-[8px]">0 plastic</b><span class="text-[5.5px] text-[#78716c]">Paper and string</span></div>
+                    </div>
+                    <div class="absolute left-[222px] top-[40px] h-[214px] w-[142px] overflow-hidden rounded-[14px]" style="background: linear-gradient(160deg, #fb923c, #fed7aa)">
+                      <div class="absolute left-[24px] top-[52px] h-[96px] w-[96px] rounded-full" style="background: radial-gradient(circle, #fffbeb, #fde68a); box-shadow: 0 16px 40px rgba(234, 88, 12, 0.35)"></div>
+                      <svg class="absolute bottom-0 left-0" width="142" height="80" viewBox="0 0 142 80"><path d="M0 80C18 40 46 18 70 34 90 48 110 22 142 2V80Z" fill="#ea580c" opacity="0.55" /></svg>
+                      <div class="absolute left-[10px] top-[10px] rounded-full bg-[#1c1917] px-2 py-[2px] text-[5.5px] font-semibold text-white">New: sourdough</div>
+                    </div>
+                    <div class="absolute left-[272px] top-[220px] flex h-[40px] w-[100px] items-center gap-1.5 rounded-[9px] bg-white px-2 shadow-[0_8px_18px_rgba(28,25,23,0.15)]"><div><b class="block text-[7px]">Croissant box</b><span class="text-[5.5px] text-[#78716c]">$12.50 · 6 pieces</span></div><span class="ml-auto flex h-[16px] w-[16px] items-center justify-center rounded-full bg-[#f97316] text-[10px] text-white">+</span></div>
+                    <!-- selected layer -->
+                    <div class="sel-box left-[18px] top-[146px] h-[22px] w-[78px]"><i style="left: 0; top: 0"></i><i style="left: 100%; top: 0"></i><i style="left: 0; top: 100%"></i><i style="left: 100%; top: 100%"></i></div>
+                    <div class="absolute left-[27px] top-[173px] rounded-[3px] bg-[#0d99ff] px-1.5 py-[1px] text-[6.5px] font-medium text-white">196 × 58</div>
+                  </div>
+                  <!-- the card the user is dragging -->
+                  <div id="drag-card" class="absolute left-[392px] top-[214px] flex h-[52px] w-[124px] items-center gap-2 rounded-[10px] bg-white px-2.5 text-[#1c1917] shadow-[0_18px_40px_rgba(0,0,0,0.45)] ring-2 ring-[#0d99ff]" style="rotate: -5deg; transition: left 1.2s cubic-bezier(0.65, 0, 0.35, 1), top 1.2s cubic-bezier(0.65, 0, 0.35, 1), rotate 1.2s">
+                    <span class="h-[24px] w-[24px] flex-none rounded-full bg-[#fed7aa]"></span>
+                    <div><b class="block text-[8.5px]">Order #204</b><span class="text-[6.5px] text-[#78716c]">On the way · 8 min</span></div>
+                  </div>
+                  <svg id="hero-user" class="cur cur-user" style="left: 470px; top: 244px; transition: left 1.2s cubic-bezier(0.65, 0, 0.35, 1), top 1.2s cubic-bezier(0.65, 0, 0.35, 1)"><use href="#a-user" /></svg>
+                  <div id="hero-ai" class="cur cur-ai" style="left: 400px; top: 236px; transition: none">
+                    <span class="halo"></span><svg width="24" height="24"><use href="#a-ai" /></svg><span class="tag">Claude</span>
+                  </div>
+                  <!-- more frames further down the canvas -->
+                  <div class="absolute left-[232px] top-[442px] text-[9px] text-[#9a9a9a]">Cart</div>
+                  <div class="absolute left-[232px] top-[456px] h-[150px] w-[118px] overflow-hidden rounded-[10px] bg-[#fff7ed] p-2 text-[#1c1917]"><div class="flex items-center gap-1"><span class="h-[8px] w-[8px] rounded-full bg-[#f97316]"></span><b class="text-[7px]">Your box</b></div><div class="mt-2 h-[30px] rounded-[6px] bg-white shadow-sm"></div><div class="mt-1.5 h-[30px] rounded-[6px] bg-white shadow-sm"></div><div class="mt-2 h-[14px] rounded-[5px] bg-[#f97316]"></div></div>
+                  <div class="absolute left-[362px] top-[442px] text-[9px] text-[#9a9a9a]">Checkout</div>
+                  <div class="absolute left-[362px] top-[456px] h-[150px] w-[118px] overflow-hidden rounded-[10px] bg-[#fff7ed] p-2 text-[#1c1917]"><b class="text-[7px]">Delivery</b><div class="mt-2 h-[12px] rounded-[4px] border border-[#e7e5e4] bg-white"></div><div class="mt-1.5 h-[12px] rounded-[4px] border border-[#e7e5e4] bg-white"></div><div class="mt-1.5 h-[12px] w-[60%] rounded-[4px] border border-[#e7e5e4] bg-white"></div><div class="mt-3 h-[14px] rounded-[5px] bg-[#1c1917]"></div></div>
+                  <div class="absolute left-[492px] top-[442px] text-[9px] text-[#9a9a9a]">Tracking</div>
+                  <div class="absolute left-[492px] top-[456px] h-[150px] w-[118px] overflow-hidden rounded-[10px] p-2 text-[#1c1917]" style="background: linear-gradient(170deg, #fed7aa, #fff7ed 60%)"><b class="text-[7px]">On the way</b><svg class="mt-2" width="100" height="60" viewBox="0 0 100 60"><path d="M6 50C30 50 30 12 56 18S84 40 94 10" stroke="#f97316" stroke-width="2" stroke-dasharray="4 3" fill="none" /><circle cx="94" cy="10" r="4" fill="#1c1917" /></svg></div>
+                  <!-- toolbar -->
+                  <div class="absolute top-[514px] left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-[12px] bg-[#2c2c2c] p-[5px] shadow-[0_8px_24px_rgba(0,0,0,0.5)] ring-1 ring-[#3a3a3a]">
+                    <span class="flex h-[26px] w-[26px] items-center justify-center rounded-[7px] bg-[#0d99ff]"><svg class="h-[14px] w-[14px] text-white"><use href="#i-move" /></svg></span>
+                    <span class="flex h-[26px] w-[26px] items-center justify-center"><svg class="ui-ico text-[#ddd]"><use href="#i-frame" /></svg></span>
+                    <span class="flex h-[26px] w-[26px] items-center justify-center"><svg class="ui-ico text-[#ddd]"><use href="#i-rect" /></svg></span>
+                    <span class="flex h-[26px] w-[26px] items-center justify-center"><svg class="ui-ico text-[#ddd]"><use href="#i-pen" /></svg></span>
+                    <span class="flex h-[26px] w-[26px] items-center justify-center"><svg class="ui-ico text-[#ddd]"><use href="#i-text" /></svg></span>
+                    <span class="flex h-[26px] w-[26px] items-center justify-center"><svg class="ui-ico text-[#ddd]"><use href="#i-spec" /></svg></span>
+                    <span class="flex h-[26px] w-[26px] items-center justify-center"><svg class="ui-ico text-[#ddd]"><use href="#i-comment" /></svg></span>
+                    <span class="flex h-[26px] w-[26px] items-center justify-center"><svg class="ui-ico text-[#ddd]"><use href="#i-actions" /></svg></span>
+                    <span class="mx-1 h-[16px] w-px bg-[#444]"></span>
+                    <span class="flex h-[26px] w-[26px] items-center justify-center"><svg class="ui-ico text-[#ddd]"><use href="#i-guide" /></svg></span>
+                  </div>
+                </div>
+
+                <!-- inspector -->
+                <div class="ui-panel flex flex-col border-l border-[#2e2e2e]">
+                  <div class="flex h-[42px] items-center border-b border-[#2e2e2e] px-3 font-semibold text-[12px]">Rectangle<svg class="ui-ico ml-auto"><use href="#i-side" /></svg></div>
+                  <div class="border-b border-[#2e2e2e] px-3 py-3">
+                    <div class="font-semibold text-[11.5px]">Position</div>
+                    <div class="ui-label mt-2.5">Alignment</div>
+                    <div class="mt-1.5 flex gap-2"><div class="flex gap-1.5 rounded-[5px] bg-[#2b2b2b] px-2 py-1"><svg class="ui-ico"><use href="#i-al-l" /></svg><svg class="ui-ico"><use href="#i-al-c" /></svg><svg class="ui-ico"><use href="#i-al-r" /></svg></div><div class="flex gap-1.5 rounded-[5px] bg-[#2b2b2b] px-2 py-1"><svg class="ui-ico"><use href="#i-al-t" /></svg><svg class="ui-ico"><use href="#i-al-m" /></svg><svg class="ui-ico"><use href="#i-al-b" /></svg></div></div>
+                    <div class="ui-label mt-3">Position</div>
+                    <div class="mt-1.5 grid grid-cols-2 gap-2"><div class="ui-field"><span class="text-[#777]">X</span>56</div><div class="ui-field"><span class="text-[#777]">Y</span>404</div></div>
+                    <div class="ui-label mt-3">Rotation</div>
+                    <div class="mt-1.5 grid grid-cols-2 gap-2"><div class="ui-field"><span class="text-[#777]">∟</span>0°</div></div>
+                  </div>
+                  <div class="border-b border-[#2e2e2e] px-3 py-3">
+                    <div class="font-semibold text-[11.5px]">Layout</div>
+                    <div class="ui-label mt-2.5">Dimensions</div>
+                    <div class="mt-1.5 grid grid-cols-2 gap-2"><div class="ui-field"><span class="text-[#777]">W</span>196</div><div class="ui-field"><span class="text-[#777]">H</span>58</div></div>
+                  </div>
+                  <div class="border-b border-[#2e2e2e] px-3 py-3">
+                    <div class="flex items-center font-semibold text-[11.5px]">Appearance<svg class="ui-ico ml-auto"><use href="#i-eye" /></svg></div>
+                    <div class="mt-2.5 grid grid-cols-2 gap-2"><div><div class="ui-label">Opacity</div><div class="ui-field mt-1.5">100%</div></div><div><div class="ui-label">Corner radius</div><div class="ui-field mt-1.5">18</div></div></div>
+                  </div>
+                  <div class="border-b border-[#2e2e2e] px-3 py-3">
+                    <div class="flex items-center font-semibold text-[11.5px]">Fill<svg class="ui-ico ml-auto"><use href="#i-actions" /></svg><svg class="ui-ico ml-2"><use href="#i-plus" /></svg></div>
+                    <div class="mt-2.5 flex items-center gap-2"><div class="ui-field flex-1"><span class="h-[12px] w-[12px] rounded-[3px] bg-[#f97316]"></span>F97316</div><div class="ui-field w-[46px]">100%</div><svg class="ui-ico"><use href="#i-eye" /></svg><svg class="ui-ico"><use href="#i-minus" /></svg></div>
+                    <div class="mt-2 flex items-center gap-1.5 text-[10px] text-[#9a9a9a]"><span class="h-[8px] w-[8px] rounded-full bg-[#f97316]"></span>Sunrise / Orange</div>
+                  </div>
+                  <div class="flex items-center border-b border-[#2e2e2e] px-3 py-3 font-semibold text-[11.5px]">Stroke<svg class="ui-ico ml-auto"><use href="#i-plus" /></svg></div>
+                  <div class="flex items-center border-b border-[#2e2e2e] px-3 py-3 font-semibold text-[11.5px]">Effects<svg class="ui-ico ml-auto"><use href="#i-plus" /></svg></div>
+                  <div class="px-3 py-3"><div class="font-semibold text-[11.5px]">Export</div><div class="mt-2 grid grid-cols-4 gap-1.5"><div class="ui-field justify-center">2x</div><div class="ui-field justify-center">PNG</div><div class="ui-field justify-center">SVG</div><div class="ui-field justify-center">PDF</div></div></div>
+                </div>
+              </div>
+              <div class="pointer-events-none absolute inset-x-0 bottom-0 h-[110px] bg-gradient-to-b from-transparent to-[#090a0c]"></div>
             </div>
-            <div class="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-ink to-transparent"></div>
           </div>
+          <div class="top-edge"></div>
         </div>
-
-        <div class="relative mx-auto max-w-6xl px-5 pb-20 pt-8">
-          <p class="text-sm text-white/60">Everything you need to design with an AI next to you:</p>
-          <p class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[15px] font-semibold">
-            <span>Spec nodes</span><span class="text-white/30">·</span><span>Guidelines</span><span class="text-white/30">·</span><span>AI cursor</span><span class="text-white/30">·</span><span>MCP server</span><span class="text-white/30">·</span><span>Vector editing</span><span class="text-white/30">·</span><span>Plugins</span>
-          </p>
-        </div>
-      </section>
-
-      <!-- ================================================================ features -->
-      <section id="features" class="bg-[#f6f6f7] py-28 text-ink">
-        <div class="mx-auto max-w-6xl px-5">
-          <h2 class="display reveal max-w-2xl text-5xl sm:text-6xl">A design editor you already know how to use</h2>
-          <p class="reveal mt-6 max-w-2xl text-lg leading-snug text-ink/70" style="--d: 0.1s">The same panels, tools and shortcuts as Figma, running on your own machine. Plus a few things an online editor cannot do.</p>
-
-          <div class="mt-14 grid gap-3 md:grid-cols-6">
-            <!-- spec nodes -->
-            <article class="card reveal md:col-span-4">
-              <div class="card-art">
-                <svg viewBox="0 0 640 260" class="h-full w-full" preserveAspectRatio="xMidYMid meet">
-                  <defs><radialGradient id="g-dot" cx="35%" cy="30%"><stop offset="0" stop-color="#ffd9b0" /><stop offset="0.6" stop-color="#f97316" /></radialGradient></defs>
-                  <path class="wire" stroke="#f97316" d="M120 130 C 180 130, 190 130, 250 130" />
-                  <path class="wire d2" stroke="#0c8ce9" d="M410 130 C 450 130, 460 80, 500 80" />
-                  <path class="wire d3" stroke="#0c8ce9" d="M410 130 C 450 130, 460 185, 500 185" />
-                  <circle class="pulse-dot" cx="90" cy="130" r="44" fill="#f97316" opacity="0.25" style="transform-origin: 90px 130px" />
-                  <circle cx="90" cy="130" r="27" fill="url(#g-dot)" stroke="#fff" stroke-opacity="0.7" stroke-width="2" />
-                  <rect x="250" y="78" width="160" height="104" rx="12" fill="#2c2c2c" stroke="#4a4a4a" />
-                  <text x="264" y="98" fill="#7cb7ff" font-size="11" font-weight="600">Spec</text>
-                  <rect x="364" y="86" width="36" height="15" rx="7.5" fill="#f2994a" /><text x="382" y="97" fill="#fff" font-size="8" font-weight="700" text-anchor="middle">TODO</text>
-                  <rect x="256" y="106" width="148" height="70" rx="6" fill="#fff" />
-                  <text x="266" y="126" fill="#1e1e1e" font-size="13" font-weight="700">Landing hero</text>
-                  <rect x="266" y="136" width="120" height="5" rx="2.5" fill="#d9d9d9" /><rect x="266" y="148" width="96" height="5" rx="2.5" fill="#d9d9d9" /><rect x="266" y="160" width="70" height="5" rx="2.5" fill="#d9d9d9" />
-                  <g><rect x="500" y="44" width="110" height="72" rx="10" fill="#fff7ed" /><path d="M500 54a10 10 0 0110-10h90a10 10 0 0110 10v8H500z" fill="#f97316" /><rect x="510" y="72" width="60" height="6" rx="3" fill="#1c1917" /><rect x="510" y="86" width="84" height="5" rx="2.5" fill="#d6d3d1" /><rect x="510" y="98" width="42" height="12" rx="5" fill="#f97316" /></g>
-                  <g><rect x="500" y="149" width="110" height="72" rx="10" fill="#fff7ed" /><path d="M500 159a10 10 0 0110-10h90a10 10 0 0110 10v8H500z" fill="#f97316" /><rect x="510" y="177" width="60" height="6" rx="3" fill="#1c1917" /><rect x="510" y="191" width="84" height="5" rx="2.5" fill="#d6d3d1" /></g>
-                </svg>
-              </div>
-              <div class="card-fade"></div>
-              <p class="card-text"><b>Spec nodes.</b> A task card with ports: materials come in on the left, the frames to work in go out on the right. The AI knows what to build and where.</p>
-            </article>
-
-            <!-- AI cursor -->
-            <article class="card reveal md:col-span-2" style="--d: 0.08s">
-              <div class="card-art" id="card-cursor">
-                <div class="absolute left-[14%] top-[22%] h-10 w-28 rounded-xl bg-warm"></div>
-                <div class="absolute left-[14%] top-[48%] h-16 w-40 rounded-xl bg-white/10"></div>
-                <div class="absolute right-[12%] top-[18%] h-24 w-24 rounded-2xl bg-gradient-to-br from-orange-400 to-amber-200"></div>
-                <div class="cur cur-ai" style="left: 40%; top: 34%">
-                  <span class="cur-glow"></span>
-                  <svg viewBox="0 0 24 24" width="26" height="26" fill="#0c8ce9" stroke-linejoin="round" stroke-linecap="round"><path d="M6.5 5.5 18.2 10.4 12.6 12.4 10.6 18Z" stroke="#fff" stroke-width="6.5" /><path d="M6.5 5.5 18.2 10.4 12.6 12.4 10.6 18Z" stroke="#0c8ce9" stroke-width="3.2" /></svg>
-                  <span class="cur-name">Claude</span>
-                </div>
-              </div>
-              <div class="card-fade"></div>
-              <p class="card-text"><b>AI cursor.</b> See which assistant is working and on which layer, live.</p>
-            </article>
-
-            <!-- vector -->
-            <article class="card reveal md:col-span-2">
-              <div class="card-art">
-                <svg viewBox="0 0 300 240" class="h-full w-full">
-                  <defs><clipPath id="blob"><path d="M40 170C60 80 120 50 165 90C200 120 235 75 270 50L270 190L40 190Z" /></clipPath></defs>
-                  <path d="M40 170C60 80 120 50 165 90C200 120 235 75 270 50L270 190L40 190Z" fill="#ea580c" opacity="0.55" />
-                  <foreignObject x="0" y="0" width="300" height="240" clip-path="url(#blob)"><div xmlns="http://www.w3.org/1999/xhtml" class="zebra" style="width: 300px; height: 240px"></div></foreignObject>
-                  <path d="M40 170C60 80 120 50 165 90C200 120 235 75 270 50L270 190L40 190Z" fill="none" stroke="#fff" stroke-width="1.5" />
-                  <path d="M118 66 L212 114" stroke="#0d99ff" />
-                  <g fill="#fff" stroke="#0d99ff" stroke-width="1.5"><rect x="113" y="61" width="8" height="8" transform="rotate(45 117 65)" /><rect x="208" y="110" width="8" height="8" transform="rotate(45 212 114)" /><circle cx="40" cy="170" r="4.5" /><circle cx="270" cy="50" r="4.5" /><circle cx="270" cy="190" r="4.5" /><circle cx="40" cy="190" r="4.5" /></g>
-                  <circle cx="165" cy="90" r="5.5" fill="#0d99ff" stroke="#fff" stroke-width="1.5" />
-                </svg>
-              </div>
-              <div class="card-fade"></div>
-              <p class="card-text"><b>Vector editing.</b> Double click, then drag points and handles. Pen, bend and paint bucket included.</p>
-            </article>
-
-            <!-- shortcuts -->
-            <article class="card reveal md:col-span-2" style="--d: 0.08s">
-              <div class="card-art flex items-center justify-center">
-                <div class="grid grid-cols-4 gap-2 font-mono text-xs text-white/80">
-                  <kbd class="col-span-2 rounded-lg border border-white/15 bg-white/10 px-3 py-3 text-center shadow-[0_0_30px_rgba(12,140,233,0.5)]">Ctrl</kbd><kbd class="rounded-lg border border-white/15 bg-white/10 px-3 py-3 text-center shadow-[0_0_30px_rgba(12,140,233,0.5)]">G</kbd><kbd class="rounded-lg border border-white/10 bg-white/5 px-3 py-3 text-center">F</kbd>
-                  <kbd class="rounded-lg border border-white/10 bg-white/5 px-3 py-3 text-center">V</kbd><kbd class="rounded-lg border border-white/10 bg-white/5 px-3 py-3 text-center">R</kbd><kbd class="col-span-2 rounded-lg border border-white/10 bg-white/5 px-3 py-3 text-center">Shift A</kbd>
-                  <kbd class="col-span-2 rounded-lg border border-white/10 bg-white/5 px-3 py-3 text-center">Alt</kbd><kbd class="rounded-lg border border-white/10 bg-white/5 px-3 py-3 text-center">P</kbd><kbd class="rounded-lg border border-white/10 bg-white/5 px-3 py-3 text-center">T</kbd>
-                </div>
-              </div>
-              <div class="card-fade"></div>
-              <p class="card-text"><b>Figma shortcuts.</b> Auto layout, components, variants, constraints, boolean operations. On any keyboard layout.</p>
-            </article>
-
-            <!-- offline -->
-            <article class="card reveal md:col-span-2" style="--d: 0.16s">
-              <div class="card-art flex items-center justify-center">
-                <div class="relative flex h-36 w-36 items-center justify-center">
-                  <span class="pulse-dot absolute inset-0 rounded-full bg-[radial-gradient(closest-side,rgba(34,197,94,0.55),transparent)]"></span>
-                  <span class="absolute inset-5 rounded-full border border-white/15"></span>
-                  <span class="relative text-center"><span id="bytes" class="block text-5xl font-semibold tracking-tight">0</span><span class="text-xs uppercase tracking-widest text-white/60">bytes uploaded</span></span>
-                </div>
-              </div>
-              <div class="card-fade"></div>
-              <p class="card-text"><b>Yours, on your disk.</b> Projects are local SQLite files. The MCP server listens on localhost only.</p>
-            </article>
-          </div>
-        </div>
-      </section>
-
-      <!-- ================================================================ AI over MCP -->
-      <section id="ai" class="relative overflow-hidden bg-ink py-28">
-        <div class="mx-auto max-w-5xl px-5">
-          <h2 class="display reveal text-5xl sm:text-7xl">Works with your AI.<br />On your canvas.</h2>
-          <p class="reveal mt-6 max-w-xl text-lg leading-snug text-white/75" style="--d: 0.1s">A built-in MCP server with 60+ tools. Claude Desktop, Claude Code, Cursor, VS Code and LM Studio connect to the running app and draw, read and fix the design. Every step is an ordinary, undoable edit.</p>
-          <div class="reveal mt-9 flex max-w-xl items-center gap-3 rounded-xl border border-white/15 bg-white/5 p-2 pl-4 font-mono text-sm" style="--d: 0.15s">
-            <span class="text-white/45">MCP</span>
-            <code id="mcp-url" class="flex-1 truncate">http://127.0.0.1:7331/mcp</code>
-            <button id="copy" class="rounded-lg bg-white px-3 py-1.5 font-sans text-xs font-bold uppercase tracking-wider text-ink transition hover:bg-brand hover:text-white">Copy</button>
-          </div>
-          <div class="glow-frame reveal mt-20" style="--d: 0.1s">
-            <img src="assets/img/tandem.jpg" alt="Claude writes the headline of a landing page while the user drags a card next to it" loading="lazy" width="2400" height="1350" />
-          </div>
-          <div class="mt-16 grid gap-10 sm:grid-cols-3">
-            <div class="reveal"><h3 class="text-xl font-semibold tracking-tight">It sees the canvas</h3><p class="mt-2 text-white/65">Screenshots and exports of any layer, so the assistant checks its own work.</p></div>
-            <div class="reveal" style="--d: 0.08s"><h3 class="text-xl font-semibold tracking-tight">You work next to it</h3><p class="mt-2 text-white/65">Keep dragging, editing and undoing while the AI builds the other half.</p></div>
-            <div class="reveal" style="--d: 0.16s"><h3 class="text-xl font-semibold tracking-tight">Same API for plugins</h3><p class="mt-2 text-white/65">Sandboxed plugins use the very commands the AI uses. Write one in a single HTML file.</p></div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ================================================================ guidelines -->
-      <section id="guidelines" class="bg-[#f6f6f7] py-28 text-ink">
-        <div class="mx-auto max-w-5xl px-5">
-          <h2 class="display reveal text-5xl sm:text-7xl">One guideline.<br />Every project.</h2>
-          <p class="reveal mt-6 max-w-xl text-lg leading-snug text-ink/70" style="--d: 0.1s">Colours with roles, fonts, logos and rules live in a library shared by all your projects. Wire a guideline to ten screens, change it once, and all ten follow.</p>
-          <div class="reveal mt-14 overflow-hidden rounded-2xl shadow-[0_40px_120px_-30px_rgba(60,40,160,0.45)] ring-1 ring-black/10" style="--d: 0.1s">
-            <img src="assets/img/guideline.jpg" alt="A guideline wired to ten screens; all of them took its new colour" loading="lazy" width="2400" height="1350" class="block w-full" />
-          </div>
-          <div class="mt-14 grid gap-10 sm:grid-cols-3">
-            <div class="reveal"><h3 class="text-2xl font-semibold tracking-tight">Linked<br />styles</h3><p class="mt-2 text-ink/65">Guideline colours and fonts become styles of the document.</p></div>
-            <div class="reveal" style="--d: 0.08s"><h3 class="text-2xl font-semibold tracking-tight">Rules<br />for AI</h3><p class="mt-2 text-ink/65">The assistant reads the guideline before it touches a wired frame.</p></div>
-            <div class="reveal" style="--d: 0.16s"><h3 class="text-2xl font-semibold tracking-tight">One file<br />to share</h3><p class="mt-2 text-ink/65">Export a brand as a single <code class="rounded bg-black/5 px-1.5 py-0.5 text-sm">.gguide</code> file and import it anywhere.</p></div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ================================================================ Figma -->
-      <section id="figma" class="bg-ink py-28">
-        <div class="mx-auto grid max-w-6xl items-center gap-14 px-5 lg:grid-cols-2">
-          <div>
-            <h2 class="display reveal text-5xl sm:text-6xl">Copy to Figma.<br />And back.</h2>
-            <p class="reveal mt-6 max-w-md text-lg leading-snug text-white/75" style="--d: 0.1s">Not a competitor, a companion. Work offline, then paste the layers into Figma. Or copy from Figma and keep going on a plane.</p>
-            <ul class="reveal mt-8 space-y-3 text-white/80" style="--d: 0.15s">
-              <li class="flex gap-3"><span class="mt-2 h-1.5 w-1.5 flex-none rounded-full bg-brand"></span>Layers, effects and typography survive the trip, images included</li>
-              <li class="flex gap-3"><span class="mt-2 h-1.5 w-1.5 flex-none rounded-full bg-brand"></span>Export to PNG, SVG and vector PDF with real text</li>
-              <li class="flex gap-3"><span class="mt-2 h-1.5 w-1.5 flex-none rounded-full bg-brand"></span>The fill popover, pen tool and point editing work the way you expect</li>
-            </ul>
-          </div>
-          <div class="glow-frame reveal" style="--d: 0.1s">
-            <img src="assets/img/picker.jpg" alt="The fill popover of Gigma next to a button it recolours" loading="lazy" width="2400" height="1350" />
-          </div>
-        </div>
-      </section>
-
-      <!-- ================================================================ video -->
-      <section id="video" class="bg-[#f6f6f7] py-28 text-ink">
-        <div class="mx-auto max-w-5xl px-5 text-center">
-          <h2 class="display reveal text-5xl sm:text-6xl">See it in one minute</h2>
-          <p class="reveal mx-auto mt-5 max-w-xl text-lg text-ink/70" style="--d: 0.1s">A user and Claude build a landing page together. The interface in the video is the real app.</p>
-          <div class="reveal mt-12 overflow-hidden rounded-2xl bg-black shadow-[0_40px_120px_-30px_rgba(0,0,0,0.6)]" style="--d: 0.1s">
-            <video controls preload="none" poster="assets/img/poster.jpg" class="block w-full" width="1280" height="720">
-              <source src="assets/gigma-promo.mp4" type="video/mp4" />
-            </video>
-          </div>
-        </div>
-      </section>
-
-      <!-- ================================================================ the last word -->
-      <section class="relative overflow-hidden bg-ink py-32">
-        <div class="pointer-events-none absolute -left-40 top-10 h-[640px] w-[640px] rounded-full bg-[radial-gradient(closest-side,rgba(249,115,22,0.35),transparent)]"></div>
-        <div class="pointer-events-none absolute -right-40 bottom-0 h-[640px] w-[640px] rounded-full bg-[radial-gradient(closest-side,rgba(12,140,233,0.4),transparent)]"></div>
-        <div class="relative mx-auto max-w-5xl px-5">
-          <h2 class="display reveal fade-text text-6xl sm:text-8xl">Yours. Local. Open.</h2>
-          <div id="stats" class="mt-14 grid grid-cols-2 gap-x-8 gap-y-10 sm:grid-cols-4">
-            <div class="reveal"><div class="text-5xl font-semibold tracking-tight text-brand sm:text-6xl"><span data-count="60">0</span>+</div><p class="mt-2 text-white/65">MCP tools for AI</p></div>
-            <div class="reveal" style="--d: 0.08s"><div class="text-5xl font-semibold tracking-tight text-green-400 sm:text-6xl"><span data-count="100">0</span>%</div><p class="mt-2 text-white/65">offline</p></div>
-            <div class="reveal" style="--d: 0.16s"><div class="text-5xl font-semibold tracking-tight text-warm sm:text-6xl">0</div><p class="mt-2 text-white/65">accounts, subscriptions, clouds</p></div>
-            <div class="reveal" style="--d: 0.24s"><div class="text-5xl font-semibold tracking-tight text-violet sm:text-6xl">MIT</div><p class="mt-2 text-white/65">open source</p></div>
-          </div>
-          <div class="reveal mt-16 flex flex-wrap items-center gap-5">
-            <a href="https://github.com/A01L/gigma/releases/latest" class="cta">Download for Windows</a>
-            <a href="https://github.com/A01L/gigma" class="pill h-12 px-6 text-xs">Source on GitHub</a>
-            <span class="text-sm text-white/50">macOS: build from source</span>
-          </div>
-        </div>
-      </section>
-    </main>
-
-    <footer class="border-t border-white/10 bg-ink py-10 text-sm text-white/50">
-      <div class="mx-auto flex max-w-6xl flex-wrap items-center gap-x-8 gap-y-3 px-5">
-        <span class="flex items-center gap-2 font-semibold text-white"><img src="assets/img/icon.png" alt="" class="h-5 w-5 rounded" />Gigma</span>
-        <a href="https://github.com/A01L/gigma" class="transition hover:text-white">GitHub</a>
-        <a href="https://github.com/A01L/gigma/releases" class="transition hover:text-white">Releases</a>
-        <a href="https://github.com/A01L/gigma/blob/main/docs/PLUGINS.md" class="transition hover:text-white">Plugin docs</a>
-        <a href="https://github.com/A01L/gigma/blob/main/LICENSE" class="transition hover:text-white">MIT License</a>
-        <span class="ml-auto">Made so that design does not depend on the internet</span>
       </div>
-    </footer>
+
+      <div class="relative mx-auto max-w-[1216px] px-6 pb-[110px] pt-12">
+        <p class="text-[15px] text-white/70">Everything you need to design with AI:</p>
+        <p class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[16px] font-semibold">Vector editing<span class="text-white/40">·</span>Auto layout<span class="text-white/40">·</span>Components<span class="text-white/40">·</span>Spec nodes<span class="text-white/40">·</span>Guidelines<span class="text-white/40">·</span>MCP server</p>
+      </div>
+    </section>
+
+    <!-- ================================================================ built for flow -->
+    <section id="features" class="relative overflow-hidden bg-paper pb-[120px] pt-[150px] text-[#0b0b0e]">
+      <div class="pointer-events-none absolute -left-40 top-[40%] h-[700px] w-[700px] rounded-full bg-[radial-gradient(closest-side,rgba(150,170,255,0.22),transparent)]"></div>
+      <div class="pointer-events-none absolute -right-40 top-[20%] h-[700px] w-[700px] rounded-full bg-[radial-gradient(closest-side,rgba(255,190,150,0.25),transparent)]"></div>
+      <div class="relative mx-auto max-w-[1216px] px-6">
+        <h2 class="h-display reveal text-[52px] sm:text-[80px] lg:text-[88px]">Built for flow</h2>
+        <p class="reveal lead mt-5 max-w-[680px] text-[#3f3f46]" style="--d: 0.08s">Gigma is a vector design editor with auto layout, components, styles and a command palette, tuned to stay fast on your own machine, with no account and no network.</p>
+
+        <div class="mt-12 grid gap-4 md:grid-cols-[356fr_640fr]">
+          <!-- actions palette -->
+          <article class="tile reveal h-[420px]">
+            <div class="absolute left-1/2 top-[-60px] h-[300px] w-[360px] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(255,120,40,0.85),rgba(255,90,20,0.25)_55%,transparent)] blur-[10px]"></div>
+            <div class="dots-warm mask-radial absolute left-1/2 top-[-40px] h-[260px] w-[420px] -translate-x-1/2 opacity-70"></div>
+            <div class="absolute inset-x-6 bottom-[100px] grid grid-cols-10 gap-[5px] opacity-40">
+              <script>document.currentScript.parentNode.innerHTML = 'QWERTYUIOPASDFGHJKL;ZXCVBNM,./'.split('').map((k) => `<span class="flex h-[26px] items-center justify-center rounded-[5px] border border-white/15 bg-white/[0.04] text-[9px] text-white/60">${k}</span>`).join('')</script>
+            </div>
+            <div class="absolute left-1/2 top-[86px] w-[250px] -translate-x-1/2 overflow-hidden rounded-[10px] border border-white/15 bg-[#1b1b1f]/95 shadow-[0_20px_50px_rgba(0,0,0,0.6)]">
+              <div class="flex items-center gap-2 border-b border-white/10 px-3 py-2.5 text-[12px] text-white/90"><svg class="h-3.5 w-3.5 text-white/60"><use href="#i-search" /></svg>auto<span class="caret h-[13px] text-white"></span></div>
+              <div class="px-3 pb-1 pt-2 text-[9px] uppercase tracking-wider text-white/40">Commands</div>
+              <div class="mx-1.5 flex items-center rounded-[6px] bg-white/10 px-2 py-[7px] text-[11.5px]">Add auto layout<span class="ml-auto rounded bg-white/10 px-1.5 text-[9px] text-white/70">Shift A</span></div>
+              <div class="mx-1.5 flex items-center px-2 py-[7px] text-[11.5px] text-white/70">Remove auto layout<span class="ml-auto rounded bg-white/5 px-1.5 text-[9px] text-white/40">Ctrl Shift A</span></div>
+              <div class="mx-1.5 mb-1.5 flex items-center px-2 py-[7px] text-[11.5px] text-white/70">Layers: Autoplay banner<span class="ml-auto rounded bg-white/5 px-1.5 text-[9px] text-white/40">Frame</span></div>
+            </div>
+            <div class="tile-shade"></div>
+            <p class="tile-cap"><b>Actions palette.</b> Ctrl+K reaches every tool, command and layer by name.</p>
+          </article>
+
+          <!-- components -->
+          <article class="tile reveal h-[420px]" style="--d: 0.06s">
+            <div class="absolute left-1/2 top-[-120px] h-[340px] w-[520px] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(120,140,255,0.55),rgba(150,110,255,0.2)_55%,transparent)] blur-[16px]"></div>
+            <div class="absolute left-[3%] top-[100px] h-[190px] w-[200px] rounded-[12px] border border-white/10 bg-white/[0.04] p-3 opacity-60 blur-[0.5px]">
+              <div class="flex items-center text-[11px] text-white/60">Card / Product<span class="ml-auto flex h-4 w-4 items-center justify-center rounded-full border border-white/30 text-[8px]">✓</span></div>
+              <div class="mt-3 h-[70px] rounded-[8px] bg-white/[0.06]"></div>
+              <div class="mt-2 h-2 w-[70%] rounded bg-white/10"></div><div class="mt-1.5 h-2 w-[45%] rounded bg-white/10"></div>
+            </div>
+            <div class="absolute right-[3%] top-[100px] h-[190px] w-[200px] rounded-[12px] border border-white/10 bg-white/[0.04] p-3 opacity-60">
+              <div class="text-[13px] font-semibold text-white/40">Create component</div>
+              <div class="mt-3 h-[70px] rounded-[8px] border border-white/10 bg-black/30 p-2 text-[10px] text-white/30">Name the component</div>
+              <div class="mt-3 flex items-center gap-2"><span class="rounded-full bg-[#2f6bff]/60 px-2 py-[2px] text-[9px]">UI kit</span><span class="h-4 w-4 rounded-full bg-gradient-to-br from-orange-300 to-rose-400"></span></div>
+            </div>
+            <div class="absolute left-1/2 top-[48px] w-[236px] -translate-x-1/2 rounded-[14px] bg-gradient-to-b from-[#f5f3ff] to-[#e9e9f2] p-2.5 text-[#18181b] shadow-[0_30px_60px_rgba(0,0,0,0.55)]">
+              <div class="flex items-center px-1.5 pb-2 pt-1 text-[15px] font-semibold">Button<span class="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-white text-[13px] text-[#8b5cf6] shadow">+</span></div>
+              <div class="rounded-[9px] bg-white p-2.5 shadow-sm">
+                <div class="flex items-center"><span class="rounded bg-[#ede9fe] px-1.5 py-[1px] text-[9px] font-semibold text-[#7c3aed]">State=Default</span><span class="ml-auto text-[13px] text-[#a1a1aa]">···</span></div>
+                <div class="mt-2 flex h-[30px] items-center justify-center rounded-[8px] bg-[#f97316] text-[11px] font-semibold text-white">Order breakfast</div>
+                <div class="mt-2 flex items-center gap-3 text-[9px] text-[#71717a]"><span>◷ 12 instances</span><span>⬡ Linked</span></div>
+              </div>
+              <div class="mt-2 rounded-[9px] bg-white p-2.5 shadow-sm">
+                <div class="flex items-center"><span class="rounded bg-[#fee2e2] px-1.5 py-[1px] text-[9px] font-semibold text-[#dc2626]">State=Hover</span><span class="ml-auto text-[13px] text-[#a1a1aa]">···</span></div>
+                <div class="mt-2 flex h-[30px] items-center justify-center rounded-[8px] bg-[#ea580c] text-[11px] font-semibold text-white">Order breakfast</div>
+              </div>
+              <div class="mt-2 h-[30px] rounded-[9px] bg-white/80 p-2"><span class="rounded bg-[#dcfce7] px-1.5 py-[1px] text-[9px] font-semibold text-[#16a34a]">State=Pressed</span></div>
+            </div>
+            <div class="tile-shade"></div>
+            <p class="tile-cap"><b>Components and variants.</b> Change the main component, and every instance follows. Overrides stay.</p>
+          </article>
+
+        </div>
+        <div class="mt-4 grid gap-4 md:grid-cols-[640fr_356fr]">
+          <article class="tile reveal h-[420px]">
+            <div class="absolute left-[30%] top-[-80px] h-[320px] w-[520px] rounded-full bg-[radial-gradient(closest-side,rgba(150,120,255,0.35),transparent)] blur-[10px]"></div>
+            <div class="absolute left-5 top-[34px] flex flex-col gap-[33px] text-[10px] text-white/30"><span>0</span><span>16</span><span>32</span><span>48</span><span>64</span><span>80</span><span>96</span></div>
+            <div class="absolute left-[70px] right-0 top-[40px] flex flex-col gap-[42px]"><span class="h-px bg-white/5"></span><span class="h-px bg-white/5"></span><span class="h-px bg-white/5"></span><span class="h-px bg-white/5"></span><span class="h-px bg-white/5"></span><span class="h-px bg-white/5"></span></div>
+            <div class="absolute left-[19%] top-[36px] w-[236px] rounded-[14px] bg-gradient-to-b from-white to-[#ececf3] p-3 text-[#18181b] shadow-[0_30px_60px_rgba(0,0,0,0.6)]">
+              <div class="flex items-center text-[14px] font-semibold">Card / Product<span class="ml-auto text-[13px] text-[#a1a1aa]">···</span></div>
+              <div class="mt-2 flex items-center gap-2 text-[10px] text-[#52525b]"><span class="rounded bg-[#f4f4f5] px-1.5 py-[2px]">↓ Vertical</span><span class="rounded bg-[#f4f4f5] px-1.5 py-[2px]">Gap 16</span><span class="rounded bg-[#f4f4f5] px-1.5 py-[2px]">Pad 24</span></div>
+              <div class="relative mt-3 rounded-[10px] border border-dashed border-[#c4b5fd] bg-[#faf5ff] p-[10px]">
+                <div class="h-[54px] rounded-[7px] bg-gradient-to-br from-orange-300 to-amber-100"></div>
+                <div class="my-[5px] h-[6px] rounded-sm bg-[#f9a8d4]/70"></div>
+                <div class="h-[9px] w-[70%] rounded bg-[#27272a]"></div>
+                <div class="my-[5px] h-[6px] rounded-sm bg-[#f9a8d4]/70"></div>
+                <div class="h-[7px] w-[88%] rounded bg-[#d4d4d8]"></div>
+                <div class="my-[5px] h-[6px] rounded-sm bg-[#f9a8d4]/70"></div>
+                <div class="flex h-[24px] items-center justify-center rounded-[7px] bg-[#f97316] text-[10px] font-semibold text-white">Add to box</div>
+              </div>
+              <div class="mt-2.5 flex items-center justify-between text-[10px] text-[#71717a]"><span>W Fill</span><span>H Hug</span><span class="rounded-full bg-[#ede9fe] px-2 text-[#7c3aed]">Wrap</span></div>
+            </div>
+            <div class="absolute left-[60%] top-[118px] hidden sm:block w-[150px] rounded-[10px] border-l-[3px] border-[#f472b6] bg-white/[0.07] p-3 text-[12px] text-white/90 shadow-[0_10px_30px_rgba(0,0,0,0.4)]">Hug contents<div class="mt-1 text-[10px] text-white/50">Height follows the children</div><div class="mt-2 flex -space-x-1.5"><span class="h-4 w-4 rounded-full bg-orange-300 ring-2 ring-[#1a1a1f]"></span><span class="h-4 w-4 rounded-full bg-violet-300 ring-2 ring-[#1a1a1f]"></span><span class="h-4 w-4 rounded-full bg-sky-300 ring-2 ring-[#1a1a1f]"></span></div></div>
+            <div class="absolute left-[67%] top-[24px] hidden sm:block w-[110px] rounded-[10px] border-l-[3px] border-[#6366f1]/60 bg-white/[0.04] p-2 text-[11px] text-white/45">Fill container<div class="text-[9px] text-white/30">W 100%</div></div>
+            <div class="absolute left-[58%] top-[262px] hidden sm:block w-[130px] rounded-[10px] border border-white/10 bg-white/[0.03] p-2 text-[11px] text-white/45">Constraints<div class="text-[9px] text-white/30">Left and right</div></div>
+            <div class="absolute right-[3%] top-[150px] hidden sm:block h-[80px] w-[60px] rounded-[10px] border-l-[3px] border-[#6366f1]/50 bg-white/[0.04] p-2 text-[10px] text-white/30">Grid</div>
+            <div class="tile-shade"></div>
+            <p class="tile-cap"><b>Auto layout.</b> Frames arrange, hug and fill by themselves, with wrapping and absolute children.</p>
+          </article>
+          <article class="tile reveal h-[420px]" style="--d: 0.06s">
+            <div class="vortex b left-1/2 top-[44%] h-[420px] w-[420px] -translate-x-1/2 -translate-y-1/2"></div>
+            <div class="vortex left-1/2 top-[44%] h-[300px] w-[300px] -translate-x-1/2 -translate-y-1/2"></div>
+            <div class="dots mask-radial absolute left-1/2 top-[44%] h-[360px] w-[360px] -translate-x-1/2 -translate-y-1/2 opacity-25"></div>
+            <div class="absolute left-1/2 top-[44%] flex h-[96px] w-[96px] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-[#0b0b0e] shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_10px_40px_rgba(0,0,0,0.8)]">
+              <div class="cur cur-ai relative" style="position: relative; left: -2px; top: -2px; width: 34px; height: 34px"><span class="halo"></span><svg width="34" height="34"><use href="#a-ai" /></svg></div>
+              <span class="absolute right-[16px] top-[16px] flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#ff4d6d] px-1 text-[10px] font-bold">2</span>
+            </div>
+            <div class="tile-shade"></div>
+            <p class="tile-cap"><b>AI cursors.</b> See which assistant is working and on which layer, live.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================ work together -->
+    <section id="together" class="relative overflow-hidden bg-paper pb-[130px] pt-[90px] text-[#0b0b0e]">
+      <div class="pointer-events-none absolute inset-x-0 top-[260px] h-[760px]">
+        <!-- the glass wall -->
+        <div class="beam-white left-[2%] top-[110px] h-[5px] w-[30%]"></div>
+        <div class="beam-white left-[18%] top-[0px] h-[560px] w-[5px]"></div>
+        <div class="beam-white left-[3%] top-[380px] h-[5px] w-[27%]"></div>
+        <div class="beam-white left-[66%] top-[60px] h-[5px] w-[34%]"></div>
+        <div class="beam-white left-[83%] top-[-80px] h-[600px] w-[5px]"></div>
+        <div class="beam-white left-[68%] top-[340px] h-[5px] w-[30%]"></div>
+        <div class="glass left-[3%] top-[130px] hidden h-[230px] w-[14%] xl:block"><div class="glow"></div><div class="rings"></div><div class="absolute inset-x-0 top-[38%] text-center text-[20px] font-medium text-white drop-shadow">Claude</div><div class="absolute inset-x-0 top-[56%] flex justify-center -space-x-1.5"><span class="h-6 w-6 rounded-full bg-[#0c8ce9] ring-2 ring-white"></span><span class="h-6 w-6 rounded-full bg-[#f97316] ring-2 ring-white"></span></div></div>
+        <div class="glass left-[19%] top-[130px] hidden h-[230px] w-[12%] xl:block"><div class="glow"></div><div class="rings"></div><div class="absolute inset-x-0 top-[34%] text-center text-[10px] text-white/90">Started 2 min ago</div><div class="absolute inset-x-0 top-[44%] text-center text-[20px] font-medium text-white drop-shadow">Landing</div></div>
+        <div class="glass left-[3%] top-[400px] hidden h-[200px] w-[28%] opacity-60 xl:block"><div class="glow"></div><div class="absolute inset-x-0 top-[44%] text-center text-[18px] text-white/80">Checkout flow</div></div>
+        <div class="glass left-[69%] top-[80px] hidden h-[240px] w-[13%] xl:block"><div class="glow"></div><div class="rings"></div><div class="absolute inset-x-0 top-[38%] text-center text-[20px] font-medium text-white drop-shadow">Codex</div><div class="absolute inset-x-0 top-[56%] flex justify-center -space-x-1.5"><span class="h-6 w-6 rounded-full bg-[#a98bff] ring-2 ring-white"></span></div></div>
+        <div class="glass left-[84.5%] top-[80px] hidden h-[240px] w-[13%] xl:block"><div class="glow"></div><div class="rings"></div><div class="absolute inset-x-0 top-[38%] text-center text-[20px] font-medium text-white drop-shadow">Cursor</div></div>
+        <div class="glass left-[69%] top-[360px] hidden h-[220px] w-[29%] xl:block"><div class="glow"></div><div class="rings"></div><div class="absolute inset-x-0 top-[42%] text-center text-[20px] font-medium text-white drop-shadow">You</div><div class="absolute inset-x-0 top-[58%] flex justify-center"><span class="h-6 w-6 rounded-full bg-[#1c1917] ring-2 ring-white"></span></div></div>
+      </div>
+      <div class="relative mx-auto max-w-[760px] px-6">
+        <h2 class="h-display reveal text-[52px] sm:text-[80px] lg:text-[88px]">Work together.<br />With your AI.</h2>
+        <p class="reveal lead mt-4 max-w-[480px] text-[17px] text-[#3f3f46]" style="--d: 0.08s">Ask an assistant to build a screen and keep designing right next to it, on the same canvas.</p>
+      </div>
+      <div class="relative mx-auto mt-10 max-w-[760px] px-6">
+        <div class="reveal rounded-[16px] bg-white/80 p-[8px] shadow-[0_40px_90px_-30px_rgba(60,90,150,0.45)] ring-1 ring-white" style="--d: 0.1s">
+          <div class="relative overflow-hidden rounded-[10px]">
+            <img src="assets/img/tandem.jpg" alt="Claude writes the headline of a landing page while the user moves a card next to it" loading="lazy" width="2400" height="1350" class="block w-full" />
+            <div class="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/55 p-1.5 pr-4 text-[12px] font-medium whitespace-nowrap text-white backdrop-blur">
+              <span class="flex -space-x-1.5"><span class="flex h-7 w-7 items-center justify-center rounded-full bg-[#1c1917] text-[10px] ring-2 ring-black/40">You</span><span class="flex h-7 w-7 items-center justify-center rounded-full bg-[#0c8ce9] text-[10px] ring-2 ring-black/40">C</span><span class="flex h-7 w-7 items-center justify-center rounded-full bg-[#a98bff] text-[10px] ring-2 ring-black/40">Cx</span></span>
+              <span class="h-2 w-2 rounded-full bg-[#22c55e] shadow-[0_0_8px_#22c55e]"></span>3 on this canvas
+            </div>
+          </div>
+        </div>
+        <p class="reveal mt-12 text-[22px] font-medium leading-[1.35] tracking-[-0.01em] text-[#27272a]">Claude, Codex or any MCP client builds while you work. Every change lands in the same history, so one Ctrl+Z takes back anything you do not like.</p>
+        <div class="mt-10 grid grid-cols-2 gap-x-6 gap-y-10 sm:grid-cols-3 sm:gap-10">
+          <div class="reveal">
+            <svg class="h-[34px] w-[34px]" viewBox="0 0 34 34"><defs><linearGradient id="g1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7dd3fc" /><stop offset="1" stop-color="#2563eb" /></linearGradient></defs><rect x="2" y="9" width="14" height="16" rx="3" fill="url(#g1)" /><circle cx="27" cy="9" r="5" fill="url(#g1)" opacity="0.7" /><circle cx="27" cy="25" r="5" fill="url(#g1)" /><path d="M16 17h4c3 0 3-8 7-8M20 17c3 0 3 8 7 8" stroke="#3b82f6" stroke-width="2" fill="none" /></svg>
+            <h3 class="mt-4 text-[22px] font-medium leading-[1.1] tracking-[-0.02em]">Spec<br />nodes</h3>
+            <p class="mt-3 text-[14px] leading-[1.45] text-[#52525b]">Wire a task to the frames it is about, and materials into it.</p>
+          </div>
+          <div class="reveal" style="--d: 0.06s">
+            <svg class="h-[34px] w-[34px]" viewBox="0 0 34 34"><defs><radialGradient id="g2" cx="35%" cy="30%"><stop offset="0" stop-color="#ffe4c4" /><stop offset="0.6" stop-color="#f97316" /><stop offset="1" stop-color="#c2410c" /></radialGradient></defs><circle cx="17" cy="17" r="13" fill="url(#g2)" /><circle cx="17" cy="17" r="15.5" fill="none" stroke="#fdba74" stroke-opacity="0.6" /></svg>
+            <h3 class="mt-4 text-[22px] font-medium leading-[1.1] tracking-[-0.02em]">Shared<br />guidelines</h3>
+            <p class="mt-3 text-[14px] leading-[1.45] text-[#52525b]">One brand for every project, read by the AI before it designs.</p>
+          </div>
+          <div class="reveal" style="--d: 0.12s">
+            <svg class="h-[34px] w-[34px]" viewBox="0 0 34 34"><defs><linearGradient id="g3" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#93c5fd" /><stop offset="1" stop-color="#6366f1" /></linearGradient></defs><circle cx="13" cy="11" r="6" fill="url(#g3)" /><path d="M2 30c0-6 5-10 11-10s11 4 11 10z" fill="url(#g3)" /><circle cx="26" cy="25" r="6" fill="#bfdbfe" /><path d="M23.5 25l2 2 3.5-4" stroke="#2563eb" stroke-width="1.8" fill="none" /></svg>
+            <h3 class="mt-4 text-[22px] font-medium leading-[1.1] tracking-[-0.02em]">Undo<br />anything</h3>
+            <p class="mt-3 text-[14px] leading-[1.45] text-[#52525b]">Every AI step is an ordinary edit in your history, never a black box.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================ MCP -->
+    <section id="ai" class="relative overflow-hidden bg-[#0b0b0d] pb-[140px] pt-[120px]">
+      <div class="relative mx-auto max-w-[830px] px-6">
+        <h2 class="h-display reveal text-[46px] sm:text-[80px] lg:text-[88px]">Connect your AI.<br />Both ways.</h2>
+        <p class="reveal mt-5 max-w-[470px] text-[16px] leading-[1.4] text-white/65" style="--d: 0.08s">Gigma runs an MCP server on your machine. The assistant reads layers, styles and screenshots, then draws back on the canvas. Use it from Claude, Cursor, VS Code or LM Studio.</p>
+        <div class="reveal mt-[90px]" style="--d: 0.1s">
+          <div class="neon">
+            <div class="neon-dots"></div>
+            <div class="fit overflow-hidden rounded-[11px]" data-w="804" data-h="470">
+              <div class="fit-inner ui">
+                <div class="absolute inset-0 grid grid-cols-[54px_1fr] bg-[#121316]">
+                  <div class="flex flex-col items-center gap-4 border-r border-white/5 py-3">
+                    <img src="assets/img/icon.png" alt="" class="h-[26px] w-[26px] rounded-[7px]" />
+                    <div class="flex h-[90px] w-[36px] flex-col items-center justify-between rounded-[10px] bg-gradient-to-b from-[#1f2a44] to-[#0d1b33] py-2 ring-1 ring-white/10"><span class="text-[11px] font-semibold">64<sup class="text-[6px]">%</sup></span><span class="h-[2px] w-[16px] rounded bg-[#0c8ce9]"></span><span class="text-[7px] font-bold">SPEC</span></div>
+                    <svg class="ui-ico mt-2"><use href="#i-comment" /></svg><svg class="ui-ico"><use href="#i-frame" /></svg><svg class="ui-ico text-white"><use href="#i-spec" /></svg><svg class="ui-ico"><use href="#i-guide" /></svg><svg class="ui-ico"><use href="#i-actions" /></svg>
+                  </div>
+                  <div class="p-3">
+                    <div class="flex items-center gap-2"><div class="flex h-[28px] flex-1 items-center gap-2 rounded-[6px] bg-white/[0.06] px-2.5 text-[11px] text-white/35"><svg class="h-3 w-3"><use href="#i-search" /></svg>Search MCP activity…</div><span class="flex h-[28px] items-center gap-1.5 rounded-[6px] bg-white/[0.06] px-2.5 text-[11px]"><svg class="h-3 w-3"><use href="#i-eye" /></svg>View</span><span class="flex h-[28px] items-center gap-1.5 rounded-[6px] bg-white/[0.06] px-2.5 text-[11px]">⚙ Show</span></div>
+                    <div class="mt-3 rounded-[8px] bg-white/[0.03] ring-1 ring-white/5">
+                      <div class="flex items-center gap-2 px-3 py-2 text-[10.5px] font-semibold"><svg class="h-2.5 w-2.5"><use href="#i-chevd" /></svg>IN PROGRESS <span class="font-normal text-white/40">· 6</span></div>
+                      <div id="mcp-rows"></div>
+                    </div>
+                    <div class="mt-3 rounded-[8px] bg-white/[0.02] opacity-45 ring-1 ring-white/5">
+                      <div class="flex items-center gap-2 px-3 py-2 text-[10.5px] font-semibold"><svg class="h-2.5 w-2.5"><use href="#i-chevd" /></svg>DONE <span class="font-normal text-white/40">· 3</span></div>
+                      <div id="mcp-done"></div>
+                    </div>
+                    <div class="mt-3 px-3 text-[10.5px] font-semibold text-white/25">› QUEUED</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="mt-[120px] grid grid-cols-2 gap-x-6 gap-y-12 sm:grid-cols-3 sm:gap-x-10 sm:gap-y-16">
+          <div class="reveal"><svg class="h-[34px] w-[34px]" viewBox="0 0 34 34"><defs><linearGradient id="h1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#93c5fd" /><stop offset="1" stop-color="#2563eb" /></linearGradient></defs><path d="M6 10h18a6 6 0 010 12H10a6 6 0 000 12h16" stroke="url(#h1)" stroke-width="4" fill="none" stroke-linecap="round" transform="translate(0 -6)" /></svg><h3 class="mt-4 text-[24px] font-medium leading-[1.1] tracking-[-0.02em]">60+ tools<br />for the AI</h3><p class="mt-3 text-[14px] leading-[1.45] text-white/50">Frames, text, shapes, styles, components, export. The whole inspector.</p></div>
+          <div class="reveal" style="--d: 0.06s"><svg class="h-[34px] w-[34px]" viewBox="0 0 34 34"><g fill="#3b82f6"><circle cx="6" cy="6" r="4" /><circle cx="17" cy="6" r="4" opacity="0.6" /><circle cx="28" cy="6" r="4" /><circle cx="6" cy="17" r="4" opacity="0.6" /><circle cx="17" cy="17" r="4" /><circle cx="28" cy="17" r="4" opacity="0.35" /><circle cx="6" cy="28" r="4" /><circle cx="17" cy="28" r="4" opacity="0.6" /><circle cx="28" cy="28" r="4" /></g></svg><h3 class="mt-4 text-[24px] font-medium leading-[1.1] tracking-[-0.02em]">It sees<br />the canvas</h3><p class="mt-3 text-[14px] leading-[1.45] text-white/50">Screenshots and exports of any layer, so it checks its own work.</p></div>
+          <div class="reveal" style="--d: 0.12s"><svg class="h-[34px] w-[34px]" viewBox="0 0 34 34"><defs><linearGradient id="h3" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#60a5fa" /><stop offset="1" stop-color="#1e3a8a" /></linearGradient></defs><path d="M3 9l14-6 14 6-14 6z" fill="#93c5fd" /><path d="M3 16l14 6 14-6" stroke="url(#h3)" stroke-width="4" fill="none" /><path d="M3 23l14 6 14-6" stroke="#1d4ed8" stroke-width="4" fill="none" /></svg><h3 class="mt-4 text-[24px] font-medium leading-[1.1] tracking-[-0.02em]">Every step<br />undoable</h3><p class="mt-3 text-[14px] leading-[1.45] text-white/50">AI edits are normal history entries. Ctrl+Z works as always.</p></div>
+          <div class="reveal"><svg class="h-[34px] w-[34px]" viewBox="0 0 34 34"><rect x="1" y="1" width="32" height="32" rx="8" fill="#1e293b" /><circle cx="17" cy="17" r="10" fill="#3b82f6" /><path d="M13 21l3-7 5-1-3 7z" fill="#fff" /></svg><h3 class="mt-4 text-[24px] font-medium leading-[1.1] tracking-[-0.02em]">Specs it<br />can follow</h3><p class="mt-3 text-[14px] leading-[1.45] text-white/50">Tasks and rules wired to frames are handed to the AI where it works.</p></div>
+          <div class="reveal" style="--d: 0.06s"><svg class="h-[34px] w-[50px]" viewBox="0 0 50 34"><path d="M2 17l12-12 12 12-12 12z" fill="#93c5fd" /><path d="M14 17l12-12 12 12-12 12z" fill="#3b82f6" opacity="0.8" /><path d="M26 17l12-12 12 12-12 12z" fill="#1d4ed8" opacity="0.55" /></svg><h3 class="mt-4 text-[24px] font-medium leading-[1.1] tracking-[-0.02em]">Guidelines<br />for the AI</h3><p class="mt-3 text-[14px] leading-[1.45] text-white/50">Exact colours, fonts and logos, with transparency, not a guess.</p></div>
+          <div class="reveal" style="--d: 0.12s"><svg class="h-[34px] w-[34px]" viewBox="0 0 34 34"><g fill="#3b82f6"><rect x="1" y="1" width="9" height="9" rx="1.5" /><rect x="12" y="1" width="9" height="9" rx="1.5" /><rect x="23" y="1" width="9" height="9" rx="1.5" fill="#93c5fd" /><rect x="1" y="12" width="9" height="9" rx="1.5" fill="#93c5fd" /><rect x="12" y="12" width="9" height="9" rx="1.5" /><rect x="23" y="12" width="9" height="9" rx="1.5" opacity="0.35" /><rect x="1" y="23" width="9" height="9" rx="1.5" opacity="0.6" /><rect x="12" y="23" width="9" height="9" rx="1.5" opacity="0.35" /></g></svg><h3 class="mt-4 text-[24px] font-medium leading-[1.1] tracking-[-0.02em]">Localhost<br />only</h3><p class="mt-3 text-[14px] leading-[1.45] text-white/50">The server listens on 127.0.0.1. Your files never leave the machine.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================ toolbox mosaic -->
+    <section id="toolbox" class="relative overflow-hidden bg-paper pb-[120px] pt-[150px] text-[#0b0b0e]">
+      <div class="side-lines pointer-events-none hidden lg:block !left-[-6%] w-[30%]"></div>
+      <div class="pointer-events-none absolute left-[10%] top-[50%] h-[600px] w-[600px] rounded-full bg-[radial-gradient(closest-side,rgba(120,150,255,0.25),transparent)]"></div>
+      <div class="pointer-events-none absolute right-[5%] top-[55%] h-[500px] w-[500px] rounded-full bg-[radial-gradient(closest-side,rgba(255,160,190,0.22),transparent)]"></div>
+      <div class="relative mx-auto max-w-[1216px] px-6">
+        <div class="mx-auto max-w-[900px] lg:pl-[160px]">
+          <h2 class="h-display reveal text-[52px] sm:text-[80px] lg:text-[88px]">Gigma Toolbox</h2>
+          <p class="reveal lead mt-4 max-w-[520px] text-[#3f3f46]" style="--d: 0.08s">Everything a designer reaches for, in one window. Every tool is also a command an AI can call.</p>
+        </div>
+        <div class="reveal mt-12" style="--d: 0.1s">
+          <div class="fit overflow-x-auto overflow-y-hidden" data-w="1130" data-h="430" data-min="0.6">
+            <div class="fit-inner">
+              <!-- row 1 -->
+              <div class="mos left-[214px] top-0 h-[208px] w-[226px]">
+                <p class="mos-cap"><b>Pen and curves.</b> Draw paths, then bend every point.</p>
+                <div class="absolute -bottom-10 -left-10 h-[160px] w-[200px] rounded-full bg-[radial-gradient(closest-side,rgba(40,120,255,0.9),transparent)] blur-[6px]"></div>
+                <svg class="absolute bottom-0 left-0" width="226" height="120" viewBox="0 0 226 120"><path d="M30 100C60 30 120 20 150 60S200 90 210 40" stroke="#fff" stroke-width="2" fill="none" /><path d="M120 22L180 98" stroke="#0d99ff" /><rect x="116" y="18" width="8" height="8" fill="#fff" stroke="#0d99ff" transform="rotate(45 120 22)" /><rect x="176" y="94" width="8" height="8" fill="#fff" stroke="#0d99ff" transform="rotate(45 180 98)" /><circle cx="150" cy="60" r="5" fill="#0d99ff" stroke="#fff" stroke-width="1.5" /><circle cx="30" cy="100" r="4" fill="#fff" stroke="#0d99ff" stroke-width="1.5" /><circle cx="210" cy="40" r="4" fill="#fff" stroke="#0d99ff" stroke-width="1.5" /></svg>
+              </div>
+              <div class="mos left-[454px] top-0 h-[208px] w-[220px]">
+                <p class="mos-cap"><b>Constraints.</b> Children follow when the frame resizes.</p>
+                <div class="absolute left-[24px] top-[86px] w-[150px] rounded-[10px] border border-white/15 bg-white/[0.06] p-3">
+                  <div class="relative mx-auto h-[62px] w-[62px] rounded-[8px] border border-white/20"><span class="absolute left-1/2 top-0 h-[16px] w-[2px] -translate-x-1/2 bg-[#0d99ff]"></span><span class="absolute left-0 top-1/2 h-[2px] w-[16px] -translate-y-1/2 bg-[#0d99ff]"></span><span class="absolute right-0 top-1/2 h-[2px] w-[16px] -translate-y-1/2 bg-[#0d99ff]"></span><span class="absolute bottom-0 left-1/2 h-[16px] w-[2px] -translate-x-1/2 bg-white/25"></span><span class="absolute left-1/2 top-1/2 h-[18px] w-[18px] -translate-x-1/2 -translate-y-1/2 rounded-[3px] border border-white/40"></span></div>
+                </div>
+                <div class="absolute left-[60px] top-[166px] flex -space-x-1"><span class="rounded-full bg-white/10 px-2 py-[2px] text-[9px] text-white/60">Left &amp; right</span></div>
+              </div>
+              <div class="absolute left-[688px] top-[2px] flex h-[204px] w-[204px] flex-col items-center justify-center rounded-full text-white shadow-[0_0_0_5px_#f4f4f5,0_30px_60px_-20px_rgba(0,0,0,0.5)]" style="background: radial-gradient(circle at 50% 35%, #5c5c66, #1a1a1f 62%)">
+                <div class="dots mask-radial absolute inset-0 rounded-full opacity-25"></div>
+                <span class="relative font-display text-[86px] font-bold leading-none tracking-[-0.06em]" style="background: linear-gradient(#fff, #c9c9d2); -webkit-background-clip: text; background-clip: text; color: transparent">100</span>
+                <span class="relative text-[14px] text-white/80">% offline</span>
+                <span class="absolute bottom-[14px] right-[10px] flex h-[46px] w-[46px] items-center justify-center rounded-full bg-[#0b0b0e] text-[26px] shadow-[0_0_0_4px_#f4f4f5]">↓</span>
+              </div>
+              <div class="mos left-[906px] top-0 h-[208px] w-[220px]">
+                <p class="mos-cap"><b>Annotations.</b> Leave notes on the canvas, for people and for AI.</p>
+                <div class="absolute right-[24px] top-[78px] rounded-[8px] bg-white/85 px-2 py-1.5 text-[10px] text-[#18181b]"><b class="text-[#0c8ce9]">@Claude</b> warmer header,<br />please</div>
+                <div class="absolute left-[22px] top-[124px] rounded-[8px] bg-black/50 px-2 py-1.5 text-[10px] text-white/85 ring-1 ring-white/10"><b class="text-[#f97316]">@You</b> done, see Home</div>
+                <div class="absolute bottom-[14px] left-[14px] right-[14px] rounded-full bg-white/10 px-3 py-[7px] text-[10px] text-white/40">Type a note…</div>
+              </div>
+              <!-- row 2 -->
+              <div class="mos left-0 top-[222px] h-[196px] w-[226px]">
+                <p class="mos-cap"><span class="mb-1 block text-white/60">⟨/⟩</span><b>Code blocks.</b> HTML and CSS rendered as a layer.</p>
+                <div class="absolute bottom-[-8px] left-[38px] w-[160px] rounded-[10px] border border-white/10 bg-white/[0.05] p-2.5 font-mono text-[9px] leading-[1.6] text-white/55"><span class="text-[#7ea7ff]">&lt;div</span> <span class="text-[#8fe3c0]">class</span>=<span class="text-[#ffcf7a]">"card"</span><span class="text-[#7ea7ff]">&gt;</span><br />&nbsp;&nbsp;Fresh bread<br /><span class="text-[#7ea7ff]">&lt;/div&gt;</span></div>
+                <div class="absolute -bottom-16 -right-10 h-[160px] w-[160px] rounded-full bg-[radial-gradient(closest-side,rgba(70,120,255,0.7),transparent)]"></div>
+              </div>
+              <div class="mos left-[240px] top-[222px] h-[196px] w-[434px]" style="background: radial-gradient(70% 90% at 50% 120%, #6c4bff, #261b5c 45%, #0c0c10 75%)">
+                <p class="mos-cap"><b>Many AIs at once.</b> Each client gets its own cursor and name on the canvas.</p>
+                <div class="absolute left-1/2 top-[118px] flex h-[70px] w-[70px] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-[#0b0b10] shadow-[0_0_0_1.5px_rgba(150,180,255,0.6),0_0_40px_rgba(110,120,255,0.9)]"><svg width="30" height="30"><use href="#a-ai" /></svg></div>
+                <span class="absolute left-[78px] top-[100px] flex h-[38px] w-[38px] items-center justify-center rounded-full bg-[#202028] text-[12px] font-semibold ring-1 ring-white/15">Cx</span>
+                <span class="absolute left-[128px] top-[140px] h-[44px] w-[44px] rounded-full bg-gradient-to-br from-orange-300 to-rose-400 ring-2 ring-white/20"></span>
+                <span class="absolute left-[268px] top-[132px] h-[46px] w-[46px] rounded-full bg-gradient-to-br from-sky-300 to-indigo-500 ring-2 ring-white/20"></span>
+                <span class="absolute left-[328px] top-[94px] flex h-[34px] w-[34px] items-center justify-center rounded-full bg-[#202028] text-[11px] ring-1 ring-white/15">Cu</span>
+                <span class="absolute left-[178px] top-[76px] h-[22px] w-[22px] rounded-full bg-white/20 blur-[1px]"></span>
+                <span class="absolute left-[38px] top-[150px] h-[26px] w-[26px] rounded-full bg-white/10 blur-[2px]"></span>
+                <span class="absolute right-[24px] top-[150px] h-[28px] w-[28px] rounded-full bg-white/10 blur-[2px]"></span>
+              </div>
+              <div class="mos left-[688px] top-[222px] h-[196px] w-[352px]">
+                <p class="mos-cap"><b>Pages and projects.</b> Tabs, trash and one .gigma file per project.</p>
+                <div class="absolute left-[30px] top-[96px] h-[110px] w-[90px] rounded-[10px] border border-white/10 bg-white/[0.04] p-2 text-[10px] text-white/35">Checkout</div>
+                <div class="absolute right-[24px] top-[96px] h-[110px] w-[80px] rounded-[10px] border border-white/10 bg-white/[0.04] p-2 text-[10px] text-white/35">Archive</div>
+                <div class="absolute left-[100px] top-[74px] w-[150px] rounded-[10px] bg-white p-2.5 text-[#18181b] shadow-[0_20px_40px_rgba(0,0,0,0.5)]"><div class="flex items-center text-[12px] font-semibold">Sunrise Bakery<span class="ml-auto text-[#f43f5e]">★</span></div><div class="mt-1 text-[9px] text-[#71717a]">3 pages · 41 layers</div><div class="mt-2 space-y-1 text-[9.5px] text-[#3f3f46]"><div>▤ Landing</div><div>▤ Cart</div><div>▤ Checkout</div></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================ plugins, written like a document -->
+    <section id="plugins" class="relative bg-paper pb-[140px] pt-[60px] text-[#0b0b0e]">
+      <div class="side-lines pointer-events-none hidden lg:block !left-[8%] w-[22%]"></div>
+      <div class="relative mx-auto grid max-w-[1216px] gap-12 px-6 lg:grid-cols-[300px_1fr] lg:gap-[110px]">
+        <!-- side cards, they stick while the text scrolls -->
+        <div class="relative hidden lg:block">
+          <div class="sticky top-[140px]">
+            <div class="w-[214px] overflow-hidden rounded-[6px] bg-white shadow-[0_30px_60px_-20px_rgba(90,80,160,0.35)] ring-1 ring-black/5">
+              <div class="relative h-[140px] bg-[radial-gradient(80%_80%_at_30%_30%,#ffd6f2,#e5e0ff_45%,#f4f6ff)]">
+                <div class="dots absolute inset-0 opacity-20 invert"></div>
+                <div class="absolute left-[60px] top-[52px] border border-[#0d99ff] px-1 font-display text-[30px] font-semibold text-[#2a2a33]">Plugin<span class="caret ml-0.5 h-[26px] text-[#2a2a33]"></span></div>
+                <span class="name-pill left-[-6px] top-[22px] bg-[#4f7cff]">You</span>
+                <svg class="absolute left-[46px] top-[44px] h-[16px] w-[16px]"><use href="#a-user" /></svg>
+                <div class="cur cur-ai" style="left: 150px; top: 96px"><svg width="20" height="20"><use href="#a-ai" /></svg></div>
+                <span class="name-pill left-[160px] top-[118px] bg-[#0c8ce9]">Claude</span>
+              </div>
+              <div class="p-3.5"><div class="text-[14px] font-semibold">Sandboxed</div><p class="mt-1 text-[12.5px] leading-[1.4] text-[#52525b]">A plugin only sees the open project, never your disk or the network.</p></div>
+            </div>
+            <div class="mt-[46vh] w-[214px] overflow-hidden rounded-[6px] bg-white shadow-[0_30px_60px_-20px_rgba(90,80,160,0.35)] ring-1 ring-black/5">
+              <div class="relative h-[130px] bg-[linear-gradient(160deg,#eef2ff,#fdf2f8)] p-3">
+                <div class="rounded-[6px] bg-white p-2 text-[10px] shadow"><div class="flex items-center font-semibold">manifest.json<span class="ml-2 rounded bg-[#fee2e2] px-1 text-[8px] text-[#dc2626]">v1.2</span></div><div class="mt-1 font-mono text-[8.5px] leading-[1.5] text-[#52525b]">"name": "Phone frame",<br />"permissions": ["network"]</div></div>
+                <span class="absolute bottom-3 left-3 flex h-[34px] w-[34px] items-center justify-center rounded-full bg-[#4f7cff] text-white shadow-lg">⟳</span>
+              </div>
+              <div class="p-3.5"><div class="text-[14px] font-semibold">One file to share</div><p class="mt-1 text-[12.5px] leading-[1.4] text-[#52525b]">Zip it as .gplug, double click, done. Updates replace the old version.</p></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="doc max-w-[600px]">
+          <h2 class="h-display reveal text-[52px] sm:text-[76px] lg:text-[84px]">Plugins in one<br />HTML file<span class="relative ml-1 inline-block h-[0.82em] w-[3px] translate-y-[0.08em] bg-[#4f7cff] align-baseline"><span class="absolute bottom-[-10px] left-1/2 h-[9px] w-[9px] -translate-x-1/2 rounded-full bg-[#4f7cff]"></span><span class="absolute bottom-[-46px] left-[10px] flex h-[34px] items-center rounded-full bg-[#0c8ce9] px-3 font-sans text-[13px] font-semibold tracking-normal text-white shadow-[0_6px_16px_rgba(12,140,233,0.45)] ring-[3px] ring-white">Claude</span></span></h2>
+          <p class="reveal mt-16">A plugin is a web page with a manifest, zipped into a .gplug file. It runs in a sandbox and talks to Gigma through the very commands the AI uses.</p>
+          <div class="reveal relative mt-20">
+            <div class="absolute left-[170px] top-[-52px] z-10 hidden items-center sm:flex gap-1 rounded-[8px] bg-[#2a2a30] p-1 text-[13px] text-white shadow-[0_10px_30px_rgba(0,0,0,0.3)]">
+              <span class="rounded-[6px] bg-[#4f7cff] px-2 py-1 font-semibold">+ Link</span><span class="px-2 font-bold">B</span><span class="px-2 italic">I</span><span class="px-2 underline">U</span><span class="px-2 line-through">S</span><span class="px-2 text-white/60">@</span>
+            </div>
+            <p><span class="absolute left-[-6px] top-[2px] h-[1.2em] w-[2px] bg-[#1c1c20]"><span class="absolute left-[-3px] top-[-6px] h-[8px] w-[8px] rounded-full bg-[#1c1c20]"></span></span><span class="hl"><b>Plugins in Gigma</b> can fit a screen into every phone, pull data into tables, generate icons or turn a web page into layers.</span><span class="relative ml-1 inline-block h-[1.2em] w-[2px] align-[-0.2em] bg-[#1c1c20]"><span class="absolute bottom-[-6px] left-[-3px] h-[8px] w-[8px] rounded-full bg-[#1c1c20]"></span></span></p>
+          </div>
+          <div class="reveal mt-10 overflow-hidden rounded-[12px] shadow-[0_30px_60px_-30px_rgba(0,0,0,0.5)]">
+            <div class="relative flex h-[330px] items-center justify-center overflow-hidden bg-[radial-gradient(60%_80%_at_70%_30%,#6d5bff,#251a63_50%,#0d0c1f)]">
+              <div class="absolute left-[8%] top-[18%] h-[160px] w-[160px] rounded-[26px] bg-white/10 blur-[1px] backdrop-blur"></div>
+              <div class="absolute bottom-[10%] right-[10%] h-[120px] w-[220px] rounded-[26px] bg-white/10"></div>
+              <div class="relative text-center"><div class="flex items-center justify-center gap-2 text-[14px] font-semibold text-white/80"><img src="assets/img/icon.png" alt="" class="h-5 w-5 rounded" />gigma</div><div class="mt-2 font-display text-[88px] font-bold leading-none tracking-[-0.05em]" style="background: linear-gradient(120deg, #fff, #c7d2fe 40%, #f0abfc 70%, #fff); -webkit-background-clip: text; background-clip: text; color: transparent">Plugins</div><div class="mt-2 text-[15px] text-white/75">The tools you need, written by you</div></div>
+            </div>
+          </div>
+          <p class="reveal relative mt-10">With <s class="text-[#a1a1aa]">a few</s> one HTML file, a plugin can read the selection, create layers, use fetch with permission and keep its own settings, <s class="text-[#a1a1aa]">same tools</s> <span class="text-[#f05a3c]">the very commands</span><span class="relative inline-block h-[1.1em] w-[2px] align-[-0.18em] bg-[#f05a3c]"><span class="absolute bottom-[-7px] left-[-3px] h-[8px] w-[8px] rounded-full bg-[#f05a3c]"></span><span class="absolute left-[-3px] top-[calc(100%+8px)] rounded-[3px_10px_10px_10px] bg-[#a98bff] px-2 py-[1px] text-[12px] font-semibold leading-[1.5] text-white shadow-[0_4px_12px_rgba(169,139,255,0.5)]">Codex</span></span> an assistant calls over MCP.</p>
+          <div class="reveal code relative mt-10 rounded-[10px] bg-[#1c1c20] px-5 py-6 text-[#e9e9ee] sm:px-7 sm:py-7">
+            <span class="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-[7px] bg-white/10 text-[13px]">⧉</span>
+<pre class="overflow-x-auto whitespace-pre"><span class="c">&lt;!-- index.html of a plugin --&gt;</span>
+<span class="k">&lt;button</span> <span class="n">id</span>=<span class="s">"go"</span><span class="k">&gt;</span>Round the selection<span class="k">&lt;/button&gt;</span>
+<span class="k">&lt;script&gt;</span>
+  go.onclick = <span class="k">async</span> () =&gt; {
+    <span class="k">const</span> nodes = <span class="k">await</span> gigma.<span class="t">selection</span>()
+    <span class="k">await</span> gigma.<span class="t">undoGroup</span>(<span class="k">async</span> () =&gt; {
+      <span class="k">for</span> (<span class="k">const</span> n <span class="k">of</span> nodes)
+        <span class="k">await</span> gigma.<span class="t">command</span>(<span class="s">'update_node'</span>, {
+          id: n.id, cornerRadius: <span class="n">16</span>,
+        })
+    })
+  }
+<span class="k">&lt;/script&gt;</span></pre>
+          </div>
+          <p class="reveal mt-10">Write it by hand or give the plugin docs to an AI along with your idea. Drop the .gplug file into Settings, Plugins, and it is ready to run from Ctrl+K.</p>
+          <div class="reveal mt-10 flex items-center gap-1.5 text-[1.32rem] text-[#a1a1aa]"><span class="h-[1.3em] w-[2px] bg-[#1c1c20]"></span>Tap here to continue…</div>
+          <div class="reveal mt-3 flex w-max items-center gap-1 rounded-full bg-white p-1 shadow-[0_8px_24px_rgba(0,0,0,0.12)]"><span class="flex h-9 w-9 items-center justify-center rounded-full bg-[#1c1c20] text-white">+</span><span class="flex h-9 w-9 items-center justify-center rounded-full text-[#52525b]">◎</span><span class="flex h-9 w-9 items-center justify-center rounded-full text-[#52525b]">✎</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================ last word -->
+    <section class="relative overflow-hidden bg-[#0b0b0d] pt-[120px]">
+      <div class="band dots-warm left-[-6%] top-[90px] w-[520px] rotate-[18deg] opacity-80" style="background-color: rgba(255, 90, 30, 0.18)"></div>
+      <div class="pointer-events-none absolute left-[-4%] top-[120px] h-[60px] w-[520px] rotate-[18deg] bg-gradient-to-r from-transparent via-[#ff5a1f]/60 to-transparent blur-[18px]"></div>
+      <div class="band dots-blue left-[33%] top-[430px] w-[640px] rotate-[20deg] opacity-80" style="background-color: rgba(70, 90, 255, 0.16)"></div>
+      <div class="relative mx-auto grid max-w-[1216px] items-center gap-12 px-6 pb-[90px] lg:grid-cols-[1fr_1.05fr]">
+        <div class="reveal flex justify-center lg:justify-end lg:pr-10">
+          <div class="dial">
+            <div class="dial-ticks"></div>
+            <div class="dial-glow"></div>
+            <div class="dial-ring"></div>
+            <img src="assets/img/icon.png" alt="" class="absolute left-1/2 top-1/2 h-[120px] w-[120px] -translate-x-1/2 -translate-y-1/2 rounded-[28px] opacity-35 grayscale" />
+            <div class="dots mask-radial absolute inset-[60px] rounded-full opacity-25"></div>
+            <span class="absolute left-1/2 top-1/2 h-[4px] w-[128px] origin-left -translate-y-1/2 rounded-full bg-gradient-to-r from-white/70 to-[#ff3b5c]" style="rotate: -30deg" id="hand"></span>
+            <span class="absolute left-1/2 top-1/2 h-[12px] w-[12px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#2a2a31] ring-2 ring-white/40"></span>
+            <span class="absolute right-[-18px] top-1/2 h-[30px] w-[10px] -translate-y-1/2 rounded-[3px] bg-[#2a2a31]"></span>
+          </div>
+        </div>
+        <div class="reveal" style="--d: 0.08s">
+          <h2 class="h-display text-[56px] sm:text-[84px]" style="background: linear-gradient(180deg, #fff 40%, #c9c6ff); -webkit-background-clip: text; background-clip: text; color: transparent">Start designing<br />offline</h2>
+          <p class="mt-4 max-w-[340px] text-[16px] font-medium leading-[1.35] text-white/85">Free and open source. Your projects stay yours. The AI is optional and always under your control.</p>
+          <div class="mt-9 flex flex-wrap items-center gap-6">
+            <a href="https://github.com/A01L/gigma/releases/latest" class="btn-hot">Download</a>
+            <a href="https://github.com/A01L/gigma" class="btn-ghost h-[44px] px-5"><svg class="h-4 w-4"><use href="#i-gh" /></svg>Star on GitHub</a>
+          </div>
+        </div>
+      </div>
+      <footer class="relative mx-auto flex max-w-[1216px] flex-wrap items-center gap-x-10 gap-y-4 px-6 pb-10 pt-6 text-[14px] text-white/45">
+        <span>Copyright © 2026 Gigma. MIT License.</span>
+        <a href="https://github.com/A01L/gigma/blob/main/docs/PLUGINS.md" class="text-white/85 hover:text-white">Plugin docs</a>
+        <a href="https://github.com/A01L/gigma/releases" class="text-white/85 hover:text-white">Releases</a>
+        <a href="https://github.com/A01L/gigma" class="text-white/85 hover:text-white" aria-label="GitHub"><svg class="h-[18px] w-[18px]"><use href="#i-gh" /></svg></a>
+        <span class="ml-auto flex items-center gap-2"><img src="assets/img/icon.png" alt="" class="h-5 w-5 rounded" />Made with Gigma and a little AI</span>
+      </footer>
+    </section>
+
+    <!-- the video, opened by "See in action" -->
+    <div id="player" class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+      <div class="relative w-full max-w-[1100px]">
+        <button type="button" id="player-close" class="absolute -top-11 right-0 text-[14px] font-semibold text-white/80 hover:text-white">Close ✕</button>
+        <video id="player-video" controls preload="none" poster="assets/img/poster.jpg" class="block w-full rounded-[12px] bg-black shadow-2xl" width="1280" height="720"><source src="assets/gigma-promo.mp4" type="video/mp4" /></video>
+      </div>
+    </div>
+
     <script src="assets/app.js" defer></script>
   </body>
 </html>
