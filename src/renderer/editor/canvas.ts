@@ -25,6 +25,11 @@ const accentOf = (id: string) => (ed.mainComponentOf(id) || ed.instanceOf(id) ||
 const ROTATE_CURSOR =
   `url("data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round"><g stroke="#fff" stroke-width="4"><path d="M6 15a7 7 0 0 1 9-9"/><path d="M12 4l3.5 2-2 3.5M4 12l2 3.5 3.5-2"/></g><g stroke="#000" stroke-width="1.6"><path d="M6 15a7 7 0 0 1 9-9"/><path d="M12 4l3.5 2-2 3.5M4 12l2 3.5 3.5-2"/></g></svg>')}") 12 12, crosshair`
 
+/** the arrow of Figma: black with a white outline, a little slimmer than the system one */
+export const ARROW_PATH = 'M4.5 3.5 20 10.2 12.6 12.7 10.2 20Z'
+const ARROW_CURSOR =
+  `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="${ARROW_PATH}" fill="#000" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg>`)}") 4 3, default`
+
 /** rotate a point around c by deg (Figma direction: positive = counter-clockwise on screen) */
 function turn(x: number, y: number, c: { x: number; y: number }, deg: number): { x: number; y: number } {
   const t = (-deg * Math.PI) / 180
@@ -748,7 +753,7 @@ export class CanvasController {
   }
 
   private updateCursor(e?: PointerEvent): void {
-    let c = 'default'
+    let c = ARROW_CURSOR
     if (this.spaceDown || ed.tool === 'hand') c = this.drag?.kind === 'pan' ? 'grabbing' : 'grab'
     else if (ed.tool !== 'move' && ed.tool !== 'scale') c = ed.tool === 'text' ? 'text' : ed.tool === 'annotation' ? 'cell' : 'crosshair'
     else if (e) {

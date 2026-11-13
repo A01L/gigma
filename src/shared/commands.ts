@@ -62,6 +62,8 @@ export interface CommandRequest {
   id: string
   name: CommandName
   args: Record<string, unknown>
+  /** nickname of the AI client behind an MCP call: the editor shows its cursor on the layer it touched */
+  client?: string
 }
 
 export interface CommandResponse {

@@ -987,3 +987,100 @@ svg {
   white-space: nowrap;
   color: var(--text-2);
 }
+
+/* ---- cursor of an AI client working over MCP ---- */
+.ai-cursor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 24px;
+  height: 24px;
+  z-index: 5;
+  pointer-events: none;
+}
+.ai-cursor-arrow {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+  transform-origin: 4px 3px;
+}
+.ai-cursor.land .ai-cursor-arrow {
+  animation: ai-cursor-land 0.28s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+/* the glow: a soft light behind the arrow that breathes */
+.ai-cursor-glow {
+  position: absolute;
+  left: -9px;
+  top: -9px;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(12, 140, 233, 0.6), rgba(12, 140, 233, 0.22) 45%, rgba(12, 140, 233, 0));
+  animation: ai-cursor-glow 1.6s ease-in-out infinite;
+}
+.ai-cursor.pop .ai-cursor-glow {
+  animation: ai-cursor-pop 0.42s ease-out forwards;
+}
+.ai-cursor-ring {
+  position: absolute;
+  left: 4px;
+  top: 3px;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  box-shadow: 0 0 0 0 rgba(12, 140, 233, 0);
+}
+.ai-cursor.land .ai-cursor-ring {
+  animation: ai-cursor-ring 0.6s ease-out;
+}
+.ai-cursor-name {
+  position: absolute;
+  left: 18px;
+  top: 20px;
+  padding: 2px 7px;
+  border-radius: 3px 9px 9px 9px;
+  background: #0c8ce9;
+  color: #fff;
+  font: 500 11px/16px var(--font);
+  white-space: nowrap;
+  box-shadow: 0 2px 10px rgba(12, 140, 233, 0.45);
+  opacity: 0;
+  transform: scale(0.85);
+  transform-origin: 0 0;
+  transition: opacity 0.12s, transform 0.12s;
+}
+.ai-cursor:hover .ai-cursor-name,
+.ai-cursor.named .ai-cursor-name {
+  opacity: 1;
+  transform: none;
+}
+.ai-cursor.pop .ai-cursor-arrow {
+  animation: ai-cursor-pop 0.42s ease-out forwards;
+}
+.ai-cursor.pop .ai-cursor-ring {
+  animation: ai-cursor-burst 0.42s ease-out forwards;
+}
+.ai-cursor.pop .ai-cursor-name {
+  opacity: 0;
+}
+@keyframes ai-cursor-glow {
+  0%, 100% { opacity: 0.45; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+@keyframes ai-cursor-land {
+  from { transform: scale(0.3); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+@keyframes ai-cursor-ring {
+  from { box-shadow: 0 0 0 0 rgba(12, 140, 233, 0.5); }
+  to { box-shadow: 0 0 0 22px rgba(12, 140, 233, 0); }
+}
+@keyframes ai-cursor-pop {
+  0% { transform: none; opacity: 1; }
+  35% { transform: scale(1.45); opacity: 1; }
+  100% { transform: scale(0); opacity: 0; }
+}
+@keyframes ai-cursor-burst {
+  0% { box-shadow: 0 0 0 0 rgba(12, 140, 233, 0.7), 0 0 0 0 rgba(255, 255, 255, 0.6); }
+  100% { box-shadow: 0 0 0 30px rgba(12, 140, 233, 0), 0 0 0 18px rgba(255, 255, 255, 0); }
+}

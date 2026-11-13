@@ -201,7 +201,7 @@ const MIME: Record<string, string> = {
   '.avif': 'image/avif'
 }
 
-async function runCommand(name: CommandName, args: Record<string, unknown>): Promise<unknown> {
+async function runCommand(name: CommandName, args: Record<string, unknown>, client?: string): Promise<unknown> {
   if (!win || win.isDestroyed()) throw new Error('Gigma window is not open')
   // project-level commands handled in main
   if (name === 'list_projects')
@@ -264,7 +264,7 @@ async function runCommand(name: CommandName, args: Record<string, unknown>): Pro
       reject(new Error('Gigma editor did not respond in time'))
     }, 60_000)
     pending.set(id, { resolve, reject, timer })
-    tab.view.webContents.send('cmd:request', { id, name, args })
+    tab.view.webContents.send('cmd:request', { id, name, args, client })
   })
   // export_pdf: the editor describes the pages, the PDF itself is made and saved here
   if (name === 'export_pdf') {

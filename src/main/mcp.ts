@@ -11,7 +11,19 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { z } from 'zod'
 import type { CommandName } from '../shared/commands'
 
-export type RunCommand = (name: CommandName, args: Record<string, unknown>) => Promise<unknown>
+/** client = name of the AI client that sent the call (shown next to its cursor on the canvas) */
+export type RunCommand = (name: CommandName, args: Record<string, unknown>, client?: string) => Promise<unknown>
+
+/** "claude-code" / "codex-mcp-client" / … as a short nickname */
+function nickname(raw: string): string {
+  const known: [RegExp, string][] = [[/claude/i, 'Claude'], [/codex/i, 'Codex'], [/chatgpt|openai/i, 'ChatGPT'], [/cursor/i, 'Cursor'], [/gemini/i, 'Gemini'], [/copilot|vscode|visual studio/i, 'Copilot'], [/windsurf/i, 'Windsurf'], [/cline/i, 'Cline'], [/zed/i, 'Zed'], [/opencode/i, 'opencode']]
+  const hit = known.find(([re]) => re.test(raw))
+  if (hit) return hit[1]
+  const s = raw.replace(/[-_/]?(mcp|client|node|undici|python|httpx)\b.*$/i, '').replace(/\/.*$/, '').trim().slice(0, 24)
+  return s ? s[0].toUpperCase() + s.slice(1) : 'AI'
+}
+/** the client introduces itself once (initialize); later requests are separate, so remember who spoke last */
+let lastClient = ''
 
 const color = z.string().describe('Hex color, e.g. "#FF5733" or "#FF573380" (with alpha)')
 const parent = z.string().optional().describe('Parent frame/group id. Omit to place on the page root.')
@@ -85,7 +97,7 @@ export function commandReference(): string {
   return out
 }
 
-function buildServer(run: RunCommand): McpServer {
+function buildServer(run: RunCommand, client = 'AI'): McpServer {
   const server = new McpServer(
     { name: 'gigma', version: '0.1.0' },
     {
@@ -113,7 +125,7 @@ function buildServer(run: RunCommand): McpServer {
     TOOLS.set(name, { description, shape, map })
     server.registerTool(name, { description, inputSchema: shape }, async (args: Record<string, unknown>) => {
       try {
-        const result = await run(name, map(args))
+        const result = await run(name, map(args), client)
         if (result && typeof result === 'object' && 'pngBase64' in (result as object)) {
           const r = result as { pngBase64: string; width: number; height: number }
           return {
@@ -529,7 +541,12 @@ export function startMcpServer(run: RunCommand, port: number, devScreenshot?: (p
         chunks.push(c as Buffer)
       }
       const body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
-      const server = buildServer(run)
+      const hello = (Array.isArray(body) ? body : [body]).find((m) => m?.method === 'initialize')?.params?.clientInfo?.name
+      if (typeof hello === 'string' && hello) lastClient = hello
+      const named = req.headers['x-gigma-client']
+      const agent = String(req.headers['user-agent'] ?? '')
+      const who = (typeof named === 'string' && named) || lastClient || (/node|undici|^$/i.test(agent) ? '' : agent)
+      const server = buildServer(run, who ? nickname(who) : 'AI')
       const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true })
       res.on('close', () => {
         transport.close()

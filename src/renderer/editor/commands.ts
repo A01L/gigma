@@ -10,6 +10,7 @@ import { nodesToSvg, svgToNodes } from './svg'
 import { framesInReadingOrder, pdfPages } from './pdf'
 import { polygonPath, starPath } from './shapes'
 import { codeBitmapAsync } from './code-render'
+import { aiCursor } from './ai-cursor'
 
 type Args = Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -773,6 +774,7 @@ export async function executeCommand(req: CommandRequest): Promise<CommandRespon
     const h = handlers[req.name]
     if (!h) throw new Error('Unknown command ' + req.name)
     const result = await h(req.args ?? {})
+    if (req.client) aiCursor.touch(req.client, req.name, req.args ?? {}, result)
     return { id: req.id, ok: true, result }
   } catch (e) {
     return { id: req.id, ok: false, error: (e as Error).message }

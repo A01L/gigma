@@ -13,6 +13,9 @@ function write(msg) {
   process.stdout.write(JSON.stringify(msg) + '\n')
 }
 
+// the client names itself once in "initialize"; pass the name with every call so Gigma can sign its cursor
+let client = ''
+
 function post(message) {
   return new Promise((resolve, reject) => {
     const data = Buffer.from(JSON.stringify(message))
@@ -25,7 +28,8 @@ function post(message) {
         headers: {
           'content-type': 'application/json',
           accept: 'application/json, text/event-stream',
-          'content-length': data.length
+          'content-length': data.length,
+          ...(client && { 'x-gigma-client': client })
         }
       },
       (res) => {
@@ -60,6 +64,7 @@ rl.on('line', async (line) => {
   } catch {
     return
   }
+  if (msg && msg.method === 'initialize' && msg.params && msg.params.clientInfo) client = String(msg.params.clientInfo.name || '').replace(/[^ -~]/g, '').slice(0, 64)
   try {
     const r = await post(msg)
     for (const reply of parseReplies(r)) write(reply)
