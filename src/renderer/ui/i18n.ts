@@ -249,7 +249,6 @@ const RU: Record<string, string> = {
   'Export selection as PDF': 'Экспорт выделения в PDF',
   'One page per selected layer, vector, with selectable text': 'По странице на каждый выделенный слой, вектор, текст можно выделять',
   'Every frame of this page becomes a page of one PDF file': 'Каждый фрейм этой страницы станет страницей одного PDF-файла',
-  'patch': 'патч',
   'Author': 'Автор',
   'License': 'Лицензия',
   'license text': 'текст лицензии',

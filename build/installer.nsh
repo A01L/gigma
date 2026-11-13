@@ -4,7 +4,7 @@
 
 !macro customHeader
   ; these run at global scope right after the languages are loaded
-  BrandingText "Gigma 26 patch ${VERSION}  ·  github.com/A01L/gigma"
+  BrandingText "Gigma 26 Patch ${VERSION}  ·  github.com/A01L/gigma"
 
   LangString gigmaWelcomeTitle ${LANG_ENGLISH} "Welcome to Gigma"
   LangString gigmaWelcomeTitle ${LANG_RUSSIAN} "Добро пожаловать в Gigma"

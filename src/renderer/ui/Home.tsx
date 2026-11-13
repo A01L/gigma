@@ -405,17 +405,14 @@ function SettingsView() {
             <div className="about-name">
               Gigma <span className="brand-year">26</span>
             </div>
-            <div className="muted">
-              {t('patch')} {backend.appVersion}
-            </div>
+            <div className="muted">Patch {backend.appVersion}</div>
           </div>
         </div>
         <p className="muted">{t('Gigma is free and open source. Your files never leave this computer.')}</p>
         <div className="set-row">
           <span>{t('Version')}</span>
-          <code className="path">
-            Gigma 26 {t('patch')} {backend.appVersion}
-          </code>
+          {/* "Patch" is part of the product name: not translated */}
+          <code className="path">Gigma 26 Patch {backend.appVersion}</code>
         </div>
         <div className="set-row">
           <span>{t('Author')}</span>

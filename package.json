@@ -1,7 +1,7 @@
 {
   "name": "gigma",
   "productName": "Gigma",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "Offline, open-source desktop design tool with a built-in MCP server.",
   "license": "MIT",
   "author": "Nuradil Takhirov (A01L)",
@@ -95,7 +95,7 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Gigma",
-      "uninstallDisplayName": "Gigma 26 patch ${version}",
+      "uninstallDisplayName": "Gigma 26 Patch ${version}",
       "runAfterFinish": true,
       "deleteAppDataOnUninstall": false
     },
