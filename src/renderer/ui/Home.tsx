@@ -407,10 +407,49 @@ function SettingsView() {
 
       <section>
         <h2>{t('About')}</h2>
-        <p>
-          Gigma {t('Version')} {backend.appVersion}
-        </p>
+        <div className="about-head">
+          <img src={logoUrl} alt="" />
+          <div>
+            <div className="about-name">
+              Gigma <span className="brand-year">26</span>
+            </div>
+            <div className="muted">
+              {t('patch')} {backend.appVersion}
+            </div>
+          </div>
+        </div>
         <p className="muted">{t('Gigma is free and open source. Your files never leave this computer.')}</p>
+        <div className="set-row">
+          <span>{t('Version')}</span>
+          <code className="path">
+            Gigma 26 {t('patch')} {backend.appVersion}
+          </code>
+        </div>
+        <div className="set-row">
+          <span>{t('Author')}</span>
+          <span className="about-value">Nuradil Takhirov (A01L)</span>
+        </div>
+        <div className="set-row">
+          <span>{t('License')}</span>
+          <span className="about-value">
+            MIT ·{' '}
+            <a href="https://github.com/A01L/gigma/blob/main/LICENSE" target="_blank" rel="noreferrer">
+              {t('license text')}
+            </a>
+          </span>
+        </div>
+        <div className="set-row">
+          <span>{t('Repository')}</span>
+          <a className="about-value" href="https://github.com/A01L/gigma" target="_blank" rel="noreferrer">
+            github.com/A01L/gigma
+          </a>
+        </div>
+        <div className="set-row">
+          <span>{t('Report a problem')}</span>
+          <a className="about-value" href="https://github.com/A01L/gigma/issues" target="_blank" rel="noreferrer">
+            github.com/A01L/gigma/issues
+          </a>
+        </div>
       </section>
     </div>
   )
