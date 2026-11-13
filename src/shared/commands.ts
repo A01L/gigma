@@ -43,6 +43,8 @@ export type CommandName =
   | 'update_guideline'
   | 'place_guideline'
   | 'link_guideline'
+  | 'get_guideline_image'
+  | 'place_guideline_image'
   | 'add_variant'
   | 'set_variant'
   | 'list_styles'

@@ -517,6 +517,20 @@ function buildServer(run: RunCommand, client = 'AI'): McpServer {
     open: z.boolean().default(false).describe('Show it as an open card instead of a dot'),
     frameIds: z.array(z.string()).optional()
   })
+  const gPic = {
+    id: z.string().describe('Guideline id'),
+    kind: z.enum(['logo', 'pattern']).optional().describe('Which list to look in (default: every picture of the guideline)'),
+    name: z.string().optional().describe('Name of the picture as listed by get_guideline, or its number from 1 (default: the first)')
+  }
+  tool('get_guideline_image', 'Look at a picture of a guideline (a logo, a pattern): returns it as PNG with its transparency. The backdrop the user chose for viewing it ("shownOn") is not part of the picture.', gPic)
+  tool('place_guideline_image', 'Put a picture of a guideline (usually the logo) on the canvas as an image layer with its transparent background kept. Give width or height to size it; the proportions are kept.', {
+    ...gPic,
+    x: z.number().default(0),
+    y: z.number().default(0),
+    width: z.number().positive().optional(),
+    height: z.number().positive().optional(),
+    parentId: parent
+  })
   tool('link_guideline', 'Wire a guideline on the canvas (nodeId from place_guideline / list_guidelines) to frames or sections: the design system applies there. To hand it to a spec as a material use link_spec with role "source" and the nodeId.', {
     nodeId: z.string(),
     frameIds: z.array(z.string()).min(1),

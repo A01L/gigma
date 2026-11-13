@@ -63,6 +63,8 @@ export interface GuideImage {
   name: string
   /** the picture itself, as a data: URL (a guideline is one self-contained file) */
   dataUrl: string
+  /** colour shown behind the picture in the card and the editor (hex); absent = transparent. Only a backdrop: the picture itself is never changed */
+  bg?: string
 }
 export interface GuideSection {
   id: string

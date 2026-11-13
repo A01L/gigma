@@ -62,11 +62,29 @@ const guidelineView = (g: GuideData) => ({
   accent: g.accent,
   colors: g.colors.map((c) => ({ name: c.name, role: c.role || undefined, hex: c.hex, styleId: `guide:${g.id}:${c.id}` })),
   fonts: g.fonts.map((f) => ({ role: f.role, family: f.family, weight: f.weight, size: f.size, lineHeightPercent: f.lineHeightPercent, styleId: `guide:${g.id}:${f.id}` })),
-  logos: g.logos.map((i) => i.name),
-  patterns: g.patterns.map((i) => i.name),
+  // pictures by name: get_guideline_image returns one (with its transparency), place_guideline_image puts it on the canvas
+  logos: g.logos.map((i) => ({ name: i.name, ...(i.bg && { shownOn: i.bg }) })),
+  patterns: g.patterns.map((i) => ({ name: i.name, ...(i.bg && { shownOn: i.bg }) })),
   rules: g.rules,
   sections: g.sections.map((s) => ({ title: s.title, text: s.text, images: s.images.map((i) => i.name) }))
 })
+/** a picture of a guideline by its name (or its number in the list, from 1) */
+function guidelineImage(g: GuideData, kind: string | undefined, name: string | undefined) {
+  const list = kind === 'pattern' ? g.patterns : kind === 'logo' ? g.logos : [...g.logos, ...g.patterns, ...g.sections.flatMap((s) => s.images)]
+  const im = name ? (list.find((i) => i.name === name) ?? list.find((i) => i.name.toLowerCase() === name.toLowerCase()) ?? list[parseInt(name) - 1]) : list[0]
+  if (!im) throw new Error('No such picture in this guideline: ' + (list.map((i) => i.name).join(', ') || 'it has no pictures'))
+  return im
+}
+/** the picture as PNG bytes with its transparency kept (whatever format it was added in) */
+async function imageAsPng(dataUrl: string): Promise<{ bytes: Uint8Array; width: number; height: number }> {
+  const bmp = await createImageBitmap(await (await fetch(dataUrl)).blob())
+  const c = document.createElement('canvas')
+  c.width = bmp.width
+  c.height = bmp.height
+  c.getContext('2d')!.drawImage(bmp, 0, 0)
+  const blob = await new Promise<Blob>((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error('could not encode the picture'))), 'image/png'))
+  return { bytes: new Uint8Array(await blob.arrayBuffer()), width: bmp.width, height: bmp.height }
+}
 function requireGuideline(id: string): GuideData {
   const g = guides.get(id)
   if (!g) throw new Error('Unknown guideline id; use list_guidelines')
@@ -357,6 +375,24 @@ const handlers: Record<CommandName, (a: Args) => unknown | Promise<unknown>> = {
     const n = placeGuide(g.id, { x: a.x ?? 0, y: a.y ?? 0 }, !!a.open)
     if (Array.isArray(a.frameIds) && a.frameIds.length) setGuideTargets(n.id, a.frameIds)
     return { ...created(ed.nodes.get(n.id)!), guideline: { id: g.id, name: g.name } }
+  },
+  get_guideline_image: async (a) => {
+    const png = await imageAsPng(guidelineImage(requireGuideline(a.id), a.kind, a.name).dataUrl)
+    let bin = ''
+    for (let i = 0; i < png.bytes.length; i += 0x8000) bin += String.fromCharCode(...png.bytes.subarray(i, i + 0x8000))
+    return { pngBase64: btoa(bin), width: png.width, height: png.height }
+  },
+  place_guideline_image: async (a) => {
+    const im = guidelineImage(requireGuideline(a.id), a.kind, a.name)
+    const png = await imageAsPng(im.dataUrl)
+    const hash = await backend.blob.put(png.bytes, 'image/png')
+    const w = a.width ?? (a.height ? (png.width / png.height) * a.height : png.width)
+    const h = a.height ?? (png.height / png.width) * w
+    return created(
+      ed.act(() =>
+        ed.addNode({ type: 'RECTANGLE', name: im.name || 'Logo', x: a.x ?? 0, y: a.y ?? 0, width: w, height: h, fills: [{ type: 'IMAGE', imageHash: hash, scaleMode: 'FIT' }], parentId: checkParent(a.parentId) })
+      )
+    )
   },
   link_guideline: (a) => {
     const n = requireNode(a.nodeId)

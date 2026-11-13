@@ -1,6 +1,6 @@
 // The editor of a guideline (right panel, shown while its dot or card is selected).
 // Everything typed here goes to the shared library, so it changes in every project that uses the guideline.
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { GNode, GuideData, GuideImage } from '@shared/types'
 import { editor as ed } from '../editor/editor'
 import { guides, newGuideId, removeGuide, saveGuide, setGuideOpen } from '../editor/guides'
@@ -8,11 +8,36 @@ import { guideAccent } from '../editor/guide-render'
 import { backend } from '../backend'
 import { Icons } from './icons'
 import { useT } from './i18n'
+import { Select } from './Select'
 import './guide.css'
 
 const FONTS = ['Inter', 'Roboto', 'Arial', 'Helvetica', 'Segoe UI', 'Georgia', 'Times New Roman', 'Courier New', 'Verdana', 'Montserrat', 'Open Sans']
 /** pictures are kept inside the guideline file: keep each one reasonable */
 const MAX_IMAGE = 3 * 1024 * 1024
+
+/** fonts installed on this computer (asked once), on top of the usual ones */
+let localFonts: string[] | null = null
+function useFonts(): string[] {
+  const [fonts, setFonts] = useState(localFonts ?? FONTS)
+  useEffect(() => {
+    if (localFonts) return
+    const q = (window as unknown as { queryLocalFonts?: () => Promise<{ family: string }[]> }).queryLocalFonts
+    q?.()
+      .then((list) => {
+        localFonts = [...new Set([...FONTS, ...list.map((f) => f.family)])].sort()
+        setFonts(localFonts)
+      })
+      .catch(() => {})
+  }, [])
+  return fonts
+}
+const WEIGHTS = [100, 200, 300, 400, 500, 600, 700, 800, 900]
+/** backdrops offered for a picture: none, white, black */
+const BACKDROPS: [string | undefined, string][] = [
+  [undefined, 'Transparent'],
+  ['#ffffff', 'White'],
+  ['#111111', 'Dark']
+]
 
 /** text field that saves when you leave it or press Enter */
 function In({ value, onCommit, placeholder, list, area, rows = 3 }: { value: string; onCommit: (v: string) => void; placeholder?: string; list?: string; area?: boolean; rows?: number }) {
@@ -74,7 +99,15 @@ function Gallery({ images, onChange }: { images: GuideImage[]; onChange: (list: 
     <div className="g-gallery">
       {images.map((im) => (
         <div key={im.id} className="g-thumb" title={im.name}>
-          <img src={im.dataUrl} alt="" draggable={false} />
+          <img className={im.bg ? '' : 'clear'} style={im.bg ? { background: im.bg } : undefined} src={im.dataUrl} alt="" draggable={false} />
+          <div className="g-bgs" title={t('Backdrop in the card. The file itself stays transparent.')}>
+            {BACKDROPS.map(([bg, label]) => (
+              <i key={label} className={(im.bg ?? '') === (bg ?? '') ? 'on' : ''} title={t(label)} style={bg ? { background: bg } : undefined} onClick={() => onChange(images.map((x) => (x.id === im.id ? { ...x, bg } : x)))} />
+            ))}
+            <label title={t('Other colour')} style={{ background: im.bg && !BACKDROPS.some(([b]) => b === im.bg) ? im.bg : undefined }} className={im.bg && !BACKDROPS.some(([b]) => b === im.bg) ? 'on' : 'pick'}>
+              <input type="color" value={hex6(im.bg ?? '#888888')} onChange={(e) => onChange(images.map((x) => (x.id === im.id ? { ...x, bg: e.target.value } : x)))} />
+            </label>
+          </div>
           <button title={t('Remove')} onClick={() => onChange(images.filter((x) => x.id !== im.id))}>
             ×
           </button>
@@ -117,17 +150,13 @@ function Block({ title, onAdd, children }: { title: string; onAdd?: () => void; 
 
 export function GuideInspector({ node }: { node: GNode }) {
   const t = useT()
+  const fonts = useFonts()
   const g = guides.get(node.guide?.id ?? '')
   if (!g) return <div className="section g-block muted">{t('This guideline is not in the library.')}</div>
   const set = (patch: Partial<GuideData>) => saveGuide({ ...g, ...patch, updatedAt: Date.now() })
   const targets = (node.guide?.targets ?? []).filter((id) => ed.nodes.has(id))
   return (
     <div className="guide-ins">
-      <datalist id="g-fonts">
-        {FONTS.map((f) => (
-          <option key={f} value={f} />
-        ))}
-      </datalist>
       <Block title={t('Guideline')}>
         <div className="muted g-hint">{t('A guideline is shared: an edit here changes it in every project that uses it.')}</div>
         <In value={g.name} placeholder={t('Name')} onCommit={(v) => set({ name: v || 'Guideline' })} />
@@ -187,8 +216,17 @@ export function GuideInspector({ node }: { node: GNode }) {
                 </button>
               </div>
               <div className="g-row g-font">
-                <In value={f.family} list="g-fonts" placeholder={t('Font')} onCommit={(v) => upd({ family: v || 'Inter' })} />
-                <In value={String(f.weight)} placeholder="400" onCommit={(v) => upd({ weight: Math.round(num(v, f.weight, 100, 900) / 100) * 100 })} />
+                <div className="g-sel g-grow">
+                  <Select
+                    searchable
+                    value={f.family}
+                    onChange={(v) => upd({ family: v })}
+                    options={[...new Set([f.family, ...fonts])].map((name) => ({ value: name, label: name, style: { fontFamily: `"${name}", Inter, sans-serif` } }))}
+                  />
+                </div>
+                <div className="g-sel g-weight">
+                  <Select value={f.weight} onChange={(v) => upd({ weight: v })} options={WEIGHTS.map((w) => ({ value: w, label: String(w) }))} />
+                </div>
                 <In value={String(f.size)} placeholder="16" onCommit={(v) => upd({ size: num(v, f.size, 1, 999) })} />
               </div>
             </div>

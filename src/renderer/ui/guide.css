@@ -211,3 +211,61 @@ textarea.g-in {
   vertical-align: -6px;
   margin-right: 8px;
 }
+
+/* font and weight menus of a typography row */
+.g-sel .gsel {
+  width: 100%;
+  height: 28px;
+}
+.g-weight {
+  flex: 0 0 62px;
+}
+.g-font > .g-in:last-child {
+  flex: 0 0 44px;
+}
+/* a picture without a backdrop is shown on a checkerboard: it is transparent */
+.g-thumb img.clear {
+  background-color: #3a3a3a;
+  background-image: linear-gradient(45deg, #4a4a4a 25%, transparent 25%), linear-gradient(-45deg, #4a4a4a 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #4a4a4a 75%), linear-gradient(-45deg, transparent 75%, #4a4a4a 75%);
+  background-size: 10px 10px;
+  background-position: 0 0, 0 5px, 5px -5px, -5px 0;
+}
+.g-bgs {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.g-bgs i,
+.g-bgs label {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(128, 128, 128, 0.55);
+  cursor: pointer;
+  overflow: hidden;
+  flex: none;
+}
+.g-bgs i:first-child {
+  background-color: #fff;
+  background-image: linear-gradient(45deg, #aaa 25%, transparent 25%, transparent 75%, #aaa 75%), linear-gradient(45deg, #aaa 25%, transparent 25%, transparent 75%, #aaa 75%);
+  background-size: 6px 6px;
+  background-position: 0 0, 3px 3px;
+}
+.g-bgs .on {
+  box-shadow: 0 0 0 2px var(--accent, #0c8ce9);
+}
+.g-bgs label.pick {
+  background: conic-gradient(#f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+}
+.g-bgs input {
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+}
+/* typography row: the family gets the room, weight and size stay narrow */
+.g-item .g-row.g-font > .g-in:nth-child(3) {
+  flex: 0 0 44px;
+  padding: 0 6px;
+}

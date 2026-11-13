@@ -96,10 +96,17 @@ function card(ctx: CanvasRenderingContext2D, g: GuideData, x: number, y: number,
         rowH = 0
       }
       if (paint) {
-        ctx.fillStyle = '#ffffff'
+        // the backdrop chosen for this picture; without one the card shows through, inside a thin frame
         ctx.beginPath()
         ctx.roundRect(px, cy, iw, h, 8)
-        ctx.fill()
+        if (im.bg && /^#[0-9a-f]{3,8}$/i.test(im.bg)) {
+          ctx.fillStyle = im.bg
+          ctx.fill()
+        } else {
+          ctx.strokeStyle = 'rgba(255,255,255,0.16)'
+          ctx.lineWidth = 1
+          ctx.stroke()
+        }
         if (el) {
           ctx.save()
           ctx.beginPath()
