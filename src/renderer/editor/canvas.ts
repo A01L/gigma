@@ -12,6 +12,7 @@ import { rectsIntersect, round2, unionRects, type Rect } from './util'
 import { polygonPath, smoothPath, starPath } from './shapes'
 import { parsePath, segsBounds, segsToD, transformSegs, type Seg } from './svgpath'
 import { DEFAULT_CODE, setCodeReadyCallback } from './code-render'
+import { DEFAULT_TEXT_STYLE, layoutText, lineHeightOf, loremFor, LOREM_SHORT } from './text'
 
 const BLUE = '#0d99ff'
 /** components and instances */
@@ -66,6 +67,8 @@ type Drag =
   | { kind: 'marquee'; sx: number; sy: number; x: number; y: number; base: string[]; scope: string | null }
   | { kind: 'create'; type: GNode['type']; wx: number; wy: number; id: string | null; parent: string | null; tool: string }
   | { kind: 'pencil'; pts: [number, number][]; parent: string | null }
+  /** the text tool is down: a click will place a line of text, a drag a text box (world coordinates; sx, sy = where it started on screen) */
+  | { kind: 'text'; wx: number; wy: number; x: number; y: number; sx: number; sy: number; parent: string | null; moved: boolean }
   | { kind: 'pen-handle'; index: number }
 
 interface PenPoint {
@@ -483,6 +486,16 @@ export class CanvasController {
       ctx.fillRect(x, y, Math.abs(d.x - d.sx), Math.abs(d.y - d.sy))
       ctx.strokeRect(x + 0.5, y + 0.5, Math.abs(d.x - d.sx), Math.abs(d.y - d.sy))
     }
+    // the box of a text being dragged out
+    if (this.drag?.kind === 'text' && this.drag.moved) {
+      const d = this.drag
+      const z = ed.camera.zoom
+      const x = Math.min(d.wx, d.x) * z + ed.camera.x
+      const y = Math.min(d.wy, d.y) * z + ed.camera.y
+      ctx.strokeStyle = BLUE
+      ctx.lineWidth = 1
+      ctx.strokeRect(Math.round(x) + 0.5, Math.round(y) + 0.5, Math.round(Math.abs(d.x - d.wx) * z), Math.round(Math.abs(d.y - d.wy) * z))
+    }
   }
 
   // ---------------------------------------------------------------- spec wires
@@ -890,14 +903,10 @@ export class CanvasController {
     if (e.button !== 0) return
 
     if (ed.tool === 'text') {
-      const parent = ed.frameAt(p.x, p.y)
-      const pw = parent ? ed.world(parent) : { x: 0, y: 0 }
-      const n = ed.act(() =>
-        ed.addNode({ type: 'TEXT', parentId: parent, x: p.x - pw.x, y: p.y - pw.y, characters: '', fills: [{ type: 'SOLID', color: { r: 0, g: 0, b: 0, a: 1 } }] })
-      )
-      ed.setSelection([n.id])
-      ed.setTool('move')
-      this.onEditText(n.id)
+      // the text appears when the button is released, as in Figma: a click gives a line, a drag gives a box.
+      // (Opening the editor here, on the press, lost it at once: the same press then moved the focus to the canvas,
+      // the editor closed and threw the still empty text away.)
+      this.drag = { kind: 'text', wx: p.x, wy: p.y, x: p.x, y: p.y, sx: p.sx, sy: p.sy, parent: ed.frameAt(p.x, p.y), moved: false }
       return
     }
     if (ed.tool === 'annotation') {
@@ -1155,6 +1164,12 @@ export class CanvasController {
         ed.panBy(e.clientX - d.sx, e.clientY - d.sy)
         d.sx = e.clientX
         d.sy = e.clientY
+        break
+      case 'text':
+        d.x = p.x
+        d.y = p.y
+        if (Math.hypot(p.sx - d.sx, p.sy - d.sy) > 3) d.moved = true
+        this.invalidate()
         break
       case 'marquee': {
         d.x = p.sx
@@ -1496,6 +1511,44 @@ export class CanvasController {
     ed.setSelection([n.id])
   }
 
+  /**
+   * The text tool was released. A click places a line that grows with its text; a drag makes a box of that size.
+   * Either comes filled with Lorem ipsum and opens for editing with all of it selected, so typing replaces it.
+   */
+  private placeText(d: Extract<Drag, { kind: 'text' }>): void {
+    const w = Math.round(Math.abs(d.x - d.wx))
+    const h = Math.round(Math.abs(d.y - d.wy))
+    const boxed = d.moved && w >= 4 && h >= 4
+    const pw = d.parent ? ed.world(d.parent) : { x: 0, y: 0 }
+    const n = ed.act(() => {
+      const made = ed.addNode({
+        type: 'TEXT',
+        parentId: d.parent,
+        // a click marks the middle of the first line, a drag the corners of the box
+        x: round2((boxed ? Math.min(d.wx, d.x) : d.wx) - pw.x),
+        y: round2((boxed ? Math.min(d.wy, d.y) : d.wy - lineHeightOf(DEFAULT_TEXT_STYLE) / 2) - pw.y),
+        characters: LOREM_SHORT,
+        name: LOREM_SHORT,
+        fills: [{ type: 'SOLID', color: { r: 0, g: 0, b: 0, a: 1 } }],
+        ...(boxed && { width: w, height: h, textAutoResize: 'NONE' as const })
+      })
+      if (boxed) {
+        const text = loremFor(made)
+        ed.updateNode(made.id, { characters: text, name: text.slice(0, 40) })
+      }
+      return made
+    })
+    ed.setSelection([n.id])
+    ed.setTool('move')
+    this.onEditText(n.id)
+  }
+
+  /** for the UI test scripts: how a text is laid out */
+  textLayoutOf(id: string): ReturnType<typeof layoutText> | null {
+    const n = ed.nodes.get(id)
+    return n ? layoutText(n) : null
+  }
+
   private up(e: PointerEvent): void {
     if (!this.drag && this.vedit.active) {
       if (this.canvas.hasPointerCapture(e.pointerId)) this.canvas.releasePointerCapture(e.pointerId)
@@ -1554,6 +1607,8 @@ export class CanvasController {
       ed.commit()
       ed.emit('selection')
       ed.setTool('move')
+    } else if (d.kind === 'text') {
+      this.placeText(d)
     } else if (d.kind === 'pencil') {
       if (d.pts.length > 1) {
         const dpath = smoothPath(d.pts, 1.2 / ed.camera.zoom)

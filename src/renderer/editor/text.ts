@@ -163,6 +163,30 @@ export function layoutText(n: GNode): TextLayout {
   return layout
 }
 
+const LOREM =
+  'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. ' +
+  'Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. ' +
+  'Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. ' +
+  'Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.'
+/** the placeholder of a new text */
+export const LOREM_SHORT = 'Lorem ipsum'
+
+/** Lorem ipsum that fills a text box of the node's size and style without spilling out of it (never less than two words). */
+export function loremFor(n: GNode): string {
+  const words = LOREM.split(' ')
+  const take = (count: number) => Array.from({ length: count }, (_, i) => words[i % words.length]).join(' ')
+  const fits = (count: number) => layoutText({ ...n, characters: take(count), textAutoResize: 'HEIGHT' }).height <= n.height + 0.5
+  let lo = 2
+  let hi = 1600
+  if (!fits(lo)) return take(lo)
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2)
+    if (fits(mid)) lo = mid
+    else hi = mid - 1
+  }
+  return take(lo)
+}
+
 /** Returns the size a text node should have after its content/style changed. */
 export function fitText(n: GNode): { width: number; height: number } {
   const mode = n.textAutoResize ?? 'WIDTH_AND_HEIGHT'
