@@ -105,31 +105,102 @@
       <div class="pointer-events-none absolute -right-40 top-[20%] h-[700px] w-[700px] rounded-full bg-[radial-gradient(closest-side,rgba(255,190,150,0.25),transparent)]"></div>
       <div class="relative mx-auto max-w-[1216px] px-6">
         <h2 class="h-display reveal text-[52px] sm:text-[80px] lg:text-[88px]">Built for flow</h2>
-        <p class="reveal lead mt-5 max-w-[680px] text-[#3f3f46]" style="--d: 0.08s">Gigma is a vector design editor with auto layout, components, styles and a command palette. On top of that it has things made for working with an AI: tasks as nodes, shared guidelines and live cursors.</p>
+        <p class="reveal lead mt-5 max-w-[680px] text-[#3f3f46]" style="--d: 0.08s">Gigma is a vector design editor with auto layout, components, styles and a command palette. On top of that it has what a designer needs to work with an AI and with Figma.</p>
 
-        <!-- every tile is a close-up of the app itself -->
+        <!-- four things that set Gigma apart, each drawn, none a screenshot -->
         <div class="mt-12 grid gap-4 md:grid-cols-[356fr_640fr]">
-          <article class="tile shot reveal h-[420px]">
-            <img src="assets/img/flow-guideline.jpg" width="712" height="840" loading="lazy" alt="An open guideline card in Gigma: colours, fonts and rules of the Sunrise brand" />
-            <div class="tile-shade"></div>
-            <p class="tile-cap"><b>Guidelines.</b> The colours, fonts, logos and rules of a brand, shared by every project.</p>
+          <!-- Figma -->
+          <article class="tile feat reveal h-[384px]" style="--glow: rgba(124, 92, 255, 0.5)">
+            <p class="feat-cap"><b>Works with Figma.</b> Copy layers there and back with a plain copy and paste. A token brings the images along.</p>
+            <div class="absolute inset-x-6 bottom-7 flex flex-col items-center gap-5">
+              <div class="flex items-center gap-3 text-[13px] font-semibold">
+                <span class="rounded-[12px] bg-white/10 px-5 py-3 ring-1 ring-white/15">Figma</span>
+                <span class="flex flex-col items-center gap-1 text-[10px] font-medium text-white/70"><span class="rounded bg-black/40 px-1.5 py-[1px] ring-1 ring-white/15">Ctrl C</span><span class="text-[15px] leading-none text-white/60">⇄</span><span class="rounded bg-black/40 px-1.5 py-[1px] ring-1 ring-white/15">Ctrl V</span></span>
+                <span class="flex items-center gap-2 rounded-[12px] bg-[#0b0b10] px-5 py-3 shadow-[0_0_0_1.5px_rgba(150,180,255,0.6),0_0_30px_rgba(110,120,255,0.8)]"><img src="assets/img/icon.png" alt="" class="h-4 w-4 rounded" />Gigma</span>
+              </div>
+              <div class="w-full max-w-[290px] rounded-[12px] border border-white/10 bg-white/[0.05] p-3 text-[11px]">
+                <div class="text-white/50">Personal access token</div>
+                <div class="mt-2 flex items-center gap-2"><span class="flex h-[30px] flex-1 items-center rounded-[8px] bg-black/40 px-2.5 font-mono text-[11px] text-white/70 ring-1 ring-white/10">figd_••••••••••••</span><span class="flex h-[30px] items-center rounded-full bg-white/10 px-3 font-semibold text-white/85">Save</span></div>
+              </div>
+            </div>
           </article>
-          <article class="tile shot reveal h-[420px]" style="--d: 0.06s">
-            <img src="assets/img/flow-nodes.jpg" width="1280" height="840" loading="lazy" alt="A Spec card in Gigma wired to a UI kit and a guideline on the left and to the Landing frame on the right, with a card of rules below" />
-            <div class="tile-shade"></div>
-            <p class="tile-cap"><b>Spec nodes.</b> A task takes materials in on the left and points at the frames to work in on the right. A card of rules sits next to it.</p>
+          <!-- MCP -->
+          <article class="tile feat reveal h-[384px]" style="--glow: rgba(12, 140, 233, 0.5); --d: 0.06s">
+            <p class="feat-cap"><b>An MCP server, built in.</b> Gigma listens on your own machine and gives an assistant 62 tools: it reads layers and styles, takes screenshots and draws on the canvas.</p>
+            <div class="absolute inset-x-5 bottom-7 flex items-center gap-2 sm:inset-x-7 sm:gap-3">
+              <div class="flex flex-none flex-col gap-2">
+                <span class="flex items-center gap-2 rounded-full bg-white/[0.07] px-3 py-[6px] text-[12px] font-medium text-white/90 ring-1 ring-white/10"><i class="h-[7px] w-[7px] rounded-full" style="background: #0c8ce9; box-shadow: 0 0 8px #0c8ce9"></i>Claude</span>
+                <span class="flex items-center gap-2 rounded-full bg-white/[0.07] px-3 py-[6px] text-[12px] font-medium text-white/90 ring-1 ring-white/10"><i class="h-[7px] w-[7px] rounded-full" style="background: #14b8a6; box-shadow: 0 0 8px #14b8a6"></i>Cursor</span>
+                <span class="flex items-center gap-2 rounded-full bg-white/[0.07] px-3 py-[6px] text-[12px] font-medium text-white/90 ring-1 ring-white/10"><i class="h-[7px] w-[7px] rounded-full" style="background: #60a5fa; box-shadow: 0 0 8px #60a5fa"></i>VS Code</span>
+                <span class="flex items-center gap-2 rounded-full bg-white/[0.07] px-3 py-[6px] text-[12px] font-medium text-white/90 ring-1 ring-white/10"><i class="h-[7px] w-[7px] rounded-full" style="background: #a98bff; box-shadow: 0 0 8px #a98bff"></i>LM Studio</span>
+              </div>
+              <span class="feat-wire"></span>
+              <div class="flex-none rounded-[14px] border border-white/15 bg-white/[0.06] px-4 py-3.5 shadow-[0_0_40px_rgba(12,140,233,0.35)]">
+                <div class="flex items-center gap-2 text-[12px] font-semibold"><i class="h-2 w-2 rounded-full bg-[#14ae5c] shadow-[0_0_8px_#14ae5c]"></i>MCP server</div>
+                <div class="mt-2 font-mono text-[12px] text-[#7cc4ff]">127.0.0.1:7331/mcp</div>
+                <div class="mt-2 max-w-[150px] text-[10.5px] leading-[1.35] text-white/45">Only this computer can connect</div>
+              </div>
+              <span class="feat-wire hidden sm:block"></span>
+              <div class="hidden flex-none rounded-[12px] border border-white/10 bg-black/30 px-3.5 py-3 font-mono text-[11px] leading-[1.75] text-white/75 sm:block">
+                <div>create_frame</div><div>create_text</div><div>update_node</div><div>get_screenshot</div><div>list_specs</div><div>get_guideline</div><div class="text-white/35">+ 56 more</div>
+              </div>
+            </div>
           </article>
         </div>
         <div class="mt-4 grid gap-4 md:grid-cols-[640fr_356fr]">
-          <article class="tile shot reveal h-[420px]">
-            <img src="assets/img/flow-palette.jpg" width="1420" height="972" loading="lazy" alt="The actions palette of Gigma open over a page: a tool, two commands and two layers found by the letters fr" />
-            <div class="tile-shade"></div>
-            <p class="tile-cap"><b>Actions palette.</b> Ctrl+K finds every tool, command and layer by name.</p>
+          <!-- Spec nodes -->
+          <article class="tile feat reveal h-[384px]" style="--glow: rgba(169, 139, 255, 0.45)">
+            <p class="feat-cap"><b>Spec nodes.</b> A task is a card on the canvas. Materials come in on its left, the frames to work in go out on its right, and the assistant follows the wires.</p>
+            <div class="absolute inset-x-0 bottom-5 px-4 sm:px-6">
+              <div class="fit mx-auto max-w-[590px]" data-w="590" data-h="230">
+                <div class="fit-inner">
+                  <svg class="absolute inset-0" width="590" height="230" viewBox="0 0 590 230" fill="none">
+                    <path d="M132 56 C 170 56, 170 92, 208 92" stroke="#a98bff" stroke-width="2" />
+                    <path d="M94 168 C 150 168, 160 104, 208 104" stroke="#a98bff" stroke-width="2" />
+                    <path d="M388 92 C 420 92, 410 50, 444 50" stroke="#7cb7ff" stroke-width="2" stroke-dasharray="6 5" class="feat-dash" />
+                    <circle cx="208" cy="98" r="4" fill="#a98bff" /><circle cx="388" cy="92" r="4" fill="#7cb7ff" /><circle cx="444" cy="50" r="4" fill="#7cb7ff" />
+                  </svg>
+                  <!-- materials -->
+                  <div class="absolute left-0 top-[14px] h-[84px] w-[132px] rounded-[10px] bg-white p-2.5">
+                    <div class="text-[8px] font-semibold text-[#78716c]">UI kit</div>
+                    <div class="mt-1.5 flex gap-1.5"><span class="h-[18px] flex-1 rounded-[6px] bg-[#f97316]"></span><span class="h-[18px] w-[34px] rounded-[6px] bg-[#ffedd5]"></span></div>
+                    <div class="mt-1.5 flex items-center gap-1.5"><span class="h-[18px] w-[52px] rounded-full bg-[#1c1917]"></span><span class="h-[16px] w-[16px] rounded-full bg-[#f97316]"></span><span class="h-[16px] w-[16px] rounded-full bg-[#fde68a]"></span></div>
+                  </div>
+                  <div class="absolute left-[46px] top-[144px] h-[48px] w-[48px] rounded-full" style="background: radial-gradient(circle at 35% 30%, #ffe4c4, #f97316 60%, #c2410c); outline: 1.5px solid rgba(253, 186, 116, 0.6); outline-offset: 5px"></div>
+                  <div class="absolute left-[30px] top-[204px] w-[80px] text-center text-[10px] font-semibold text-white/85">Sunrise</div>
+                  <!-- the task -->
+                  <div class="absolute left-[208px] top-[34px] w-[180px] rounded-[10px] bg-[#2c2c2c] p-[5px] shadow-[0_14px_30px_rgba(0,0,0,0.5)] ring-1 ring-[#0d99ff]">
+                    <div class="flex h-[22px] items-center gap-1 px-1 text-[9.5px] font-semibold text-[#7cb7ff]">Landing hero<span class="ml-auto rounded-full bg-[#2f80ed] px-1.5 py-[1px] text-[7px] font-bold text-white">IN PROGRESS</span></div>
+                    <div class="rounded-[6px] bg-white px-3 py-2.5">
+                      <div class="text-[12px] font-bold text-[#1e1e1e]">Landing hero</div>
+                      <div class="mt-1 text-[8px] leading-[1.45] text-[#555]">Navigation, a warm headline, one orange button, a collage with an order card.</div>
+                    </div>
+                  </div>
+                  <!-- the frame to work in -->
+                  <div class="absolute left-[444px] top-[4px] text-[9px] text-[#9a9a9a]">Landing</div>
+                  <div class="absolute left-[444px] top-[20px] h-[190px] w-[146px] overflow-hidden rounded-[10px] bg-[#fff7ed] p-3 text-[#1c1917]">
+                    <div class="flex items-center gap-1.5"><span class="h-[10px] w-[10px] rounded-full bg-[#f97316]"></span><b class="text-[9px]">Sunrise</b></div>
+                    <div class="mt-3 font-['Georgia'] text-[17px] font-bold leading-[1.05]">Breakfast, delivered warm.</div>
+                    <div class="mt-3 h-[20px] w-[80px] rounded-[7px] bg-[#f97316]"></div>
+                    <div class="mt-3 h-[60px] rounded-[10px] bg-[#fb923c]"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </article>
-          <article class="tile shot reveal h-[420px]" style="--d: 0.06s">
-            <img src="assets/img/flow-cursors.jpg" width="712" height="840" loading="lazy" alt="The cursors of Claude and Codex on a page in Gigma while a button is selected by the person" />
-            <div class="tile-shade"></div>
-            <p class="tile-cap"><b>AI cursors.</b> See which assistant is working, and on which layer.</p>
+          <!-- Guidelines -->
+          <article class="tile feat reveal h-[384px]" style="--glow: rgba(249, 115, 22, 0.45); --d: 0.06s">
+            <p class="feat-cap"><b>Guidelines.</b> The colours, fonts, logos and rules of a brand, shared by every project and read by the AI before it draws.</p>
+            <div class="absolute inset-x-6 bottom-7 rounded-[14px] border border-white/10 bg-[#242424] p-4 shadow-[0_18px_40px_rgba(0,0,0,0.5)]" style="border-top: 3px solid #f97316">
+              <div class="flex items-center gap-2 text-[15px] font-bold"><i class="h-[14px] w-[14px] rounded-full" style="background: radial-gradient(circle at 35% 30%, #ffe4c4, #f97316 60%, #c2410c)"></i>Sunrise<span class="ml-auto text-[8.5px] font-semibold tracking-[0.08em] text-white/40">GUIDELINE</span></div>
+              <div class="mt-3 grid grid-cols-4 gap-2 text-[9px] text-white/60">
+                <span><i class="block h-[30px] rounded-[7px] bg-[#f97316]"></i><b class="mt-1 block text-white/90">Orange</b></span>
+                <span><i class="block h-[30px] rounded-[7px] bg-[#fff7ed]"></i><b class="mt-1 block text-white/90">Cream</b></span>
+                <span><i class="block h-[30px] rounded-[7px] bg-[#1c1917] ring-1 ring-white/15"></i><b class="mt-1 block text-white/90">Ink</b></span>
+                <span><i class="block h-[30px] rounded-[7px] bg-[#fde68a]"></i><b class="mt-1 block text-white/90">Butter</b></span>
+              </div>
+              <div class="mt-3 flex items-center gap-3 border-t border-white/10 pt-3"><span class="font-['Georgia'] text-[24px] font-bold leading-none">Aa</span><span class="text-[11px] leading-[1.35]"><b class="block">Heading</b><span class="text-white/50">Georgia · 700 · 92px</span></span></div>
+            </div>
           </article>
         </div>
       </div>
@@ -307,12 +378,10 @@
                 <div class="absolute -bottom-16 -right-10 h-[160px] w-[160px] rounded-full bg-[radial-gradient(closest-side,rgba(70,120,255,0.7),transparent)]"></div>
               </div>
               <div class="mos mos-wide mo-6 left-[240px] top-[222px] h-[196px] w-[434px]" style="background: radial-gradient(70% 90% at 50% 120%, #6c4bff, #261b5c 45%, #0c0c10 75%)">
-                <p class="mos-cap"><b>Works with Figma.</b> Copy layers there and back with a plain copy and paste. A token brings the images along.</p>
-                <div class="absolute bottom-[22px] left-0 right-0 flex items-center justify-center gap-3 text-[12px] font-semibold">
-                  <span class="rounded-[10px] bg-white/10 px-4 py-2.5 ring-1 ring-white/15">Figma</span>
-                  <span class="flex flex-col items-center gap-1 text-[9px] font-medium text-white/70"><span class="rounded bg-black/40 px-1.5 py-[1px] ring-1 ring-white/15">Ctrl C</span><span class="text-[13px] leading-none text-white/60">⇄</span><span class="rounded bg-black/40 px-1.5 py-[1px] ring-1 ring-white/15">Ctrl V</span></span>
-                  <span class="flex items-center gap-2 rounded-[10px] bg-[#0b0b10] px-4 py-2.5 shadow-[0_0_0_1.5px_rgba(150,180,255,0.6),0_0_30px_rgba(110,120,255,0.8)]"><img src="assets/img/icon.png" alt="" class="h-4 w-4 rounded" />Gigma</span>
-                </div>
+                <p class="mos-cap"><b>AI cursors.</b> Every assistant gets its own cursor and name on the canvas, so you see who is working and where.</p>
+                <div class="cur cur-ai" style="left: 21%; top: 112px"><span class="halo"></span><svg width="24" height="24"><use href="#a-ai" /></svg><span class="tag">Claude</span></div>
+                <div class="cur cur-ai" style="left: 47%; top: 136px"><span class="halo"></span><svg width="24" height="24"><use href="#a-ai" /></svg><span class="tag">Codex</span></div>
+                <div class="cur cur-ai" style="left: 72%; top: 104px"><span class="halo"></span><svg width="24" height="24"><use href="#a-ai" /></svg><span class="tag">Cursor</span></div>
               </div>
               <div class="mos mos-wide mo-7 left-[688px] top-[222px] h-[196px] w-[352px]">
                 <p class="mos-cap"><b>Share as a file.</b> Projects, guidelines and plugins travel in formats of their own.</p>

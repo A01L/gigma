@@ -307,25 +307,58 @@ body {
   color: #fff;
   isolation: isolate;
 }
-/* a tile that shows a close-up of the app: the picture fills it, from the top */
-.tile.shot {
-  background: #404040;
+/* a feature card: the caption on top, a small drawing under it, a glow of its own colour from below */
+.tile.feat {
+  background: radial-gradient(120% 90% at 50% 125%, var(--glow, rgba(90, 110, 255, 0.4)), transparent 60%), radial-gradient(130% 100% at 30% 0%, #25252b, #0c0c10 62%);
 }
-.tile.shot img {
+.feat-cap {
+  position: relative;
+  z-index: 3;
+  max-width: 540px;
+  padding: 1.4rem 1.5rem 0;
+  font-size: 16px;
+  line-height: 1.36;
+  color: rgba(255, 255, 255, 0.62);
+}
+.feat-cap b {
+  color: #fff;
+  font-weight: 600;
+}
+/* a wire between two things, with light running along it */
+.feat-wire {
+  position: relative;
+  flex: 1;
+  min-width: 14px;
+  height: 2px;
+  border-radius: 2px;
+  background: rgba(124, 196, 255, 0.28);
+  overflow: hidden;
+}
+.feat-wire::after {
+  content: "";
   position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: 50% 0;
-  transition: scale 0.9s cubic-bezier(0.2, 0.7, 0.2, 1);
+  top: 0;
+  bottom: 0;
+  width: 46%;
+  background: linear-gradient(90deg, transparent, #7cc4ff, transparent);
+  animation: wire 2.4s linear infinite;
 }
-.tile.shot:hover img {
-  scale: 1.03;
+@keyframes wire {
+  from {
+    left: -46%;
+  }
+  to {
+    left: 100%;
+  }
 }
-.tile.shot .tile-shade {
-  height: 38%;
-  background: linear-gradient(to top, #0b0b0e 42%, rgba(11, 11, 14, 0.7) 66%, transparent);
+/* the dashed wire to the frame creeps forward, as a wire that is being followed */
+.feat-dash {
+  animation: dash 1.6s linear infinite;
+}
+@keyframes dash {
+  to {
+    stroke-dashoffset: -22;
+  }
 }
 .tile-cap {
   position: absolute;
