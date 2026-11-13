@@ -131,136 +131,113 @@ body {
     translate: -40px 18px;
   }
 }
-.beam {
+/* the window of the app on the first screen */
+.app-window {
+  position: relative;
+  border-radius: 12px;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.16),
+    0 50px 140px -30px rgba(70, 90, 255, 0.55),
+    0 0 90px -10px rgba(130, 100, 255, 0.28);
+}
+/* the line of lightning that splits it in two (drawn by app.js) */
+.bolt {
   position: absolute;
-  left: var(--beam-x, 50%);
-  top: 0;
-  height: var(--beam-h, 100%);
-  width: 0;
+  left: 50%;
+  top: -48px;
+  bottom: -36px;
+  width: 140px;
+  translate: -50% 0;
   pointer-events: none;
+  z-index: 4;
 }
-.beam-line {
+.bolt-line {
   position: absolute;
-  left: -1.5px;
+  left: 50%;
   top: 0;
   bottom: 0;
-  width: 3px;
-  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.15), #e8f1ff 22%, #fff);
-  box-shadow: 0 0 8px 1px #9cc8ff, 0 0 26px 4px rgba(90, 130, 255, 0.75);
+  width: 2px;
+  translate: -50% 0;
+  background: linear-gradient(to bottom, transparent, #dbe8ff 9%, #fff 50%, #dbe8ff 91%, transparent);
+  box-shadow:
+    0 0 6px 1px #9cc8ff,
+    0 0 22px 4px rgba(90, 130, 255, 0.8),
+    0 0 60px 12px rgba(120, 90, 255, 0.35);
+  animation: hum 3.2s ease-in-out infinite;
 }
-.beam-line::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  width: 3px;
-  height: 220px;
-  background: linear-gradient(to bottom, transparent, #fff);
-  animation: run 2.8s cubic-bezier(0.55, 0, 0.85, 0.5) infinite;
-}
-@keyframes run {
-  from {
-    top: -220px;
-    opacity: 0;
-  }
-  25% {
-    opacity: 1;
-  }
-  to {
-    top: 100%;
-    opacity: 0;
-  }
-}
-.beam-cone {
-  position: absolute;
-  left: -330px;
-  width: 660px;
-  bottom: 0;
-  height: 62%;
-  background: radial-gradient(50% 100% at 50% 100%, rgba(255, 255, 255, 0.95), rgba(170, 196, 255, 0.75) 12%, rgba(110, 120, 255, 0.45) 32%, rgba(120, 70, 220, 0.18) 58%, transparent 80%);
-  clip-path: polygon(48% 0, 52% 0, 100% 100%, 0 100%);
-  filter: blur(22px);
-  animation: breathe 5s ease-in-out infinite;
-}
-.beam-dots {
-  position: absolute;
-  left: -260px;
-  width: 520px;
-  bottom: 0;
-  height: 48%;
-  background-image: radial-gradient(rgba(255, 255, 255, 0.55) 0.7px, transparent 1.1px);
-  background-size: 4px 4px;
-  -webkit-mask: radial-gradient(50% 100% at 50% 100%, #000, transparent 75%);
-  mask: radial-gradient(50% 100% at 50% 100%, #000, transparent 75%);
-  clip-path: polygon(46% 0, 54% 0, 100% 100%, 0 100%);
-  opacity: 0.55;
-}
-.beam-flare {
-  position: absolute;
-  left: -420px;
-  width: 840px;
-  bottom: -60px;
-  height: 120px;
-  background: radial-gradient(closest-side, #fff, rgba(210, 225, 255, 0.9) 20%, rgba(120, 140, 255, 0.45) 50%, transparent);
-  filter: blur(10px);
-  animation: breathe 5s ease-in-out infinite;
-}
-@keyframes breathe {
-  0%,
-  100% {
-    opacity: 0.86;
-  }
+@keyframes hum {
   50% {
-    opacity: 1;
+    opacity: 0.72;
   }
 }
-.rim {
+.bolt-flash {
   position: absolute;
-  right: -3px;
-  top: 0;
-  width: 6px;
-  height: 78%;
-  border-radius: 6px;
-  background: linear-gradient(to bottom, #fff, #e6dcff 18%, #b89cff 40%, #6c7bff 65%, transparent);
-  box-shadow: 0 0 18px 4px rgba(170, 140, 255, 0.7), 0 0 60px 18px rgba(110, 120, 255, 0.35);
+  inset: 0 -90px;
+  background: radial-gradient(50% 50% at 50% 50%, rgba(150, 180, 255, 0.4), rgba(120, 100, 255, 0.12) 45%, transparent 70%);
+  opacity: 0;
+  transition: opacity 0.35s ease-out;
 }
-.rim::after {
-  content: "";
+.bolt svg {
   position: absolute;
-  left: 4px;
-  top: 0;
-  width: 110px;
+  inset: 0;
+  width: 100%;
   height: 100%;
-  background: linear-gradient(90deg, rgba(190, 170, 255, 0.28), transparent);
-  -webkit-mask: linear-gradient(to bottom, transparent, #000 12%, transparent);
-  mask: linear-gradient(to bottom, transparent, #000 12%, transparent);
-  filter: blur(18px);
+  overflow: visible;
+  filter: drop-shadow(0 0 3px #a9cdff) drop-shadow(0 0 9px #5d7bff);
 }
-.top-edge {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: -1px;
-  height: 2px;
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.85) 50%, #fff 72%, rgba(200, 180, 255, 0.9));
-  box-shadow: 0 0 22px 2px rgba(150, 170, 255, 0.6);
+.bolt path {
+  fill: none;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  transition: opacity 0.3s ease-out;
 }
-
-/* the waterfall of light over the mockup (canvas, see app.js) */
-.fall {
-  position: absolute;
-  pointer-events: none;
-  z-index: 5;
-  mix-blend-mode: screen;
+.bolt .b1 {
+  stroke: #fff;
+  stroke-width: 1.3;
+  opacity: 0.4;
 }
-.fall-glow {
-  opacity: 0.85;
+.bolt .b2 {
+  stroke: #cfe0ff;
+  stroke-width: 1;
+  opacity: 0.12;
 }
-/* while the water runs, the still line of light is not needed */
-.flowing .beam-line {
+.bolt .b3 {
+  stroke: #9db8ff;
+  stroke-width: 0.8;
   opacity: 0;
 }
-.flowing .rim {
-  opacity: 0.8;
+/* on a phone the window is small: the line is thinner and stays inside it */
+@media (max-width: 640px) {
+  .bolt {
+    top: -16px;
+    bottom: -16px;
+  }
+  .bolt-line {
+    width: 1.5px;
+    box-shadow:
+      0 0 4px 0 #9cc8ff,
+      0 0 12px 2px rgba(90, 130, 255, 0.7);
+  }
+  .bolt svg {
+    filter: drop-shadow(0 0 2px #a9cdff);
+  }
+}
+/* a strike: everything lights up at once and dies away slowly */
+.bolt.strike path,
+.bolt.strike .bolt-flash {
+  transition: none;
+}
+.bolt.strike .b1 {
+  opacity: 1;
+}
+.bolt.strike .b2 {
+  opacity: 0.85;
+}
+.bolt.strike .b3 {
+  opacity: 0.55;
+}
+.bolt.strike .bolt-flash {
+  opacity: 1;
 }
 
 /* ================================================================ mockups: fixed design size, scaled to fit */
@@ -310,20 +287,6 @@ body {
   flex: none;
   color: #9a9a9a;
 }
-.sel-box {
-  position: absolute;
-  outline: 1.5px solid #0d99ff;
-  pointer-events: none;
-}
-.sel-box i {
-  position: absolute;
-  width: 7px;
-  height: 7px;
-  background: #fff;
-  border: 1.5px solid #0d99ff;
-  translate: -50% -50%;
-}
-
 /* cursors */
 .cur {
   position: absolute;
