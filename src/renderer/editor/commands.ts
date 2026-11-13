@@ -11,6 +11,7 @@ import { framesInReadingOrder, pdfPages } from './pdf'
 import { polygonPath, starPath } from './shapes'
 import { codeBitmapAsync } from './code-render'
 import { aiCursor } from './ai-cursor'
+import { noteSpecClient } from './spec-board'
 import { guides, newGuide, newGuideId, placeGuide, saveGuide } from './guides'
 import type { GuideData } from '@shared/types'
 
@@ -971,6 +972,8 @@ export async function executeCommand(req: CommandRequest): Promise<CommandRespon
     if (!h) throw new Error('Unknown command ' + req.name)
     const result = await h(req.args ?? {})
     if (req.client) aiCursor.touch(req.client, req.name, req.args ?? {}, result)
+    // the task board on Home shows which assistant works on a spec (creating a card is not working on it)
+    if (req.client && req.name === 'update_spec') noteSpecClient(req.args?.id, req.client)
     return { id: req.id, ok: true, result }
   } catch (e) {
     return { id: req.id, ok: false, error: (e as Error).message }

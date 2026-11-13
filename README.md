@@ -66,6 +66,7 @@ Its main feature is a **built-in MCP server**. An AI assistant (Claude Desktop, 
 - **MCP server** on `127.0.0.1:7331`: 60+ tools, from creating a frame to exporting a PDF
 - The AI sees the canvas: a screenshot and an export of any layer
 - **Spec** cards as nodes: the right port leads to the frames to work in, the left port takes materials; a card is a task or a set of standing rules
+- A task board on Home: the Spec tasks of every open project grouped into in progress, queue and done, with a progress bar in the sidebar; a click jumps to the task on its canvas
 - **AI cursor**: shows which client (Claude, Codex and others) is working and on which layer
 - Annotations right on the canvas
 - **Guidelines**: design systems (colours with roles, fonts, logos, rules) in a library shared by every project, exported and imported as `.gguide`
@@ -392,6 +393,7 @@ node scripts/test-components.mjs    # components, outline stroke
 node scripts/test-pdf.mjs           # PDF export
 node scripts/test-undo.mjs          # undo and redo on any keyboard layout
 node scripts/test-specs.mjs         # Spec cards as nodes
+node scripts/test-spec-board.mjs    # the task board on Home
 node scripts/test-guides.mjs        # guideline library
 node scripts/test-ai-cursor.mjs     # AI cursor
 node scripts/test-vector-edit.mjs   # point editing

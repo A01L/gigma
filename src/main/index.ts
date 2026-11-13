@@ -23,7 +23,7 @@ import { deletedGuides, exportGuide, guideSizes, importGuide, importGuideFile, i
 import type { GuideData } from '../shared/types'
 import type { CommandName, CommandResponse } from '../shared/commands'
 import type { DocChanges } from '../shared/types'
-import type { AppSettings, McpStatus, StorageStats, TabInfo, TabsState } from '../shared/api'
+import type { AppSettings, McpStatus, SpecBoardItem, SpecTask, StorageStats, TabInfo, TabsState } from '../shared/api'
 
 const MCP_PORT = Number(process.env.GIGMA_MCP_PORT || 7331)
 export const TAB_BAR_H = 40
@@ -54,6 +54,8 @@ interface Tab {
   file: GigmaFile | null
   ready: Promise<void>
   markReady: () => void
+  /** Spec tasks the tab reported, for the board on Home */
+  specs: SpecTask[]
 }
 
 const tabs: Tab[] = []
@@ -83,8 +85,17 @@ function tabsState(): TabsState {
   return { activeId, tabs: tabs.map((t): TabInfo => ({ id: t.id, name: t.name, path: t.path })) }
 }
 
+/** Spec tasks of every open tab, in tab order */
+function specBoard(): SpecBoardItem[] {
+  return tabs.flatMap((t) => t.specs.map((s): SpecBoardItem => ({ ...s, tabId: t.id, project: t.name })))
+}
+function broadcastSpecs(): void {
+  if (win && !win.isDestroyed()) win.webContents.send('specs:update', specBoard())
+}
+
 function broadcastTabs(): void {
   win?.webContents.send('tabs:update', tabsState())
+  broadcastSpecs()
   const t = activeTab()
   win?.setTitle(t ? `${t.name} - Gigma` : 'Gigma')
 }
@@ -131,7 +142,7 @@ async function openTab(path: string): Promise<Tab> {
   view.setBackgroundColor('#1e1e1e')
   let markReady!: () => void
   const ready = new Promise<void>((r) => (markReady = r))
-  const tab: Tab = { id, path, name: 'Loading…', view, file: null, ready, markReady }
+  const tab: Tab = { id, path, name: 'Loading…', view, file: null, ready, markReady, specs: [] }
   tabs.push(tab)
   win!.contentView.addChildView(view)
   view.webContents.setWindowOpenHandler(({ url }) => {
@@ -390,6 +401,19 @@ ipcMain.handle('doc:open', (e, path: string) => {
   broadcastTabs()
   setTimeout(() => t.markReady(), 300) // let the editor mount before MCP commands arrive
   return snap
+})
+ipcMain.on('specs:report', (e, tasks: SpecTask[]) => {
+  const t = tabOf(e.sender)
+  if (!t || !Array.isArray(tasks)) return
+  t.specs = tasks
+  broadcastSpecs()
+})
+ipcMain.handle('specs:list', () => specBoard())
+ipcMain.handle('specs:focus', (_e, tabId: string, id: string) => {
+  const t = tabs.find((x) => x.id === tabId)
+  if (!t) return
+  activate(tabId)
+  t.view.webContents.send('specs:focus', id)
 })
 ipcMain.handle('doc:close', (e) => {
   const t = tabOf(e.sender)

@@ -4,6 +4,7 @@ import { backend } from '../backend'
 import { editor } from '../editor/editor'
 import { installCommandBus } from '../editor/commands'
 import { initGuides } from '../editor/guides'
+import { initSpecBoard } from '../editor/spec-board'
 import { EditorView } from './EditorView'
 import { saveThumbnail } from './actions'
 
@@ -24,6 +25,8 @@ export function DocApp({ path }: { path: string }) {
         editor.load(snap)
         // the shared guideline library: load it and keep this document in step with it
         initGuides()
+        // Home shows the Spec tasks of open projects: report ours and keep them fresh
+        initSpecBoard()
         setLoaded(true)
       })
       .catch((e) => setError(String(e?.message ?? e)))

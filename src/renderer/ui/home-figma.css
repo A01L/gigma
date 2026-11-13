@@ -299,3 +299,235 @@
 .file-badge img {
   border-radius: 6px;
 }
+
+/* ---------- Spec tasks: the widget in the sidebar ---------- */
+.side-specs {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 11px 12px 12px;
+  margin-bottom: 6px;
+  border-radius: 10px;
+  background: var(--panel-2);
+  border: 1px solid transparent;
+  text-align: left;
+}
+.side-specs:hover {
+  border-color: var(--border);
+}
+.side-specs.active {
+  border-color: var(--accent);
+}
+.side-specs-top {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.side-specs-top b {
+  font-size: 20px;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.side-specs-word {
+  font-size: 12px;
+  color: var(--text-2);
+}
+.side-specs-tag {
+  margin-left: auto;
+  align-self: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(12, 140, 233, 0.16);
+  color: #0c8ce9;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.side-specs-bottom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.side-specs-bar {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--hover);
+  overflow: hidden;
+}
+.side-specs-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #0c8ce9, #5cc0ff);
+  transition: width 0.4s ease;
+}
+.side-specs-pct {
+  min-width: 30px;
+  text-align: right;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Spec tasks: the page ---------- */
+.specs-page {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 40px;
+}
+.specs-page .home-head .side-specs-tag {
+  margin-left: 0;
+}
+.specs-sub {
+  margin: 0;
+  padding: 0 36px 14px;
+  font-size: 12px;
+}
+.specs-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 36px 14px;
+}
+.specs-search {
+  flex: 1;
+  max-width: 520px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 10px;
+  background: var(--panel-2);
+  color: var(--text-3);
+  border: 1px solid transparent;
+}
+.specs-search:focus-within {
+  border-color: var(--accent);
+}
+.specs-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: none;
+  font-size: 12px;
+}
+.specs-total {
+  margin-left: auto;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.specs-group {
+  margin: 0 36px 14px;
+  border-radius: 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.specs-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 38px;
+  padding: 0 14px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-align: left;
+}
+.specs-group-count {
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-3);
+}
+.specs-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 40px;
+  padding: 0 14px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  text-align: left;
+}
+.specs-row:hover {
+  background: var(--hover);
+}
+.spec-ico {
+  flex: none;
+}
+.spec-ico.progress {
+  color: #f5a524;
+}
+.spec-ico.todo {
+  color: var(--text-3);
+}
+.spec-ico.done {
+  color: #14ae5c;
+}
+.specs-title {
+  flex: none;
+  max-width: 38%;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.specs-excerpt {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.specs-chip {
+  flex: none;
+  max-width: 180px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--text-2);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.specs-chip.ai i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #0c8ce9;
+  box-shadow: 0 0 6px #0c8ce9;
+}
+.specs-page-name {
+  flex: none;
+  width: 90px;
+  text-align: right;
+  color: var(--text-3);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* finished tasks step back, as in a done column */
+.specs-group.done .specs-row {
+  opacity: 0.55;
+}
+.specs-group.done .specs-row:hover {
+  opacity: 1;
+}

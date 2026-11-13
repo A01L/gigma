@@ -73,6 +73,17 @@ const api: GigmaApi = {
     },
     popupMenu: (x, y) => ipcRenderer.invoke('menu:popup', x, y)
   },
+  specs: {
+    report: (tasks) => ipcRenderer.send('specs:report', tasks),
+    list: () => ipcRenderer.invoke('specs:list'),
+    onUpdate: (handler) => {
+      ipcRenderer.on('specs:update', (_e, items) => handler(items))
+    },
+    focus: (tabId, id) => ipcRenderer.invoke('specs:focus', tabId, id),
+    onFocus: (handler) => {
+      ipcRenderer.on('specs:focus', (_e, id) => handler(id))
+    }
+  },
   doc: {
     open: (path) => ipcRenderer.invoke('doc:open', path),
     close: () => ipcRenderer.invoke('doc:close'),

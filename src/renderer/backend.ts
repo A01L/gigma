@@ -76,6 +76,7 @@ function memoryBackend(): GigmaApi {
       onUpdate: () => {},
       popupMenu: async () => {}
     },
+    specs: { report: () => {}, list: async () => [], onUpdate: () => {}, focus: async () => {}, onFocus: () => {} },
     onBeforeClose: () => {},
     ready: () => {},
     appVersion: 'web',

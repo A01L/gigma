@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { McpStatus, ProjectInfo } from '@shared/api'
+import type { McpStatus, ProjectInfo, SpecBoardItem } from '@shared/api'
 import { backend } from '../backend'
 import { Icons } from './icons'
 import logoUrl from '../assets/logo.svg'
@@ -15,9 +15,13 @@ interface Props {
   initialSection?: Section
   onImport?: () => void
   openPaths?: Set<string>
+  /** Spec tasks of the projects open in tabs */
+  specs?: SpecBoardItem[]
+  /** the section changed: the shell remembers it, so Home comes back to the same place */
+  onSection?: (s: Section) => void
 }
 
-export type Section = 'recent' | 'favorites' | 'trash' | 'settings'
+export type Section = 'recent' | 'favorites' | 'trash' | 'settings' | 'specs'
 
 const I = {
   clock: (
@@ -69,12 +73,25 @@ function relTime(ts: number, lang: string): string {
   return new Date(ts).toLocaleDateString(lang)
 }
 
-export function Home({ onOpen, onNew, onImport, openPaths, initialSection }: Props) {
+/** "1 task", "3 tasks"; Russian has three forms */
+function taskWord(n: number, lang: string): string {
+  if (!lang.startsWith('ru')) return n === 1 ? 'task' : 'tasks'
+  const form = new Intl.PluralRules('ru').select(n)
+  return form === 'one' ? 'задача' : form === 'few' ? 'задачи' : 'задач'
+}
+
+export function Home({ onOpen, onNew, onImport, openPaths, initialSection, specs = [], onSection }: Props) {
   const t = useT()
   const settings = useSettings()
   const lang = document.documentElement.lang || 'en'
   const [items, setItems] = useState<ProjectInfo[] | null>(null)
-  const [section, setSection] = useState<Section>(initialSection ?? 'recent')
+  const [section, setSectionState] = useState<Section>(initialSection ?? 'recent')
+  const setSection = (s: Section) => {
+    setSectionState(s)
+    onSection?.(s)
+  }
+  const specsDone = specs.filter((s) => s.status === 'DONE').length
+  const specsPct = specs.length ? Math.round((specsDone / specs.length) * 100) : 0
   const [query, setQuery] = useState('')
   const [favOpen, setFavOpen] = useState(true)
   const greeting = useMemo(() => greetingFor(), [])
@@ -126,6 +143,23 @@ export function Home({ onOpen, onNew, onImport, openPaths, initialSection }: Pro
           {I.search}
           <input placeholder={t('Search')} value={query} onChange={(e) => setQuery(e.target.value)} onFocus={() => section === 'settings' && setSection('recent')} />
         </label>
+        <button
+          className={'side-specs' + (section === 'specs' ? ' active' : '')}
+          title={t('Spec tasks of the open projects')}
+          onClick={() => setSection('specs')}
+        >
+          <span className="side-specs-top">
+            <b>{specs.length}</b>
+            <span className="side-specs-word">{taskWord(specs.length, lang)}</span>
+            <span className="side-specs-tag">SPECS</span>
+          </span>
+          <span className="side-specs-bottom">
+            <span className="side-specs-bar">
+              <i style={{ width: specsPct + '%' }} />
+            </span>
+            <span className="side-specs-pct">{specsPct}%</span>
+          </span>
+        </button>
         <nav>
           <button className={'side-item' + (section === 'recent' ? ' active' : '')} onClick={() => setSection('recent')}>
             {I.clock}
@@ -171,6 +205,8 @@ export function Home({ onOpen, onNew, onImport, openPaths, initialSection }: Pro
       <main className="home-main">
         {section === 'settings' ? (
           <SettingsView />
+        ) : section === 'specs' ? (
+          <SpecsView items={specs} query={query} onQuery={setQuery} hasTabs={!!openPaths?.size} />
         ) : section === 'trash' ? (
           <TrashView
             query={query}
@@ -481,6 +517,126 @@ function FigmaSection() {
       </div>
       <p className="muted">{t('How to get a token: Figma → Settings → Security → Personal access tokens → Generate (scope: File content, read-only).')}</p>
     </section>
+  )
+}
+
+const SPEC_GROUPS = [
+  { status: 'IN_PROGRESS', label: 'In progress' },
+  { status: 'TODO', label: 'Queue' },
+  { status: 'DONE', label: 'Done' }
+] as const
+
+function SpecStatusIcon({ status }: { status: SpecBoardItem['status'] }) {
+  if (status === 'DONE')
+    return (
+      <svg className="spec-ico done" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4">
+        <circle cx="8" cy="8" r="6" fill="currentColor" fillOpacity="0.18" />
+        <path d="M5.4 8.2l1.8 1.8 3.4-3.8" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    )
+  if (status === 'IN_PROGRESS')
+    return (
+      <svg className="spec-ico progress" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4">
+        <circle cx="8" cy="8" r="6" />
+        <circle cx="8" cy="8" r="2.6" fill="currentColor" stroke="none" />
+      </svg>
+    )
+  return (
+    <svg className="spec-ico todo" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeDasharray="2.4 2.2">
+      <circle cx="8" cy="8" r="6" />
+    </svg>
+  )
+}
+
+/** The task board: Spec tasks of the projects open in tabs, grouped by status. A click shows the task on its canvas. */
+function SpecsView({ items, query, onQuery, hasTabs }: { items: SpecBoardItem[]; query: string; onQuery: (q: string) => void; hasTabs: boolean }) {
+  const t = useT()
+  const lang = document.documentElement.lang || 'en'
+  const [project, setProject] = useState('all')
+  const [closed, setClosed] = useState<Record<string, boolean>>({})
+  const projects = useMemo(() => [...new Map(items.map((s) => [s.tabId, s.project])).entries()], [items])
+  const tab = projects.some(([id]) => id === project) ? project : 'all'
+  const q = query.trim().toLowerCase()
+  const shown = items.filter(
+    (s) => (tab === 'all' || s.tabId === tab) && (!q || (s.title + ' ' + s.excerpt + ' ' + s.project + ' ' + s.frames.join(' ')).toLowerCase().includes(q))
+  )
+  const done = shown.filter((s) => s.status === 'DONE').length
+  return (
+    <div className="specs-page">
+      <div className="home-head">
+        <h1>{t('Tasks')}</h1>
+        <span className="side-specs-tag">SPECS</span>
+      </div>
+      <p className="specs-sub muted">{t('Spec tasks of the projects open in tabs. Click a task to see it on the canvas.')}</p>
+      <div className="specs-tools">
+        <label className="specs-search">
+          {I.search}
+          <input placeholder={t('Search tasks')} value={query} onChange={(e) => onQuery(e.target.value)} spellCheck={false} />
+        </label>
+        {projects.length > 1 && (
+          <Select
+            variant="pill"
+            prefix={t('Project') + ':'}
+            value={tab}
+            minWidth={200}
+            onChange={setProject}
+            options={[{ value: 'all', label: t('All open') }, ...projects.map(([id, name]) => ({ value: id, label: name }))]}
+          />
+        )}
+        {shown.length > 0 && (
+          <span className="specs-total muted">
+            {t('{done} of {total} done', { done: String(done), total: String(shown.length) })}
+          </span>
+        )}
+      </div>
+      {shown.length === 0 && (
+        <div className="empty">
+          {items.length
+            ? t('Nothing found')
+            : hasTabs
+              ? t('The open projects have no Spec tasks yet. Add a Spec card from the toolbar, or ask your AI to create one.')
+              : t('Open a project to see its Spec tasks here.')}
+        </div>
+      )}
+      {SPEC_GROUPS.map((g) => {
+        const rows = shown.filter((s) => s.status === g.status)
+        if (!rows.length) return null
+        const open = !closed[g.status]
+        return (
+          <section key={g.status} className={'specs-group ' + g.status.toLowerCase()}>
+            <button className="specs-group-head" onClick={() => setClosed({ ...closed, [g.status]: open })}>
+              <span className={'chev-mini' + (open ? ' open' : '')}>▸</span>
+              {t(g.label)}
+              <span className="specs-group-count">
+                · {rows.length} {taskWord(rows.length, lang)}
+              </span>
+            </button>
+            {open &&
+              rows.map((s) => (
+                <button key={s.tabId + s.id} className="specs-row" title={t('Show on the canvas')} onClick={() => void backend.specs.focus(s.tabId, s.id)}>
+                  <SpecStatusIcon status={s.status} />
+                  <span className="specs-title">{s.title || t('Untitled')}</span>
+                  <span className="specs-excerpt">{s.excerpt}</span>
+                  {s.frames.length > 0 && (
+                    <span className="specs-chip frame" title={s.frames.join(', ')}>
+                      → {s.frames[0]}
+                      {s.frames.length > 1 && ' +' + (s.frames.length - 1)}
+                    </span>
+                  )}
+                  {s.client && (
+                    <span className="specs-chip ai">
+                      <i />
+                      {s.client}
+                    </span>
+                  )}
+                  <span className="specs-chip">{s.project}</span>
+                  <span className="specs-page-name">{s.page}</span>
+                </button>
+              ))}
+          </section>
+        )
+      })}
+    </div>
   )
 }
 

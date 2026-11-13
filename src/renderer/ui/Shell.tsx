@@ -1,7 +1,7 @@
 // Window shell: Figma Desktop-style tab bar + the Home (file browser) tab.
 // Project tabs are separate views placed by the main process right under this bar.
 import { useEffect, useState } from 'react'
-import type { TabsState } from '@shared/api'
+import type { SpecBoardItem, TabsState } from '@shared/api'
 import { backend } from '../backend'
 import { Home, type Section } from './Home'
 import { Icons } from './icons'
@@ -13,11 +13,15 @@ export function Shell() {
   const [state, setState] = useState<TabsState>({ activeId: null, tabs: [] })
   const [homeSection, setHomeSection] = useState<Section | undefined>(undefined)
   const [homeKey, setHomeKey] = useState(0)
+  // Spec tasks of the open projects, for the board on Home
+  const [specs, setSpecs] = useState<SpecBoardItem[]>([])
 
   useEffect(() => {
     backend.tabs.onUpdate(setState)
     backend.tabs.state().then(setState)
     backend.library.onChanged(() => setHomeKey((k) => k + 1))
+    backend.specs.onUpdate(setSpecs)
+    backend.specs.list().then(setSpecs)
     backend.onMenu((a) => {
       if (a === 'settings') {
         setHomeSection('settings')
@@ -87,6 +91,8 @@ export function Shell() {
             onOpen={(p) => void backend.tabs.open(p)}
             onNew={() => void backend.tabs.newProject()}
             initialSection={homeSection}
+            onSection={setHomeSection}
+            specs={specs}
             onImport={async () => {
               const p = await backend.library.importFile()
               if (p) await backend.tabs.open(p)

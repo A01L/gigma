@@ -58,6 +58,24 @@ export interface TabInfo {
   path: string
 }
 
+/** a Spec task (not RULES) of an open project, as the Home board shows it */
+export interface SpecTask {
+  id: string
+  title: string
+  /** the first lines of the task text */
+  excerpt: string
+  status: 'TODO' | 'IN_PROGRESS' | 'DONE'
+  page: string
+  /** names of the frames or sections the spec is wired to */
+  frames: string[]
+  /** the AI client that last changed the spec over MCP in this session (Claude, Codex…) */
+  client?: string
+}
+export interface SpecBoardItem extends SpecTask {
+  tabId: string
+  project: string
+}
+
 export interface TabsState {
   activeId: string | null // null = Home
   tabs: TabInfo[]
@@ -169,6 +187,16 @@ export interface GigmaApi {
     openSettings(): Promise<void>
     onUpdate(handler: (s: TabsState) => void): void
     popupMenu(x: number, y: number): Promise<void>
+  }
+  /** the task board on Home: Spec tasks of the projects open in tabs */
+  specs: {
+    /** a project tab tells the app its Spec tasks (sent again whenever they change) */
+    report(tasks: SpecTask[]): void
+    list(): Promise<SpecBoardItem[]>
+    onUpdate(handler: (items: SpecBoardItem[]) => void): void
+    /** switch to the tab and show the spec on its canvas */
+    focus(tabId: string, id: string): Promise<void>
+    onFocus(handler: (id: string) => void): void
   }
   doc: {
     open(path: string): Promise<DocSnapshot>
