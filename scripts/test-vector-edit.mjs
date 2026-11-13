@@ -16,7 +16,7 @@ const results = []
 const check = (label, got, want) => (process.env.TRACE && console.error(label), results).push(`${JSON.stringify(got) === JSON.stringify(want) ? 'PASS' : 'FAIL'}  ${label}: ${JSON.stringify(got)}${JSON.stringify(got) === JSON.stringify(want) ? '' : '  want ' + JSON.stringify(want)}`)
 const svg = (d, w, h, fill = 'none') => `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><path d="${d}" fill="${fill}" stroke="#000"/></svg>`
 
-await mcp('create_project', { name: 'Vector test' })
+const proj = await mcp('create_project', { name: 'Vector test' })
 const made = await mcp('create_svg', { svg: svg('M0 0L200 0L200 100L0 100Z', 200, 100, '#D9D9D9'), x: 100, y: 100 })
 const rect = await mcp('create_rectangle', { name: 'rect', x: 400, y: 100, width: 120, height: 80, fill: '#2563EB' })
 const ell = await mcp('create_ellipse', { name: 'ell', x: 600, y: 100, width: 100, height: 100, fill: '#F59E0B' })
@@ -25,7 +25,7 @@ const two = await mcp('create_svg', { svg: svg('M0 0L50 0M100 40L150 40', 150, 4
 const round = await mcp('create_rectangle', { name: 'round', x: 550, y: 400, width: 120, height: 80, fill: '#10B981' })
 
 const targets = await (await fetch(`http://127.0.0.1:${port}/json`)).json()
-const page = targets.filter((p) => p.type === 'page' && p.url.includes('#doc=')).pop()
+const page = targets.filter((p) => p.type === 'page' && p.url.includes('#doc=' + encodeURIComponent(proj.path))).pop()
 const ws = new WebSocket(page.webSocketDebuggerUrl)
 await new Promise((r) => ws.addEventListener('open', r, { once: true }))
 let id = 0

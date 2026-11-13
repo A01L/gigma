@@ -5,6 +5,7 @@ import type { Constraint, DocMeta, DocSnapshot, GNode, Page, Paint, RGBA } from 
 import { DEFAULT_PAGE_BG } from '@shared/types'
 import { backend } from '../backend'
 import { keyBetween, rectsIntersect, uid, unionRects, type Rect } from './util'
+import { shapePath } from './shapes'
 import { DEFAULT_TEXT_STYLE, fitText } from './text'
 import { computeLayout, inFlow, isAutoLayout } from './autolayout'
 import { GUIDE_CARD_W, GUIDE_DOT, guideCardHeight, guideStore } from './guide-render'
@@ -967,6 +968,8 @@ export class Editor {
 
   /** id of the guideline the next click on the canvas places; 'new' = create one */
   pendingGuide: string | null = null
+  /** the gradient fill open in the fill popover: its handles are shown on the canvas. `stop` is the selected colour stop */
+  paintEdit: { id: string; index: number; stop: number } | null = null
 
   /** Copies of the guidelines used in this document (the library stays the source of truth). */
   setGuideCopies(guides: NonNullable<DocMeta['guides']>): void {
@@ -1092,6 +1095,10 @@ export class Editor {
       strokes: [],
       ...partial
     } as GNode
+    if (n.type === 'VECTOR' && n.shape) {
+      n.path = shapePath(n.shape, n.width, n.height, n.cornerRadius ?? 0)
+      n.pathBox = { w: n.width, h: n.height }
+    }
     if (n.type === 'TEXT') {
       n.textStyle = { ...DEFAULT_TEXT_STYLE, ...(n.textStyle ?? {}) }
       n.characters ??= ''
@@ -1118,6 +1125,17 @@ export class Editor {
     const oldX = n.x
     const oldY = n.y
     Object.assign(n, patch)
+    if (n.type === 'VECTOR' && n.shape) {
+      if ('path' in patch && !('shape' in patch)) {
+        // the points were edited by hand: from now on it is a plain path, with the rounding already in it
+        n.shape = undefined
+        n.cornerRadius = undefined
+      } else if ('width' in patch || 'height' in patch || 'cornerRadius' in patch || 'shape' in patch) {
+        // a polygon or a star is drawn anew at its real size, so its corners stay round however it is squeezed
+        n.path = shapePath(n.shape, n.width, n.height, n.cornerRadius ?? 0)
+        n.pathBox = { w: n.width, h: n.height }
+      }
+    }
     // a resized frame carries its children along according to their constraints
     if (n.type === 'FRAME' && !this.noConstraints && ('width' in patch || 'height' in patch) && (n.width !== oldW || n.height !== oldH)) this.applyConstraints(n, oldW, oldH)
     // a guideline is like a document: nobody sets its size, a dot is a dot and an open card is as large as its contents

@@ -18,9 +18,10 @@ import { parsePath, transformSegs } from './svgpath'
 import { getCodeBitmap, codeBitmapAsync } from './code-render'
 import { booleanAsVector, isBooleanGroup } from './boolean'
 import { drawGuide, guideStore } from './guide-render'
+import { handlesOf } from './gradient'
 
 // ---------------- image cache ----------------
-type ImgEntry = { bmp: ImageBitmap | null; missing: boolean; promise: Promise<ImageBitmap | null> }
+type ImgEntry = { bmp: ImageBitmap | null; missing: boolean; promise: Promise<ImageBitmap | null>; opaque?: boolean }
 const images = new Map<string, ImgEntry>()
 let onImageLoaded: () => void = () => {}
 export function setImageLoadedCallback(fn: () => void): void {
@@ -49,6 +50,35 @@ export function loadImage(hash: string): Promise<ImageBitmap | null> {
     images.set(hash, e)
   }
   return e.promise
+}
+/**
+ * Has the picture no transparency at all? Looked at once, on a small copy. A mask filled with such a picture
+ * is just its outline, which is far cheaper to cut by than by the alpha of the picture.
+ */
+function imageOpaque(hash: string): boolean {
+  const e = images.get(hash)
+  if (!e) {
+    loadImage(hash)
+    return false
+  }
+  if (!e.bmp) return false
+  if (e.opaque === undefined) {
+    const c = document.createElement('canvas')
+    c.width = Math.min(64, e.bmp.width)
+    c.height = Math.min(64, e.bmp.height)
+    const g = c.getContext('2d', { willReadFrequently: true })!
+    g.drawImage(e.bmp, 0, 0, c.width, c.height)
+    const d = g.getImageData(0, 0, c.width, c.height).data
+    let opaque = true
+    for (let i = 3; i < d.length; i += 4) {
+      if (d[i] < 250) {
+        opaque = false
+        break
+      }
+    }
+    e.opaque = opaque
+  }
+  return e.opaque
 }
 /** Forget cached state so a newly stored blob for this hash is picked up. */
 export function forgetImage(hash: string): void {
@@ -161,6 +191,20 @@ function drawImagePaint(ctx: CanvasRenderingContext2D, p: Extract<Paint, { type:
     if (e.missing) drawMissingImage(ctx, r)
     return
   }
+  if (p.scaleMode === 'STRETCH' && p.transform) {
+    // Figma's crop: the matrix takes a point of the box to a point of the picture, so the picture is drawn through its inverse
+    const [a, b, c, d, e, f] = p.transform
+    const det = a * d - b * c
+    if (Math.abs(det) > 1e-9) {
+      ctx.save()
+      ctx.translate(r.x, r.y)
+      ctx.scale(r.w, r.h)
+      ctx.transform(d / det, -b / det, -c / det, a / det, (c * f - d * e) / det, (b * e - a * f) / det)
+      ctx.drawImage(bmp, 0, 0, 1, 1)
+      ctx.restore()
+      return
+    }
+  }
   let dw = r.w
   let dh = r.h
   if (p.scaleMode !== 'STRETCH') {
@@ -230,26 +274,84 @@ function inverseOf(shape: Path2D, r: Rect, pad: number): Path2D {
   return p
 }
 
-/** Start/end points of a linear gradient across a box (CSS angle convention). */
-export function gradientLine(angle: number, r: Rect): { x1: number; y1: number; x2: number; y2: number } {
-  const a = (angle * Math.PI) / 180
-  const dx = Math.sin(a)
-  const dy = -Math.cos(a)
-  const L = Math.abs((r.w / 2) * dx) + Math.abs((r.h / 2) * dy)
-  const cx = r.x + r.w / 2
-  const cy = r.y + r.h / 2
-  return { x1: cx - dx * L, y1: cy - dy * L, x2: cx + dx * L, y2: cy + dy * L }
-}
-
-function canvasGradient(ctx: CanvasRenderingContext2D, f: GradientPaint, r: Rect): CanvasGradient {
-  let g: CanvasGradient
-  if (f.type === 'GRADIENT_RADIAL') g = ctx.createRadialGradient(r.x + r.w / 2, r.y + r.h / 2, 0, r.x + r.w / 2, r.y + r.h / 2, Math.max(r.w, r.h) / 2)
-  else {
-    const l = gradientLine(f.angle ?? 180, r)
-    g = ctx.createLinearGradient(l.x1, l.y1, l.x2, l.y2)
-  }
+const addStops = (g: CanvasGradient, f: GradientPaint): CanvasGradient => {
   for (const s of f.stops) g.addColorStop(Math.max(0, Math.min(1, s.position)), rgbaToCss(s.color))
   return g
+}
+
+/** the handles of a gradient in the coordinates the box is drawn in */
+function gradientPoints(f: GradientPaint, r: Rect): [number, number][] {
+  return handlesOf(f, r.w, r.h).map((p) => [r.x + p.x * r.w, r.y + p.y * r.h] as [number, number])
+}
+
+/** A gradient as a plain canvas style: exact for a linear one, round for the others (text is filled with it). */
+function canvasGradient(ctx: CanvasRenderingContext2D, f: GradientPaint, r: Rect): CanvasGradient {
+  const [p0, p1] = gradientPoints(f, r)
+  if (f.type === 'GRADIENT_LINEAR') return addStops(ctx.createLinearGradient(p0[0], p0[1], p1[0], p1[1]), f)
+  if (f.type === 'GRADIENT_ANGULAR') return addStops(ctx.createConicGradient(Math.atan2(p1[1] - p0[1], p1[0] - p0[0]), p0[0], p0[1]), f)
+  return addStops(ctx.createRadialGradient(p0[0], p0[1], 0, p0[0], p0[1], Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) || 1), f)
+}
+
+/**
+ * Fill a shape with a gradient. A linear one is a plain canvas gradient. Radial, angular and diamond ones are drawn
+ * in the gradient's own space (start = origin, end = one unit along x, width handle = one unit along y), so they can
+ * be stretched and turned the way the three handles say.
+ */
+function fillGradient(ctx: CanvasRenderingContext2D, f: GradientPaint, r: Rect, path: Path2D, rule: CanvasFillRule): void {
+  const opacity = f.opacity ?? 1
+  if (opacity <= 0) return
+  ctx.save()
+  if (opacity < 1) ctx.globalAlpha *= opacity
+  const [p0, p1, p2] = gradientPoints(f, r)
+  if (f.type === 'GRADIENT_LINEAR') {
+    ctx.fillStyle = addStops(ctx.createLinearGradient(p0[0], p0[1], p1[0], p1[1]), f)
+    ctx.fill(path, rule)
+    ctx.restore()
+    return
+  }
+  const a = p1[0] - p0[0]
+  const b = p1[1] - p0[1]
+  const c = p2[0] - p0[0]
+  const d = p2[1] - p0[1]
+  const det = a * d - b * c
+  ctx.clip(path, rule)
+  if (Math.abs(det) < 1e-9) {
+    // the handles lie on one line: nothing to spread the colours over
+    const last = [...f.stops].sort((x, y) => x.position - y.position).pop()
+    if (last) {
+      ctx.fillStyle = rgbaToCss(last.color)
+      ctx.fillRect(r.x, r.y, r.w, r.h)
+    }
+    ctx.restore()
+    return
+  }
+  ctx.transform(a, b, c, d, p0[0], p0[1])
+  // the box in gradient space: what has to be covered
+  let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity
+  for (const [wx, wy] of [[r.x, r.y], [r.x + r.w, r.y], [r.x, r.y + r.h], [r.x + r.w, r.y + r.h]]) {
+    const u = (d * (wx - p0[0]) - c * (wy - p0[1])) / det
+    const v = (-b * (wx - p0[0]) + a * (wy - p0[1])) / det
+    x1 = Math.min(x1, u)
+    y1 = Math.min(y1, v)
+    x2 = Math.max(x2, u)
+    y2 = Math.max(y2, v)
+  }
+  if (f.type === 'GRADIENT_DIAMOND') {
+    // |x| + |y|: one linear gradient per quarter
+    for (const [sx, sy] of [[1, 1], [-1, 1], [-1, -1], [1, -1]]) {
+      const qx1 = sx > 0 ? Math.max(0, x1) : x1
+      const qx2 = sx > 0 ? x2 : Math.min(0, x2)
+      const qy1 = sy > 0 ? Math.max(0, y1) : y1
+      const qy2 = sy > 0 ? y2 : Math.min(0, y2)
+      if (qx2 <= qx1 || qy2 <= qy1) continue
+      ctx.fillStyle = addStops(ctx.createLinearGradient(0, 0, sx * 0.5, sy * 0.5), f)
+      ctx.fillRect(qx1, qy1, qx2 - qx1, qy2 - qy1)
+    }
+  } else {
+    ctx.fillStyle = f.type === 'GRADIENT_ANGULAR' ? addStops(ctx.createConicGradient(0, 0, 0), f) : addStops(ctx.createRadialGradient(0, 0, 0, 0, 0, 1), f)
+    ctx.fillRect(x1, y1, x2 - x1, y2 - y1)
+  }
+  ctx.restore()
 }
 
 function drawFills(ctx: CanvasRenderingContext2D, n: GNode, r: Rect, path: Path2D): void {
@@ -259,8 +361,7 @@ function drawFills(ctx: CanvasRenderingContext2D, n: GNode, r: Rect, path: Path2
       ctx.fillStyle = rgbaToCss(f.color)
       ctx.fill(path, n.fillRule ?? 'nonzero')
     } else if ('stops' in f) {
-      ctx.fillStyle = canvasGradient(ctx, f, r)
-      ctx.fill(path, n.fillRule ?? 'nonzero')
+      fillGradient(ctx, f, r, path, n.fillRule ?? 'nonzero')
     } else {
       ctx.save()
       ctx.clip(path, n.fillRule ?? 'nonzero')
@@ -422,8 +523,11 @@ function drawNodeInner(ctx: CanvasRenderingContext2D, ed: Editor, id: string, o:
     if (n.arrowEnd && n.type === 'VECTOR' && n.path) drawArrowHead(ctx, n, r)
   } else if (n.type === 'TEXT') {
     const s = n.textStyle ?? DEFAULT_TEXT_STYLE
-    const fill = n.fills.find((f) => f.type === 'SOLID' && f.visible !== false)
-    if (fill && fill.type === 'SOLID') {
+    // the top visible fill colours the text: a solid colour or a gradient
+    const top = [...n.fills].reverse().find((f) => f.visible !== false && f.type !== 'IMAGE')
+    const fill = top && top.type === 'SOLID' ? top : top && 'stops' in top ? { color: [...top.stops].sort((a, b) => a.position - b.position)[0]?.color ?? { r: 0, g: 0, b: 0, a: 1 } } : null
+    const ink = (): string | CanvasGradient => (top && 'stops' in top ? canvasGradient(ctx, top, r) : rgbaToCss(fill!.color))
+    if (fill) {
       if (s.fontSize * o.zoom < 3) {
         // LOD: greek tiny text
         ctx.fillStyle = rgbaToCss(fill.color, 0.25)
@@ -481,7 +585,8 @@ function drawNodeInner(ctx: CanvasRenderingContext2D, ed: Editor, id: string, o:
           lines(true)
           ctx.restore()
         }
-        ctx.fillStyle = rgbaToCss(fill.color)
+        ctx.fillStyle = ink()
+        if (top && 'stops' in top && (top.opacity ?? 1) < 1) ctx.globalAlpha *= top.opacity!
         lines(true)
       }
     }
@@ -648,6 +753,92 @@ function drawCode(ctx: CanvasRenderingContext2D, n: GNode, r: Rect): void {
   ctx.setLineDash([])
 }
 
+/**
+ * Can this mask be a plain clip? Yes when it is a shape filled with solid colour: its outline is all that matters.
+ * A picture, a gradient with transparency, a text, a group or a frame masks with its alpha instead (as in Figma),
+ * and that needs the layers to be composed off screen.
+ */
+export function clipsAsShape(n: GNode): boolean {
+  if (isBooleanGroup(n)) return true
+  if (n.type === 'GROUP' || n.type === 'FRAME' || n.type === 'SECTION' || n.type === 'TEXT' || n.type === 'CODE' || n.type === 'SPEC' || n.type === 'GUIDE') return false
+  if (n.opacity < 0.999 || (n.effects ?? []).some((e) => e.visible !== false && e.type === 'LAYER_BLUR')) return false
+  const fills = n.fills.filter((f) => f.visible !== false)
+  // an outline only (no fill) masks with its stroke
+  if (!fills.length) return !n.strokes.some((s) => s.visible !== false && s.weight > 0)
+  return fills.some((f) =>
+    f.type === 'SOLID'
+      ? f.color.a >= 0.999
+      : 'stops' in f
+        ? (f.opacity ?? 1) >= 0.999 && f.stops.every((s) => s.color.a >= 0.999)
+        : // a picture that covers the whole box and has no transparency
+          f.scaleMode !== 'FIT' && !f.transform && imageOpaque(f.imageHash)
+  )
+}
+
+// canvases the masked layers are composed on, reused from frame to frame
+const scratch: HTMLCanvasElement[] = []
+function takeCanvas(w: number, h: number): HTMLCanvasElement {
+  const c = scratch.pop() ?? document.createElement('canvas')
+  // setting the size also clears it
+  c.width = w
+  c.height = h
+  return c
+}
+
+/**
+ * Alpha mask: the siblings above the mask are drawn off screen, then everything outside the picture the mask
+ * itself gives is erased. Only the part of the screen the mask covers is composed.
+ */
+function drawMasked(ctx: CanvasRenderingContext2D, ed: Editor, mask: GNode, rest: string[], o: DrawOpts): void {
+  const r = ed.world(mask.id)
+  const m = ctx.getTransform()
+  // effects of the mask reach outside its box
+  let pad = 2
+  for (const e of mask.effects ?? []) if (e.visible !== false) pad = Math.max(pad, e.radius * 2 + ('offset' in e ? Math.abs(e.offset.x) + Math.abs(e.offset.y) + Math.abs(e.spread) : 0))
+  let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity
+  // a rotated mask covers the box of its turned corners
+  const c0 = { x: r.x + r.w / 2, y: r.y + r.h / 2 }
+  const t = (-(mask.rotation ?? 0) * Math.PI) / 180
+  for (const [px, py] of [[r.x - pad, r.y - pad], [r.x + r.w + pad, r.y - pad], [r.x - pad, r.y + r.h + pad], [r.x + r.w + pad, r.y + r.h + pad]]) {
+    const dx = px - c0.x
+    const dy = py - c0.y
+    const p = m.transformPoint({ x: c0.x + dx * Math.cos(t) - dy * Math.sin(t), y: c0.y + dx * Math.sin(t) + dy * Math.cos(t) })
+    x1 = Math.min(x1, p.x)
+    y1 = Math.min(y1, p.y)
+    x2 = Math.max(x2, p.x)
+    y2 = Math.max(y2, p.y)
+  }
+  x1 = Math.max(0, Math.floor(x1))
+  y1 = Math.max(0, Math.floor(y1))
+  x2 = Math.min(ctx.canvas.width, Math.ceil(x2))
+  y2 = Math.min(ctx.canvas.height, Math.ceil(y2))
+  const w = x2 - x1
+  const h = y2 - y1
+  // the mask is off screen: nothing of the masked layers can be seen
+  if (w <= 0 || h <= 0) return
+  const local = new DOMMatrix().translate(-x1, -y1).multiply(m)
+  // the layers are cut by the box of the mask anyway, so nothing outside it has to be drawn
+  const inside: DrawOpts = { ...o, visible: undefined, view: { x: -1e9, y: -1e9, w: 2e9, h: 2e9 } }
+  const a = takeCanvas(w, h)
+  const ac = a.getContext('2d')!
+  ac.setTransform(local)
+  ac.imageSmoothingQuality = ctx.imageSmoothingQuality
+  drawChildren(ac, ed, rest, inside)
+  const b = takeCanvas(w, h)
+  const bc = b.getContext('2d')!
+  bc.setTransform(local)
+  bc.imageSmoothingQuality = ctx.imageSmoothingQuality
+  drawNode(bc, ed, mask.id, inside)
+  ac.setTransform(1, 0, 0, 1, 0, 0)
+  ac.globalCompositeOperation = 'destination-in'
+  ac.drawImage(b, 0, 0)
+  ctx.save()
+  ctx.setTransform(1, 0, 0, 1, 0, 0)
+  ctx.drawImage(a, x1, y1)
+  ctx.restore()
+  scratch.push(a, b)
+}
+
 /** Clip the context to a mask layer's shape (Figma "Use as mask"). */
 function clipToMask(ctx: CanvasRenderingContext2D, ed: Editor, n: GNode): void {
   const r = ed.world(n.id)
@@ -673,10 +864,15 @@ function clipToMask(ctx: CanvasRenderingContext2D, ed: Editor, n: GNode): void {
 /** Draw siblings bottom-to-top; a mask layer clips every sibling above it and is itself not painted. */
 function drawChildren(ctx: CanvasRenderingContext2D, ed: Editor, ids: string[], o: DrawOpts): void {
   let masks = 0
-  for (const c of ids) {
+  for (const [i, c] of ids.entries()) {
     const n = ed.nodes.get(c)
     if (n?.isMask) {
       if (!n.visible) continue
+      if (!clipsAsShape(n)) {
+        // an alpha mask takes over everything above it (further masks included: they are handled inside)
+        drawMasked(ctx, ed, n, ids.slice(i + 1), o)
+        break
+      }
       ctx.save()
       masks++
       clipToMask(ctx, ed, n)

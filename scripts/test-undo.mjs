@@ -12,13 +12,13 @@ async function mcp(name, args = {}) {
 const results = []
 const check = (label, got, want) => results.push(`${JSON.stringify(got) === JSON.stringify(want) ? 'PASS' : 'FAIL'}  ${label}: ${JSON.stringify(got)}${JSON.stringify(got) === JSON.stringify(want) ? '' : '  want ' + JSON.stringify(want)}`)
 
-await mcp('create_project', { name: 'Undo test' })
+const proj = await mcp('create_project', { name: 'Undo test' })
 const f = await mcp('create_frame', { name: 'F', x: 0, y: 0, width: 600, height: 400 })
 const a = await mcp('create_rectangle', { name: 'a', x: 50, y: 50, width: 100, height: 100, fill: '#2563EB', parentId: f.id })
 const b = await mcp('create_ellipse', { name: 'b', x: 300, y: 50, width: 100, height: 100, fill: '#EC4899', parentId: f.id })
 
 const targets = await (await fetch(`http://127.0.0.1:${port}/json`)).json()
-const page = targets.filter((p) => p.type === 'page' && p.url.includes('#doc=')).pop()
+const page = targets.filter((p) => p.type === 'page' && p.url.includes('#doc=' + encodeURIComponent(proj.path))).pop()
 const ws = new WebSocket(page.webSocketDebuggerUrl)
 await new Promise((r) => ws.addEventListener('open', r, { once: true }))
 let id = 0

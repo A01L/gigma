@@ -27,6 +27,7 @@ export function EditorView({ onHome }: { onHome: () => void }) {
   const ctrlRef = useRef<CanvasController | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [annotationId, setAnnotationId] = useState<string | null>(null)
+  const [renamingId, setRenamingId] = useState<string | null>(null)
   const [actionsOpen, setActionsOpen] = useState(false)
   const [guidesOpen, setGuidesOpen] = useState(false)
   const [ctx, setCtx] = useState<{ x: number; y: number } | null>(null)
@@ -46,6 +47,11 @@ export function EditorView({ onHome }: { onHome: () => void }) {
       ed.emit('doc')
     }
     c.onEditAnnotation = (id) => setAnnotationId(id)
+    c.onRenameLabel = (id) => {
+      c.renamingLabel = id
+      c.invalidate()
+      setRenamingId(id)
+    }
     requestAnimationFrame(() => ed.zoomToFit())
     const onKey = (e: KeyboardEvent) => {
       // Ctrl+K: actions (physical key, any layout); Ctrl+Alt+K is "Create component"
@@ -151,6 +157,20 @@ export function EditorView({ onHome }: { onHome: () => void }) {
             }}
           />
         )}
+        {renamingId && ctrlRef.current && (
+          <LabelEditor
+            id={renamingId}
+            ctrl={ctrlRef.current}
+            onDone={() => {
+              if (ctrlRef.current) {
+                ctrlRef.current.renamingLabel = null
+                ctrlRef.current.invalidate()
+              }
+              setRenamingId(null)
+              canvasRef.current?.focus()
+            }}
+          />
+        )}
         {!ed.leftOpen && (
           <button className="icon-btn float-btn" style={{ left: 10 }} title="Show left panel (Ctrl+\)" onClick={() => runAction('toggle-left')}>
             {Icons.sidebarL}
@@ -244,6 +264,55 @@ function ZoomChip() {
         </div>
       )}
     </div>
+  )
+}
+
+/** The name of a frame (or a section) edited right on the canvas: Enter or a click elsewhere keeps it, Escape drops it. */
+function LabelEditor({ id, ctrl, onDone }: { id: string; ctrl: CanvasController; onDone: () => void }) {
+  useEditor('camera', 'doc')
+  const ref = useRef<HTMLInputElement>(null)
+  const closed = useRef(false)
+  const n = ed.nodes.get(id)
+  const [text, setText] = useState(n?.name ?? '')
+  useEffect(() => {
+    ref.current?.focus()
+    ref.current?.select()
+  }, [])
+  const g = ctrl.labelGeometry(id)
+  useEffect(() => {
+    // the layer is gone (undo, a script): nothing to rename
+    if (!n) onDone()
+  })
+  if (!n || !g) return null
+  const finish = (keep: boolean) => {
+    if (closed.current) return
+    closed.current = true
+    const name = text.trim()
+    if (keep && name && name !== n.name) ed.act(() => ed.updateNode(id, { name }))
+    onDone()
+  }
+  return (
+    <input
+      ref={ref}
+      className={'label-editor' + (g.section ? ' section' : '')}
+      value={text}
+      spellCheck={false}
+      style={{
+        left: g.x,
+        top: g.y,
+        // the field sits where the label is drawn: over the corner of a frame, inside the corner of a section, turned with the layer
+        transform: `rotate(${-g.rot}deg) translate(${g.section ? '8px, 8px' : '-4px, calc(-100% - 1px)'})`,
+        width: `calc(${Math.max(4, text.length + 1)}ch + 10px)`
+      }}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => finish(true)}
+      onPointerDown={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        e.stopPropagation()
+        if (e.key === 'Enter') finish(true)
+        else if (e.key === 'Escape') finish(false)
+      }}
+    />
   )
 }
 

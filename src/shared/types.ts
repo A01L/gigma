@@ -112,11 +112,25 @@ export interface GradientStop {
   color: RGBA
 }
 
+export type GradientType = 'GRADIENT_LINEAR' | 'GRADIENT_RADIAL' | 'GRADIENT_ANGULAR' | 'GRADIENT_DIAMOND'
+export const GRADIENT_TYPES: GradientType[] = ['GRADIENT_LINEAR', 'GRADIENT_RADIAL', 'GRADIENT_ANGULAR', 'GRADIENT_DIAMOND']
+/** a point in the units of the layer's box: 0,0 = top left corner, 1,1 = bottom right */
+export interface UnitPoint {
+  x: number
+  y: number
+}
 export type GradientPaint = {
-  type: 'GRADIENT_LINEAR' | 'GRADIENT_RADIAL'
+  type: GradientType
   stops: GradientStop[]
-  /** linear only, CSS convention: 180 = top to bottom, 90 = left to right */
+  /** linear only, CSS convention: 180 = top to bottom, 90 = left to right. Used when there are no handles */
   angle?: number
+  /**
+   * The three handles of Figma: where the gradient starts (the centre of a radial, angular or diamond one), where it ends,
+   * and how wide it is (a point across the line). Present once the gradient was moved by hand or came from Figma.
+   */
+  handles?: [UnitPoint, UnitPoint, UnitPoint]
+  /** 0..1, the whole fill; undefined = 1 */
+  opacity?: number
   visible?: boolean
 }
 
@@ -127,6 +141,11 @@ export type Paint =
       type: 'IMAGE'
       imageHash: string // SHA-1 hex of the image bytes (same scheme as Figma's image hash)
       scaleMode: 'FILL' | 'FIT' | 'STRETCH'
+      /**
+       * Figma's crop: a 2x3 matrix [a, b, c, d, e, f] that takes a point of the layer's box (0..1) to a point of the picture (0..1):
+       * u = a*x + c*y + e, v = b*x + d*y + f. Only with STRETCH.
+       */
+      transform?: [number, number, number, number, number, number]
       visible?: boolean
       /** set when pasted from Figma: lets Gigma fetch missing image bytes via the Figma API */
       figmaFileKey?: string
@@ -286,6 +305,11 @@ export interface BaseNode {
   clipsContent?: boolean // frames only
   /** like Figma "Use as mask": this layer's shape clips the siblings above it (and is not drawn) */
   isMask?: boolean
+  /**
+   * VECTOR drawn by the Polygon or Star tool: the path is rebuilt from this whenever the size or the corner radius changes,
+   * so corners stay round instead of being stretched. Gone once the points are edited by hand.
+   */
+  shape?: { kind: 'POLYGON' | 'STAR'; count: number; ratio?: number }
   /** VECTOR lines/paths: arrowhead at the end point (Arrow tool) */
   arrowEnd?: boolean
   strokeCap?: 'NONE' | 'ROUND' | 'SQUARE'

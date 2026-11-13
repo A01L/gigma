@@ -3,6 +3,7 @@
 // and "Copy as SVG" in Figma gives us SVG we can import. Gigma additionally embeds its own
 // lossless node data in <metadata> so Gigma -> Gigma copy/paste keeps everything.
 import type { GNode, Paint, RGBA, Stroke } from '@shared/types'
+import { handlesOf } from './gradient'
 import { blendCss, rgbaToHex } from '@shared/types'
 import { booleanAsVector, isBooleanGroup } from './boolean'
 import { backend } from '../backend'
@@ -11,7 +12,7 @@ import { layoutText, DEFAULT_TEXT_STYLE, justifyWords, lineX, textBaseline, vert
 import { base64ToBytes, bytesToBase64, uid, unionRects, keyBetween } from './util'
 import { parsePath, segsBounds, segsToD, transformSegs, type Mat, type Seg } from './svgpath'
 import { arrowHeadPoints } from './shapes'
-import { cornerRadiiOf } from './render'
+import { clipsAsShape, cornerRadiiOf } from './render'
 import { codeToPngDataUrl } from './code-render'
 
 const META_TAG = 'gigma-data'
@@ -297,16 +298,17 @@ const f = (v: number) => String(Math.round(v * 1000) / 1000)
 /** fills array -> "url(#gradient)" registered by nodeSvgInner for nodes whose top fill is a gradient */
 const gradientRefs = new WeakMap<Paint[], string>()
 
-function gradientDef(p: Extract<Paint, { stops: unknown }>, id: string): string {
+function gradientDef(p: Extract<Paint, { stops: unknown }>, id: string, w: number, h: number): string {
   const stops = [...p.stops]
     .sort((a, b) => a.position - b.position)
     .map((st) => `<stop offset="${f(st.position)}" stop-color="${rgbaToHex(st.color)}"${st.color.a < 1 ? ` stop-opacity="${f(st.color.a)}"` : ''}/>`)
     .join('')
-  if (p.type === 'GRADIENT_RADIAL') return `<radialGradient id="${id}" cx="0.5" cy="0.5" r="0.5">${stops}</radialGradient>`
-  const a = ((p.angle ?? 180) * Math.PI) / 180
-  const dx = Math.sin(a) / 2
-  const dy = -Math.cos(a) / 2
-  return `<linearGradient id="${id}" x1="${f(0.5 - dx)}" y1="${f(0.5 - dy)}" x2="${f(0.5 + dx)}" y2="${f(0.5 + dy)}">${stops}</linearGradient>`
+  const op = (p.opacity ?? 1) < 1 ? ` opacity="${f(p.opacity!)}"` : ''
+  const [h0, h1, h2] = handlesOf(p, w, h)
+  // SVG has no angular or diamond gradient: they go out as a radial one of the same place and size
+  if (p.type !== 'GRADIENT_LINEAR')
+    return `<radialGradient id="${id}" cx="0" cy="0" r="1" gradientTransform="matrix(${f(h1.x - h0.x)} ${f(h1.y - h0.y)} ${f(h2.x - h0.x)} ${f(h2.y - h0.y)} ${f(h0.x)} ${f(h0.y)})"${op}>${stops}</radialGradient>`
+  return `<linearGradient id="${id}" x1="${f(h0.x)}" y1="${f(h0.y)}" x2="${f(h1.x)}" y2="${f(h1.y)}"${op}>${stops}</linearGradient>`
 }
 
 function paintAttrs(n: GNode): string {
@@ -423,7 +425,7 @@ async function nodeSvgInner(ed: Editor, id: string, ox: number, oy: number, defs
   gradientRefs.delete(n.fills)
   if (topFill && 'stops' in topFill) {
     const gid = 'g' + defs.length
-    defs.push(gradientDef(topFill, gid))
+    defs.push(gradientDef(topFill, gid, n.width, n.height))
     gradientRefs.set(n.fills, `url(#${gid})`)
   }
 
@@ -435,6 +437,16 @@ async function nodeSvgInner(ed: Editor, id: string, ox: number, oy: number, defs
     const clip = 'c' + defs.length
     defs.push(`<clipPath id="${clip}">${rect('')}</clipPath>`)
     const par = p.scaleMode === 'STRETCH' ? 'none' : p.scaleMode === 'FIT' ? 'xMidYMid meet' : 'xMidYMid slice'
+    if (p.scaleMode === 'STRETCH' && p.transform) {
+      // a cropped picture: the whole picture is placed through the inverse of the crop matrix and cut by the box
+      const [a, b, c, d, e, g] = p.transform
+      const det = a * d - b * c
+      if (Math.abs(det) > 1e-9) {
+        const m = [d / det, -b / det, -c / det, a / det, (c * g - d * e) / det, (b * e - a * g) / det]
+        imgs += `<g clip-path="url(#${clip})"><image data-hash="${p.imageHash}" width="1" height="1" preserveAspectRatio="none" transform="translate(${f(x)} ${f(y)}) scale(${f(w.w)} ${f(w.h)}) matrix(${m.map((v) => String(Math.round(v * 1e6) / 1e6)).join(' ')})" href="data:${h.mime};base64,${h.b64}"/></g>`
+        continue
+      }
+    }
     imgs += `<image data-hash="${p.imageHash}" x="${f(x)}" y="${f(y)}" width="${f(w.w)}" height="${f(w.h)}" preserveAspectRatio="${par}" clip-path="url(#${clip})" href="data:${h.mime};base64,${h.b64}"/>`
   }
 
@@ -518,6 +530,16 @@ async function nodeSvgInner(ed: Editor, id: string, ox: number, oy: number, defs
         const cn = ed.nodes.get(c)!
         if (cn.isMask) {
           if (!cn.visible) continue
+          if (!clipsAsShape(cn)) {
+            // a picture, a text or a group masks with its alpha: that is an SVG mask, not a clip path
+            const mid = 'a' + defs.length
+            defs.push('')
+            const body = await nodeSvg(ed, c, ox, oy, defs)
+            defs.push(`<mask id="${mid}" style="mask-type:alpha" mask-type="alpha">${body}</mask>`)
+            inner += `<g mask="url(#${mid})">`
+            opened++
+            continue
+          }
           const clip = 'm' + defs.length
           const shape = (await nodeSvg(ed, c, ox, oy, [])).replace(/ (fill|stroke|opacity|fill-opacity|stroke-width)="[^"]*"/g, '')
           defs.push(`<clipPath id="${clip}">${shape}</clipPath>`)

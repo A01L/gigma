@@ -4,9 +4,10 @@
 // It can be dragged by its header and closes with the cross, Escape or a click outside.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import type { RGBA } from '@shared/types'
+import type { GradientPaint, GradientType, RGBA } from '@shared/types'
 import { hexToRgba, rgbaToCss, rgbaToHex } from '@shared/types'
 import { editor as ed } from '../editor/editor'
+import { colorAt, flipped, rotated, sortedStops } from '../editor/gradient'
 import { Select } from './Select'
 import { t } from './i18n'
 
@@ -60,9 +61,26 @@ interface Props {
   anchor: HTMLElement
   onChange: (c: RGBA) => void // live (inside an open transaction)
   onClose: () => void
-  /** shows the fill types (fills only) */
-  onType?: (t: 'GRADIENT_LINEAR' | 'GRADIENT_RADIAL') => void
+  /** shows the fill types (fills only): the paint becomes a solid colour or a gradient of that kind */
+  onType?: (t: 'SOLID' | GradientType) => void
+  /**
+   * The fill is a gradient: the popover shows its kind, its bar of colour stops and their list, and the colour
+   * controls below edit the selected stop. `set` is live, inside the transaction the popover was opened in.
+   */
+  gradient?: {
+    paint: GradientPaint
+    /** index of the selected stop in paint.stops */
+    stop: number
+    select: (i: number) => void
+    set: (p: GradientPaint) => void
+    /** size of the layer, for turning the gradient */
+    w: number
+    h: number
+  }
 }
+
+const GRADIENT_LABELS: Record<GradientType, string> = { GRADIENT_LINEAR: 'Linear', GRADIENT_RADIAL: 'Radial', GRADIENT_ANGULAR: 'Angular', GRADIENT_DIAMOND: 'Diamond' }
+export const gradientLabel = (type: GradientType): string => GRADIENT_LABELS[type]
 
 /** number box that applies on Enter / blur and steps with the arrow keys */
 function Num({ value, max, onCommit, suffix }: { value: number; max: number; onCommit: (v: number) => void; suffix?: string }) {
@@ -95,6 +113,29 @@ function Num({ value, max, onCommit, suffix }: { value: number; max: number; onC
   )
 }
 
+/** the hex of a colour stop in the list: applied on Enter or when the field is left */
+function StopHex({ color, onCommit }: { color: RGBA; onCommit: (c: RGBA) => void }) {
+  const [text, setText] = useState<string | null>(null)
+  const hex = rgbaToHex(color).slice(1).toUpperCase()
+  return (
+    <input
+      className="cpick-input"
+      value={text ?? hex}
+      onFocus={(e) => {
+        setText(hex)
+        requestAnimationFrame(() => e.target.select())
+      }}
+      onChange={(e) => setText(e.target.value.toUpperCase())}
+      onBlur={() => {
+        const raw = (text ?? '').trim().replace('#', '')
+        if (/^[0-9a-f]{3,8}$/i.test(raw) && raw.toUpperCase() !== hex) onCommit({ ...hexToRgba(raw), a: raw.length === 8 ? hexToRgba(raw).a : color.a })
+        setText(null)
+      }}
+      onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+    />
+  )
+}
+
 const TypeIcon = {
   solid: (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor">
@@ -116,6 +157,22 @@ const TypeIcon = {
       <circle cx="8" cy="8" r="0.9" fill="currentColor" stroke="none" />
     </svg>
   ),
+  gradient: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor">
+      <rect x="2.5" y="2.5" width="11" height="11" rx="2" />
+      <path d="M5 5h.01M8 5h.01M11 5h.01M6.5 6.5h.01M9.5 6.5h.01M5 8h.01M8 8h.01M11 8h.01M6.5 9.5h.01M9.5 9.5h.01M8 11h.01" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  ),
+  flip: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 5.5h10M10.5 3L13 5.5 10.5 8M13 10.5H3M5.5 8L3 10.5 5.5 13" />
+    </svg>
+  ),
+  rotate: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M8 1.8l4.2 4.2L8 10.2 3.8 6zM3.5 11.5a6 6 0 009 0M12.5 9.6v2h-2" />
+    </svg>
+  ),
   dropper: (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeLinejoin="round" strokeLinecap="round">
       <path d="M9.2 4.2l2.6 2.6M10.5 3a1.84 1.84 0 012.6 2.6l-1.7 1.6-2.5-2.5zM9.8 5.6L4 11.4 3.3 13l1.6-.7 5.8-5.8" />
@@ -123,7 +180,7 @@ const TypeIcon = {
   )
 }
 
-export function ColorPicker({ color, anchor, onChange, onClose, onType }: Props) {
+export function ColorPicker({ color, anchor, onChange, onClose, onType, gradient }: Props) {
   const [hsv, setHsv] = useState<HSVA>(() => rgbToHsv(color))
   const [hex, setHex] = useState(rgbaToHex(color).slice(1).toUpperCase())
   const [pos, setPos] = useState(lastPos ?? { left: 0, top: 0 })
@@ -138,6 +195,16 @@ export function ColorPicker({ color, anchor, onChange, onClose, onType }: Props)
     lastFormat = f
     setFormatState(f)
   }
+  // another stop was selected (or the fill changed its kind): the controls show that colour
+  const shown = gradient ? gradient.stop + ':' + gradient.paint.stops.length : 'solid'
+  const first = useRef(shown)
+  useEffect(() => {
+    if (first.current === shown) return
+    first.current = shown
+    setHsv(rgbToHsv(color))
+    setHex(rgbaToHex(color).slice(1).toUpperCase())
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shown])
 
   useLayoutEffect(() => {
     if (lastPos) return
@@ -157,6 +224,8 @@ export function ColorPicker({ color, anchor, onChange, onClose, onType }: Props)
       const el = e.target as HTMLElement
       // menus of the popover (format, source) live in their own layer
       if (pop.current?.contains(el) || anchor.contains(el) || el.closest('.gsel-menu, .gsel-pop, [data-cpick-menu]')) return
+      // a press on a handle of the gradient on the canvas belongs to the gradient
+      if ((window as unknown as { canvasView?: { gradBusy(): boolean } }).canvasView?.gradBusy()) return
       onClose()
     }
     const key = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
@@ -226,6 +295,49 @@ export function ColorPicker({ color, anchor, onChange, onClose, onType }: Props)
     }
   }
 
+  // ---- gradient: the bar of stops
+  const g = gradient
+  const setStops = (stops: GradientPaint['stops']) => g?.set({ ...g.paint, stops })
+  const addStop = (t: number) => {
+    if (!g) return
+    const stops = [...g.paint.stops, { position: Math.round(t * 100) / 100, color: colorAt(g.paint.stops, t) }]
+    g.set({ ...g.paint, stops })
+    g.select(stops.length - 1)
+  }
+  const removeStop = (i: number) => {
+    if (!g || g.paint.stops.length <= 2) return
+    setStops(g.paint.stops.filter((_, k) => k !== i))
+    g.select(Math.max(0, i - 1))
+  }
+  /** drag a stop along the bar; a press on the empty bar adds one first */
+  const dragStop = (bar: HTMLElement, e: React.PointerEvent, index: number | null) => {
+    if (!g) return
+    e.stopPropagation()
+    const r = bar.getBoundingClientRect()
+    const at = (x: number) => Math.round(Math.min(1, Math.max(0, (x - r.left - 10) / (r.width - 20))) * 100) / 100
+    let stops = g.paint.stops
+    let i = index
+    if (i === null) {
+      const t = at(e.clientX)
+      stops = [...stops, { position: t, color: colorAt(stops, t) }]
+      i = stops.length - 1
+      g.set({ ...g.paint, stops })
+    }
+    g.select(i)
+    const move = (ev: PointerEvent) => {
+      stops = stops.map((s, k) => (k === i ? { ...s, position: at(ev.clientX) } : s))
+      g.set({ ...g.paint, stops })
+    }
+    const up = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
+  // the list shows the stops from the first to the last, whatever order they were added in
+  const stopRows = g ? g.paint.stops.map((s, i) => ({ s, i })).sort((a, b) => a.s.position - b.s.position || a.i - b.i) : []
+
   const hueColor = `hsl(${hsv.h}, 100%, 50%)`
   const solid = hsvToRgb({ ...hsv, a: 1 })
   const rgb255 = [solid.r, solid.g, solid.b].map((v) => Math.round(v * 255))
@@ -267,7 +379,20 @@ export function ColorPicker({ color, anchor, onChange, onClose, onType }: Props)
   )
 
   return createPortal(
-    <div ref={pop} className="cpick" style={{ left: pos.left, top: pos.top }} onKeyDown={(e) => e.stopPropagation()}>
+    <div
+      ref={pop}
+      className={'cpick' + (g ? ' grad' : '')}
+      style={{ left: pos.left, top: pos.top }}
+      onKeyDown={(e) => {
+        e.stopPropagation()
+        // Delete removes the selected stop of a gradient (not while a value is being typed)
+        const el = e.target as HTMLElement
+        if (g && (e.key === 'Delete' || e.key === 'Backspace') && el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA') {
+          e.preventDefault()
+          removeStop(g.stop)
+        }
+      }}
+    >
       <div className="cpick-head" onPointerDown={movePopover}>
         <button className={tab === 'custom' ? 'on' : ''} onClick={() => setTab('custom')}>
           {t('Custom')}
@@ -292,15 +417,85 @@ export function ColorPicker({ color, anchor, onChange, onClose, onType }: Props)
         <>
           {onType && (
             <div className="cpick-types">
-              <button className="on" title={t('Solid')}>
+              <button className={g ? '' : 'on'} title={t('Solid')} onClick={() => g && onType('SOLID')}>
                 {TypeIcon.solid}
               </button>
-              <button title={t('Linear')} onClick={() => onType('GRADIENT_LINEAR')}>
-                {TypeIcon.linear}
+              <button className={g ? 'on' : ''} title={t('Gradient')} onClick={() => !g && onType('GRADIENT_LINEAR')}>
+                {TypeIcon.gradient}
               </button>
-              <button title={t('Radial')} onClick={() => onType('GRADIENT_RADIAL')}>
-                {TypeIcon.radial}
-              </button>
+            </div>
+          )}
+          {g && (
+            <div className="cpick-grad">
+              <div className="cpick-grad-top">
+                <div className="cpick-grad-type" data-cpick-menu>
+                  <Select
+                    value={g.paint.type}
+                    onChange={(v) => onType?.(v as GradientType)}
+                    options={(Object.keys(GRADIENT_LABELS) as GradientType[]).map((k) => ({ value: k, label: t(GRADIENT_LABELS[k]) }))}
+                  />
+                </div>
+                <span className="cpick-grow" />
+                <button className="cpick-ico" title={t('Flip gradient')} onClick={() => g.set(flipped(g.paint))}>
+                  {TypeIcon.flip}
+                </button>
+                <button className="cpick-ico" title={t('Rotate gradient 90°')} onClick={() => g.set(rotated(g.paint, g.w, g.h))}>
+                  {TypeIcon.rotate}
+                </button>
+              </div>
+              <div className="cpick-bar" onPointerDown={(e) => dragStop(e.currentTarget, e, null)}>
+                <div className="cpick-bar-track">
+                  {/* the colours run between the places of the first and the last thumb */}
+                  <div style={{ background: `linear-gradient(90deg, ${sortedStops(g.paint.stops).map((s) => `${rgbaToCss(s.color)} calc(10px + (100% - 20px) * ${Math.min(1, Math.max(0, s.position))})`).join(', ')})` }} />
+                </div>
+                {g.paint.stops.map((s, i) => (
+                  <button
+                    key={i}
+                    className={'cpick-thumb' + (i === g.stop ? ' on' : '')}
+                    style={{ left: `calc(10px + (100% - 20px) * ${Math.min(1, Math.max(0, s.position))})`, zIndex: i === g.stop ? 2 : 1 }}
+                    onPointerDown={(e) => dragStop(e.currentTarget.parentElement!, e, i)}
+                  >
+                    <i style={{ background: rgbaToCss(s.color) }} />
+                  </button>
+                ))}
+              </div>
+              <div className="cpick-stops-head">
+                <span>{t('Stops')}</span>
+                <button
+                  className="cpick-ico"
+                  title={t('Add stop')}
+                  onClick={() => {
+                    // between the selected stop and the next one (or the one before the last)
+                    const k = stopRows.findIndex((r) => r.i === g.stop)
+                    const a = stopRows[k] ?? stopRows[0]
+                    const b = stopRows[k + 1] ?? stopRows[k - 1] ?? a
+                    addStop((a.s.position + b.s.position) / 2)
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 14 14" stroke="currentColor">
+                    <path d="M7 2.5v9M2.5 7h9" />
+                  </svg>
+                </button>
+              </div>
+              <div className="cpick-stops">
+                {stopRows.map(({ s, i }) => (
+                  <div key={i} className={'cpick-stop' + (i === g.stop ? ' on' : '')} onPointerDown={() => g.select(i)}>
+                    <Num value={s.position * 100} max={100} suffix="%" onCommit={(v) => setStops(g.paint.stops.map((x, k) => (k === i ? { ...x, position: v / 100 } : x)))} />
+                    <div className="cpick-stop-color">
+                      <i>
+                        <b style={{ background: rgbaToCss(s.color) }} />
+                      </i>
+                      <StopHex color={s.color} onCommit={(c) => setStops(g.paint.stops.map((x, k) => (k === i ? { ...x, color: c } : x)))} />
+                    </div>
+                    <Num value={s.color.a * 100} max={100} suffix="%" onCommit={(v) => setStops(g.paint.stops.map((x, k) => (k === i ? { ...x, color: { ...x.color, a: v / 100 } } : x)))} />
+                    <button className="cpick-ico" title={t('Remove')} disabled={g.paint.stops.length <= 2} onClick={() => removeStop(i)}>
+                      <svg width="14" height="14" viewBox="0 0 14 14" stroke="currentColor">
+                        <path d="M3 7h8" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
           <div className="cpick-body">

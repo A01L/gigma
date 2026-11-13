@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import type { BlendMode, Constraint, Effect, EffectType, GNode, GradientPaint, Paint, RGBA, SpecData } from '@shared/types'
+import type { BlendMode, Constraint, Effect, EffectType, GNode, GradientPaint, GradientType, Paint, RGBA, SpecData } from '@shared/types'
 import { BLEND_MODES, defaultEffect, hexToRgba, rgbaToCss, rgbaToHex } from '@shared/types'
 import { isAutoLayout } from '../editor/autolayout'
 import { BOOLEAN_NAMES, layerActions } from './layerActions'
@@ -16,7 +16,9 @@ import { DEFAULT_TEXT_STYLE } from '../editor/text'
 import { backend } from '../backend'
 import { t, useT } from './i18n'
 import { Select } from './Select'
-import { ColorPicker } from './ColorPicker'
+import { ColorPicker, gradientLabel } from './ColorPicker'
+import { handlesOf, previewCss } from '../editor/gradient'
+import { maxShapeRadius } from '../editor/shapes'
 import { TypeSettings } from './TypeSettings'
 import { GuideInspector } from './GuideInspector'
 
@@ -128,13 +130,89 @@ function NumberField({ label, value, apply, min, step = 1, suffix }: { label: Re
   )
 }
 
-function ColorField({ color, apply, onRemove, visible, onToggleVisible, onType }: { onType?: (t: 'GRADIENT_LINEAR' | 'GRADIENT_RADIAL') => void; color: RGBA | 'mixed'; apply: (c: RGBA) => void; onRemove?: () => void; visible?: boolean; onToggleVisible?: () => void }) {
+/**
+ * One row of colour: a solid colour, or (for fills) a gradient. A fill passes `setPaint`, and then the popover can
+ * turn the colour into a gradient and back while it stays open; `target` names the layer whose gradient handles
+ * are shown on the canvas meanwhile.
+ */
+function ColorField({
+  color,
+  apply,
+  onRemove,
+  visible,
+  onToggleVisible,
+  paint,
+  setPaint,
+  target
+}: {
+  color: RGBA | 'mixed'
+  apply: (c: RGBA) => void
+  onRemove?: () => void
+  visible?: boolean
+  onToggleVisible?: () => void
+  /** the fill when it is a gradient */
+  paint?: GradientPaint
+  /** replaces the whole fill (live, inside the transaction of the popover) */
+  setPaint?: (p: Paint) => void
+  target?: { id: string; index: number; w: number; h: number }
+}) {
   const [text, setText] = useState<string | null>(null)
+  const [stopLocal, setStopLocal] = useState(0)
+  const pe = ed.paintEdit
+  const linked = !!target && !!pe && pe.id === target.id && pe.index === target.index
+  const stop = paint ? Math.min(paint.stops.length - 1, Math.max(0, linked ? pe!.stop : stopLocal)) : 0
+  const selectStop = (i: number) => {
+    setStopLocal(i)
+    if (target && ed.paintEdit) {
+      ed.paintEdit = { ...ed.paintEdit, stop: i }
+      ed.emit('ui', 'doc')
+    }
+  }
+  /** the fill becomes a solid colour or a gradient of another kind; the popover stays open */
+  const changeType = (tp: 'SOLID' | GradientType) => {
+    if (!setPaint) return
+    if (tp === 'SOLID') {
+      if (paint) setPaint({ type: 'SOLID', color: paint.stops[stop]?.color ?? { r: 0.85, g: 0.85, b: 0.85, a: 1 }, visible: paint.visible })
+    } else if (!paint) {
+      // a colour becomes a gradient from that colour to the same colour fully transparent
+      if (color !== 'mixed') setPaint({ type: tp, angle: 180, stops: [{ position: 0, color }, { position: 1, color: { ...color, a: 0 } }], visible: visible === false ? false : undefined })
+    } else if (paint.type !== tp) {
+      const w = target?.w || 1
+      const h = target?.h || 1
+      const next: GradientPaint = { ...paint, type: tp }
+      if (paint.handles || paint.type === 'GRADIENT_LINEAR') {
+        const [a, b] = handlesOf(paint, w, h)
+        const across = (s: { x: number; y: number }, e: { x: number; y: number }, k: number) => ({ x: s.x - (((e.y - s.y) * h) / w) * k, y: s.y + (((e.x - s.x) * w) / h) * k })
+        // a line runs from its start to its end; the others spread from their centre: the middle of that line
+        if (paint.type === 'GRADIENT_LINEAR') {
+          const c = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
+          next.handles = [c, b, across(c, b, 1)]
+        } else if (tp === 'GRADIENT_LINEAR') {
+          const s = { x: a.x * 2 - b.x, y: a.y * 2 - b.y }
+          next.handles = [s, b, across(s, b, 1)]
+        }
+      }
+      setPaint(next)
+    }
+    ed.emit('doc')
+  }
   const hex = color === 'mixed' ? 'Mixed' : rgbaToHex(color).slice(1).toUpperCase()
   const alpha = color === 'mixed' ? 1 : color.a
   const swatchRef = useRef<HTMLButtonElement>(null)
   const hexDirty = useRef(false)
   const [picking, setPicking] = useState(false)
+  // while the popover of a gradient is open, the canvas shows the handles of that gradient
+  const showHandles = picking && !!paint && !!target
+  useEffect(() => {
+    if (!showHandles || !target) return
+    ed.paintEdit = { id: target.id, index: target.index, stop: stopLocal }
+    ed.emit('ui', 'doc')
+    return () => {
+      ed.paintEdit = null
+      ed.emit('ui', 'doc')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showHandles, target?.id, target?.index])
   return (
     <div className={'row tight' + (visible === false ? ' dimmed' : '')}>
       <div className="field" style={{ flex: 1 }}>
@@ -148,22 +226,31 @@ function ColorField({ color, apply, onRemove, visible, onToggleVisible, onType }
             setPicking(true)
           }}
         >
-          <div style={{ background: color === 'mixed' ? '#888' : rgbaToCss(color) }} />
+          <div style={{ background: paint ? previewCss(paint) : color === 'mixed' ? '#888' : rgbaToCss(color) }} />
         </button>
         {picking && swatchRef.current && (
           <ColorPicker
-            color={color === 'mixed' ? { r: 0.5, g: 0.5, b: 0.5, a: 1 } : color}
+            color={paint ? paint.stops[stop].color : color === 'mixed' ? { r: 0.5, g: 0.5, b: 0.5, a: 1 } : color}
             anchor={swatchRef.current}
-            onType={
-              onType &&
-              ((tp) => {
-                onType(tp)
-                setPicking(false)
-                ed.commit()
-              })
+            onType={setPaint && changeType}
+            gradient={
+              paint && setPaint
+                ? {
+                    paint,
+                    stop,
+                    select: selectStop,
+                    set: (p) => {
+                      setPaint(p)
+                      ed.emit('doc')
+                    },
+                    w: target?.w || 1,
+                    h: target?.h || 1
+                  }
+                : undefined
             }
             onChange={(c) => {
-              apply(c)
+              if (paint && setPaint) setPaint({ ...paint, stops: paint.stops.map((s, i) => (i === stop ? { ...s, color: c } : s)) })
+              else apply(c)
               ed.emit('doc')
             }}
             onClose={() => {
@@ -172,6 +259,11 @@ function ColorField({ color, apply, onRemove, visible, onToggleVisible, onType }
             }}
           />
         )}
+        {paint ? (
+          <div className="paint-kind" onDoubleClick={() => swatchRef.current?.click()}>
+            {t(gradientLabel(paint.type))}
+          </div>
+        ) : (
         <input
           value={text ?? hex}
           onFocus={(e) => {
@@ -196,9 +288,14 @@ function ColorField({ color, apply, onRemove, visible, onToggleVisible, onType }
             if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
           }}
         />
+        )}
       </div>
       <div style={{ width: 58, flex: 'none' }}>
-        <NumberField label="" value={Math.round(alpha * 100)} min={0} suffix="%" apply={(v) => color !== 'mixed' && apply({ ...color, a: Math.min(100, v) / 100 })} />
+        {paint ? (
+          <NumberField label="" value={Math.round((paint.opacity ?? 1) * 100)} min={0} suffix="%" apply={(v) => setPaint?.({ ...paint, opacity: v >= 100 ? undefined : Math.min(100, v) / 100 })} />
+        ) : (
+          <NumberField label="" value={Math.round(alpha * 100)} min={0} suffix="%" apply={(v) => color !== 'mixed' && apply({ ...color, a: Math.min(100, v) / 100 })} />
+        )}
       </div>
       {onToggleVisible && (
         <button className="icon-btn" title={visible === false ? t('Show') : t('Hide')} onClick={onToggleVisible}>
@@ -480,83 +577,6 @@ function TextStylesButton({ nodes }: { nodes: GNode[] }) {
       onDelete={(s) => ed.deleteStyle('text', s.id)}
       onDetach={() => ed.act(() => nodes.forEach((n) => ed.updateNode(n.id, { textStyleId: undefined })))}
     />
-  )
-}
-
-/** Gradient fill editor: type, angle and colour stops. `set` runs inside the caller's transaction. */
-function GradientField({ paint, set, onRemove }: { paint: GradientPaint; set: (p: Paint) => void; onRemove: () => void }) {
-  const css = `${paint.type === 'GRADIENT_RADIAL' ? 'radial-gradient(circle' : `linear-gradient(${paint.angle ?? 180}deg`}, ${[...paint.stops]
-    .sort((a, b) => a.position - b.position)
-    .map((s) => `${rgbaToCss(s.color)} ${Math.round(s.position * 100)}%`)
-    .join(', ')})`
-  const setStop = (i: number, patch: Partial<GradientPaint['stops'][number]>) => set({ ...paint, stops: paint.stops.map((s, k) => (k === i ? { ...s, ...patch } : s)) })
-  return (
-    <div className="gradient">
-      <div className={'row tight' + (paint.visible === false ? ' dimmed' : '')}>
-        <div className="field" style={{ flex: 1 }}>
-          <span className="swatch">
-            <div style={{ background: css }} />
-          </span>
-          <Select
-            value={paint.type as string}
-            onChange={(v) =>
-              ed.act(() => {
-                if (v === 'SOLID') set({ type: 'SOLID', color: paint.stops[0]?.color ?? { r: 0.85, g: 0.85, b: 0.85, a: 1 }, visible: paint.visible })
-                else set({ ...paint, type: v as GradientPaint['type'] })
-              })
-            }
-            options={[
-              { value: 'SOLID', label: t('Solid') },
-              { value: 'GRADIENT_LINEAR', label: t('Linear') },
-              { value: 'GRADIENT_RADIAL', label: t('Radial') }
-            ]}
-          />
-        </div>
-        <EyeBtn on={paint.visible !== false} onClick={() => ed.act(() => set({ ...paint, visible: paint.visible === false ? undefined : false }))} />
-        <MinusBtn onClick={onRemove} />
-      </div>
-      <div className="gradient-body">
-        {paint.type === 'GRADIENT_LINEAR' && (
-          <div className="grid2">
-            <div title={t('Angle')}>
-              <NumberField
-                label={
-                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor">
-                    <path d="M2 2v8h8M2 6a4 4 0 014 4" />
-                  </svg>
-                }
-                suffix="°"
-                value={paint.angle ?? 180}
-                apply={(v) => set({ ...paint, angle: ((v % 360) + 360) % 360 })}
-              />
-            </div>
-            <button
-              className="btn"
-              title={t('Add stop')}
-              onClick={() =>
-                ed.act(() => {
-                  const last = paint.stops[paint.stops.length - 1]
-                  const prev = paint.stops[paint.stops.length - 2] ?? last
-                  set({ ...paint, stops: [...paint.stops.slice(0, -1), { position: (prev.position + last.position) / 2, color: last.color }, last] })
-                })
-              }
-            >
-              + {t('Add stop')}
-            </button>
-          </div>
-        )}
-        {paint.stops.map((s, i) => (
-          <div key={i} className="stop-row">
-            <div style={{ width: 42, flex: 'none' }}>
-              <NumberField label="" min={0} suffix="%" value={Math.round(s.position * 100)} apply={(v) => setStop(i, { position: Math.min(100, v) / 100 })} />
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <ColorField color={s.color} apply={(c) => setStop(i, { color: c })} onRemove={paint.stops.length > 2 ? () => ed.act(() => set({ ...paint, stops: paint.stops.filter((_, k) => k !== i) })) : undefined} />
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
   )
 }
 
@@ -1014,11 +1034,13 @@ function NodeInspector({ nodes }: { nodes: GNode[] }) {
   const each = (fn: (n: GNode) => void) => nodes.forEach(fn)
   const worlds = nodes.map((n) => ed.world(n.id))
   const allText = nodes.every((n) => n.type === 'TEXT')
-  const hasRadius = nodes.every((n) => n.type === 'RECTANGLE' || n.type === 'FRAME' || n.type === 'IMAGE' || n.type === 'SECTION')
+  /** polygons and stars: one radius for every corner, and the fields Figma has for them (count, ratio) */
+  const shapes = nodes.every((n) => n.type === 'VECTOR' && !!n.shape)
+  const hasRadius = shapes || nodes.every((n) => n.type === 'RECTANGLE' || n.type === 'FRAME' || n.type === 'IMAGE' || n.type === 'SECTION')
   const frames = nodes.filter((n) => n.type === 'FRAME')
   const [scale, setScale] = useState(2)
   const [cornersOpen, setCornersOpen] = useState(false)
-  const showCorners = hasRadius && (cornersOpen || nodes.some((n) => n.cornerRadii))
+  const showCorners = hasRadius && !shapes && (cornersOpen || nodes.some((n) => n.cornerRadii))
   const locked = nodes.every((n) => n.constrainProportions)
   const visible = nodes.every((n) => n.visible)
 
@@ -1193,11 +1215,11 @@ function NodeInspector({ nodes }: { nodes: GNode[] }) {
                 }
                 min={0}
                 value={same(nodes.map((n) => (n.cornerRadii ? (new Set(n.cornerRadii).size === 1 ? n.cornerRadii[0] : -1) : (n.cornerRadius ?? 0)))) === -1 ? 'mixed' : same(nodes.map((n) => (n.cornerRadii ? n.cornerRadii[0] : (n.cornerRadius ?? 0))))}
-                apply={(v) => each((n) => ed.updateNode(n.id, { cornerRadius: v, cornerRadii: undefined }))}
+                apply={(v) => each((n) => ed.updateNode(n.id, { cornerRadius: n.shape ? Math.min(v, Math.round(maxShapeRadius(n.shape, n.width, n.height) * 100) / 100) : v, cornerRadii: undefined }))}
               />
             </div>
           )}
-          {hasRadius && (
+          {hasRadius && !shapes && (
             <button className={'icon-btn' + (showCorners ? ' active-soft' : '')} title={t('Individual corners')} onClick={() => setCornersOpen(!showCorners)}>
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor">
                 <path d="M1.5 5V3.5a2 2 0 012-2H5M9 1.5h1.5a2 2 0 012 2V5M12.5 9v1.5a2 2 0 01-2 2H9M5 12.5H3.5a2 2 0 01-2-2V9" />
@@ -1205,6 +1227,39 @@ function NodeInspector({ nodes }: { nodes: GNode[] }) {
             </button>
           )}
         </div>
+        {shapes && (
+          <div className="grid2">
+            <div title={t(nodes[0].shape!.kind === 'STAR' ? 'Points' : 'Sides')}>
+              <SubLabel>{t('Count')}</SubLabel>
+              <NumberField
+                label={
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor">
+                    <path d="M6 1.5l4.5 3.3-1.7 5.2H3.2L1.5 4.8z" />
+                  </svg>
+                }
+                min={3}
+                value={same(nodes.map((n) => n.shape!.count))}
+                apply={(v) => each((n) => ed.updateNode(n.id, { shape: { ...n.shape!, count: Math.max(3, Math.min(60, Math.round(v))) } }))}
+              />
+            </div>
+            {nodes.every((n) => n.shape!.kind === 'STAR') && (
+              <div title={t('How deep the star is cut')}>
+                <SubLabel>{t('Ratio')}</SubLabel>
+                <NumberField
+                  label={
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor">
+                      <path d="M6 1l1.4 3.2 3.4.3-2.6 2.3.8 3.4L6 8.4l-3 1.8.8-3.4L1.2 4.5l3.4-.3z" />
+                    </svg>
+                  }
+                  min={1}
+                  suffix="%"
+                  value={same(nodes.map((n) => Math.round((n.shape!.ratio ?? 0.382) * 1000) / 10))}
+                  apply={(v) => each((n) => ed.updateNode(n.id, { shape: { ...n.shape!, ratio: Math.max(0.01, Math.min(1, v / 100)) } }))}
+                />
+              </div>
+            )}
+          </div>
+        )}
         {showCorners && (
           <div className="grid2">
             {(
@@ -1262,24 +1317,16 @@ function NodeInspector({ nodes }: { nodes: GNode[] }) {
             .map((f, i) => ({ f, i }))
             .reverse()
             .map(({ f, i }) =>
-              f.type === 'SOLID' ? (
+              f.type === 'SOLID' || 'stops' in f ? (
                 <ColorField
                   key={i}
-                  color={f.color}
+                  color={f.type === 'SOLID' ? f.color : (f.stops[0]?.color ?? { r: 0.85, g: 0.85, b: 0.85, a: 1 })}
+                  paint={'stops' in f ? f : undefined}
+                  setPaint={(p) => setFills(fills.map((x, k) => (k === i ? p : x)))}
+                  target={nodes.length === 1 ? { id: nodes[0].id, index: i, w: nodes[0].width, h: nodes[0].height } : undefined}
                   visible={f.visible !== false}
                   onToggleVisible={() => ed.act(() => setFills(fills.map((x, k) => (k === i ? { ...x, visible: x.visible === false ? undefined : false } : x))))}
-                  apply={(c) => setFills(fills.map((x, k) => (k === i ? { ...x, color: c } : x)))}
-                  onRemove={() => ed.act(() => setFills(fills.filter((_, k) => k !== i)))}
-                  onType={(type) =>
-                    // solid -> gradient: from this colour to the same colour fully transparent
-                    setFills(fills.map((x, k) => (k === i ? { type, angle: 180, stops: [{ position: 0, color: f.color }, { position: 1, color: { ...f.color, a: 0 } }], visible: x.visible } : x)))
-                  }
-                />
-              ) : 'stops' in f ? (
-                <GradientField
-                  key={i}
-                  paint={f}
-                  set={(p) => setFills(fills.map((x, k) => (k === i ? (p as Paint) : x)))}
+                  apply={(c) => setFills(fills.map((x, k) => (k === i && x.type === 'SOLID' ? { ...x, color: c } : x)))}
                   onRemove={() => ed.act(() => setFills(fills.filter((_, k) => k !== i)))}
                 />
               ) : (
@@ -1290,12 +1337,14 @@ function NodeInspector({ nodes }: { nodes: GNode[] }) {
                         <div style={{ background: `center/cover url(${backend.blob.url(f.imageHash)})` }} />
                       </span>
                       <Select
-                        value={f.scaleMode}
-                        onChange={(v) => ed.act(() => setFills(fills.map((x, k) => (k === i && x.type === 'IMAGE' ? { ...x, scaleMode: v } : x))))}
+                        value={f.scaleMode === 'STRETCH' && f.transform ? 'CROP' : f.scaleMode}
+                        // a cropped picture (it comes like that from Figma) keeps its crop until another mode is chosen
+                        onChange={(v) => ed.act(() => setFills(fills.map((x, k) => (k === i && x.type === 'IMAGE' && v !== 'CROP' ? { ...x, scaleMode: v as 'FILL' | 'FIT' | 'STRETCH', transform: undefined } : x))))}
                         options={[
                           { value: 'FILL', label: t('Fill mode') },
                           { value: 'FIT', label: t('Fit') },
-                          { value: 'STRETCH', label: t('Stretch') }
+                          { value: 'STRETCH', label: t('Stretch') },
+                          ...(f.transform ? [{ value: 'CROP', label: t('Crop') }] : [])
                         ]}
                       />
                     </div>

@@ -115,6 +115,10 @@ export class VectorEdit {
       const p = shapeAsPath(n)!
       ed.act(() => ed.updateNode(id, { type: 'VECTOR', path: p.path, pathBox: p.pathBox, cornerRadius: undefined, cornerRadii: undefined }))
       n = ed.nodes.get(id)!
+    } else if (n.shape) {
+      // a polygon or a star stops being one: its outline (rounding included) is now a path of points
+      ed.act(() => ed.updateNode(id, { path: n!.path }))
+      n = ed.nodes.get(id)!
     }
     this.id = id
     this.tool = 'move'

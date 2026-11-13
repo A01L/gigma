@@ -284,13 +284,19 @@ function buildServer(run: RunCommand, client = 'AI'): McpServer {
     fills: z
       .array(
         z.object({
-          type: z.enum(['SOLID', 'IMAGE', 'GRADIENT_LINEAR', 'GRADIENT_RADIAL']),
+          type: z.enum(['SOLID', 'IMAGE', 'GRADIENT_LINEAR', 'GRADIENT_RADIAL', 'GRADIENT_ANGULAR', 'GRADIENT_DIAMOND']),
           stops: z
             .array(z.object({ position: z.number().min(0).max(1), color }))
             .min(2)
             .optional()
             .describe('Gradients: colour stops'),
           angle: z.number().optional().describe('Linear gradient angle, CSS convention (180 = top to bottom, 90 = left to right)'),
+          handles: z
+            .array(z.object({ x: z.number(), y: z.number() }))
+            .length(3)
+            .optional()
+            .describe('Gradients: start (the centre of a radial, angular or diamond one), end and width handle, in the units of the box (0,0 = top left, 1,1 = bottom right). Overrides angle'),
+          opacity: z.number().min(0).max(1).optional().describe('Gradients: opacity of the whole fill'),
           color: color.optional().describe('SOLID: hex color, alpha allowed'),
           source: z.string().optional().describe('IMAGE: base64, data: URL or absolute file path'),
           imageHash: z.string().optional().describe('IMAGE: reuse an image already in the project'),

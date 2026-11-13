@@ -10,6 +10,7 @@ import { BLEND_MODES } from '@shared/types'
 import { DEFAULT_TEXT_STYLE } from './text'
 import { base64ToBytes, keyBetween, uid } from './util'
 import { segsBounds, segsToD, transformSegs, type Seg } from './svgpath'
+import { angleOf, type Handles } from './gradient'
 
 async function inflateRaw(data: Uint8Array): Promise<Uint8Array> {
   const ds = new DecompressionStream('deflate-raw')
@@ -36,20 +37,32 @@ const toHex = (b: Uint8Array | number[] | undefined) => (b ? [...b].map((x) => x
 /** Figma file key of the copied data (from the figmeta block), used to fetch images later. */
 let currentFileKey: string | undefined
 
-function paints(list: any[] | undefined): Paint[] {
+/** Figma's 2x3 paint matrix as numbers, identity when absent */
+function matrixOf(t: any): { a: number; b: number; c: number; d: number; e: number; f: number } {
+  return { a: t?.m00 ?? 1, c: t?.m01 ?? 0, e: t?.m02 ?? 0, b: t?.m10 ?? 0, d: t?.m11 ?? 1, f: t?.m12 ?? 0 }
+}
+
+function paints(list: any[] | undefined, w = 1, h = 1): Paint[] {
   const out: Paint[] = []
   for (const p of list ?? []) {
     if (p.visible === false) continue
     if (p.type === 'SOLID') out.push({ type: 'SOLID', color: color(p.color, p.opacity ?? 1) })
     else if (p.type?.startsWith('GRADIENT') && p.stops?.length) {
-      // Figma's paint transform maps the node's unit square into gradient space; the gradient runs along +x there
-      const m = p.transform ?? { m00: 1, m01: 0 }
-      const angle = Math.round((Math.atan2(m.m00 ?? 1, -(m.m01 ?? 0)) * 180) / Math.PI)
-      out.push({
-        type: p.type === 'GRADIENT_RADIAL' || p.type === 'GRADIENT_DIAMOND' ? 'GRADIENT_RADIAL' : 'GRADIENT_LINEAR',
-        angle: ((angle % 360) + 360) % 360,
-        stops: p.stops.map((s: any) => ({ position: s.position ?? 0, color: color(s.color, p.opacity ?? 1) }))
-      })
+      // Figma's paint transform takes the node's unit square into gradient space, where the gradient runs along +x
+      // from (0, 0.5) to (1, 0.5). Its inverse gives the three handles in the units of the box.
+      const m = matrixOf(p.transform)
+      const det = m.a * m.d - m.b * m.c
+      const type = p.type === 'GRADIENT_RADIAL' || p.type === 'GRADIENT_ANGULAR' || p.type === 'GRADIENT_DIAMOND' ? p.type : 'GRADIENT_LINEAR'
+      const stops = p.stops.map((s: any) => ({ position: s.position ?? 0, color: color(s.color) }))
+      const opacity = (p.opacity ?? 1) < 1 ? p.opacity : undefined
+      if (Math.abs(det) < 1e-9) {
+        out.push({ type, angle: 180, stops, opacity })
+        continue
+      }
+      const inv = (gx: number, gy: number) => ({ x: (m.d * (gx - m.e) - m.c * (gy - m.f)) / det, y: (-m.b * (gx - m.e) + m.a * (gy - m.f)) / det })
+      // a linear gradient starts at the left of gradient space; the others are centred in it
+      const handles: Handles = type === 'GRADIENT_LINEAR' ? [inv(0, 0.5), inv(1, 0.5), inv(0, 1)] : [inv(0.5, 0.5), inv(1, 0.5), inv(0.5, 1)]
+      out.push({ type, handles, angle: angleOf(handles, w, h), stops, opacity })
     }
     else if (p.type === 'IMAGE') {
       // Figma's clipboard carries only the image *reference* (SHA-1 hash), not the bytes.
@@ -57,7 +70,15 @@ function paints(list: any[] | undefined): Paint[] {
       // bytes are fetched (Figma API) or the user drops the same image, it resolves automatically.
       const hash = toHex(p.image?.hash)
       const mode = p.imageScaleMode === 'FIT' ? 'FIT' : p.imageScaleMode === 'STRETCH' ? 'STRETCH' : 'FILL'
-      if (hash) out.push({ type: 'IMAGE', imageHash: hash, scaleMode: mode, figmaFileKey: currentFileKey })
+      if (!hash) continue
+      const paint: Extract<Paint, { type: 'IMAGE' }> = { type: 'IMAGE', imageHash: hash, scaleMode: mode, figmaFileKey: currentFileKey }
+      // "Crop" in Figma is a stretched image with a matrix that says which part of the picture the box shows
+      if (mode === 'STRETCH' && p.transform) {
+        const m = matrixOf(p.transform)
+        const identity = Math.abs(m.a - 1) < 1e-6 && Math.abs(m.d - 1) < 1e-6 && Math.abs(m.b) < 1e-6 && Math.abs(m.c) < 1e-6 && Math.abs(m.e) < 1e-6 && Math.abs(m.f) < 1e-6
+        if (!identity) paint.transform = [m.a, m.b, m.c, m.d, m.e, m.f]
+      }
+      out.push(paint)
     }
   }
   return out
@@ -289,7 +310,7 @@ export async function decodeFigmaClipboard(html: string): Promise<GNode[] | null
       default:
         type = 'VECTOR'
     }
-    const strokes: Stroke[] = paints(f.strokePaints)
+    const strokes: Stroke[] = paints(f.strokePaints, w, h)
       .filter((p): p is Extract<Paint, { type: 'SOLID' }> => p.type === 'SOLID')
       .map((p) => ({ color: p.color, weight: f.strokeWeight ?? 1, align: f.strokeAlign ?? 'INSIDE' }))
     const n: GNode = {
@@ -306,7 +327,7 @@ export async function decodeFigmaClipboard(html: string): Promise<GNode[] | null
       opacity: f.opacity ?? 1,
       visible: f.visible !== false,
       locked: !!f.locked,
-      fills: paints(f.fillPaints),
+      fills: paints(f.fillPaints, w, h),
       strokes,
       cornerRadius: f.cornerRadius || undefined,
       clipsContent: type === 'FRAME' ? !f.frameMaskDisabled : undefined

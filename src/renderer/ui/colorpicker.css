@@ -309,3 +309,172 @@ input[type='checkbox'] {
   color: var(--cp-muted);
   font-size: 11px;
 }
+
+/* ---- gradient: kind, bar of colour stops, list of stops ---- */
+.cpick.grad {
+  overflow-y: auto;
+}
+.cpick.grad .cpick-sv {
+  height: 148px;
+}
+.cpick.grad .cpick-page {
+  overflow: visible;
+}
+.cpick-grad {
+  padding: 10px 16px 12px;
+  border-bottom: 1px solid var(--cp-line);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.cpick-grad-top {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.cpick-grad-type {
+  flex: 0 0 108px;
+}
+.cpick-grad-type .gsel {
+  width: 100%;
+  height: 24px;
+  border-radius: 5px;
+  background: var(--cp-field);
+}
+/* the thumbs stand over the bar and point down at their place on it */
+.cpick-bar {
+  position: relative;
+  height: 50px;
+  cursor: copy;
+  touch-action: none;
+}
+.cpick-bar-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 26px;
+  border-radius: 6px;
+  overflow: hidden;
+  background-image: linear-gradient(45deg, #888 25%, transparent 25%), linear-gradient(-45deg, #888 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #888 75%), linear-gradient(-45deg, transparent 75%, #888 75%);
+  background-size: 8px 8px;
+  background-position: 0 0, 0 4px, 4px -4px, -4px 0;
+  background-color: #ccc;
+  box-shadow: inset 0 0 0 1px rgba(128, 128, 128, 0.25);
+}
+.cpick-bar-track > div {
+  position: absolute;
+  inset: 0;
+}
+.cpick-thumb {
+  position: absolute;
+  top: 0;
+  width: 20px;
+  height: 20px;
+  margin-left: -10px;
+  padding: 0;
+  border-radius: 5px;
+  background: #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2), 0 1px 4px rgba(0, 0, 0, 0.45);
+  cursor: grab;
+  touch-action: none;
+}
+.cpick-thumb::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  margin-left: -4px;
+  border: 4px solid transparent;
+  border-top-color: #fff;
+}
+.cpick-thumb.on {
+  background: #0d99ff;
+}
+.cpick-thumb.on::after {
+  border-top-color: #0d99ff;
+}
+.cpick-thumb > i {
+  position: absolute;
+  inset: 3px;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+.cpick-stops-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 600;
+  margin-bottom: -4px;
+}
+.cpick-stops {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 -8px;
+}
+.cpick-stop {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+.cpick-stop.on {
+  background: rgba(13, 153, 255, 0.2);
+}
+.cpick-stop > .cpick-input,
+.cpick-stop-color {
+  height: 24px;
+  border: 0;
+  border-radius: 5px;
+  background: var(--cp-field);
+}
+.cpick-stop > .cpick-input {
+  flex: 0 0 46px;
+  width: 46px;
+}
+.cpick-stop-color {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  padding-left: 5px;
+}
+.cpick-stop-color > i {
+  flex: none;
+  position: relative;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  overflow: hidden;
+  background-image: linear-gradient(45deg, #888 25%, transparent 25%), linear-gradient(-45deg, #888 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #888 75%), linear-gradient(-45deg, transparent 75%, #888 75%);
+  background-size: 6px 6px;
+  background-position: 0 0, 0 3px, 3px -3px, -3px 0;
+  background-color: #ccc;
+}
+.cpick-stop-color > i > b {
+  position: absolute;
+  inset: 0;
+}
+.cpick-stop-color .cpick-input {
+  border: 0;
+  padding: 0 0 0 4px;
+}
+.cpick-stop .cpick-ico:disabled {
+  opacity: 0.3;
+  pointer-events: none;
+}
+/* the row of a gradient fill in the panel: its kind stands where the hex of a colour would */
+.paint-kind {
+  flex: 1;
+  min-width: 0;
+  padding: 0 0 0 4px;
+  line-height: 24px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: default;
+}

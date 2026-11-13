@@ -1,15 +1,16 @@
 // Canvas controller: render loop + pointer interactions (select, move, resize, create,
 // marquee, pan/zoom, snapping) for the main editor canvas. Plain TS, no React, so input
 // handling never waits for UI re-renders.
-import type { GNode } from '@shared/types'
+import type { GNode, GradientPaint, UnitPoint } from '@shared/types'
 import { rgbaToCss } from '@shared/types'
 import { editor as ed } from './editor'
 import { guides, placeGuide, newGuide, saveGuide, setGuideOpen } from './guides'
 import { guideAccent } from './guide-render'
 import { VectorEdit, vectorEdit } from './vector-edit'
-import { applyNodeTransform, drawScene, hasTransform, outlineShape, setImageLoadedCallback } from './render'
+import { applyNodeTransform, cornerRadiiOf, drawScene, hasTransform, outlineShape, setImageLoadedCallback } from './render'
+import { across, angleOf, colorAt, handlesOf, type Handles } from './gradient'
 import { rectsIntersect, round2, unionRects, type Rect } from './util'
-import { polygonPath, smoothPath, starPath } from './shapes'
+import { maxShapeRadius, smoothPath } from './shapes'
 import { parsePath, segsBounds, segsToD, transformSegs, type Seg } from './svgpath'
 import { DEFAULT_CODE, setCodeReadyCallback } from './code-render'
 import { DEFAULT_TEXT_STYLE, layoutText, lineHeightOf, loremFor, LOREM_SHORT } from './text'
@@ -70,6 +71,10 @@ type Drag =
   /** the text tool is down: a click will place a line of text, a drag a text box (world coordinates; sx, sy = where it started on screen) */
   | { kind: 'text'; wx: number; wy: number; x: number; y: number; sx: number; sy: number; parent: string | null; moved: boolean }
   | { kind: 'pen-handle'; index: number }
+  /** the dot inside a corner: drag it to round the corners (corner = which one; all of them change unless Alt is held) */
+  | { kind: 'radius'; id: string; corner: number; start: number; p0: number; max: number; value: number }
+  /** a handle of the gradient open in the fill popover: its start, end, width, or a colour stop */
+  | { kind: 'grad'; part: 'start' | 'end' | 'width' | 'stop'; from: Handles }
 
 interface PenPoint {
   x: number
@@ -96,7 +101,11 @@ export class CanvasController {
   /** equal-spacing markers shown while dragging: a gap between two layers that matches another gap */
   private gaps: { axis: 'x' | 'y'; from: number; to: number; at: number }[] = []
   private guides: Guide[] = []
-  private frameLabels: { id: string; r: Rect }[] = []
+  /** name labels drawn in the last frame: r is in the label's own space (origin = the corner of the layer, turned with it) */
+  private frameLabels: { id: string; r: Rect; ax: number; ay: number; rot: number }[] = []
+  /** the label that is being renamed in place: its text is in a field, so it is not drawn */
+  renamingLabel: string | null = null
+  onRenameLabel: (id: string) => void = () => {}
   private annotationPins: { id: string; r: Rect }[] = []
   /** frame/section highlighted as the drop target while dragging */
   private dropTarget: string | null = null
@@ -134,6 +143,13 @@ export class CanvasController {
       if (this.vedit.active && !isTyping() && this.vedit.key(e)) {
         e.preventDefault()
         e.stopImmediatePropagation()
+        return
+      }
+      // the gradient open in the fill popover: Delete removes the selected colour stop, not the layer
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !isTyping() && this.gradEdit()) {
+        e.preventDefault()
+        e.stopImmediatePropagation()
+        this.removeStop()
         return
       }
       // finish the pen path with Enter / Escape (Escape on the first point cancels)
@@ -245,21 +261,30 @@ export class CanvasController {
       const s = this.toScreen(w)
       const sel = ed.selection.includes(id)
       let label = n.name
+      // the label is pinned to the top left corner of the layer and turns with it
+      const at = this.cornerOnScreen(id)
+      const hidden = this.renamingLabel === id
+      ctx.save()
+      ctx.translate(at.x, at.y)
+      if (at.rot) ctx.rotate((-at.rot * Math.PI) / 180)
       if (n.type === 'SECTION') {
         ctx.font = '600 12px Inter, "Segoe UI", system-ui, sans-serif'
         const maxW = Math.max(s.w - 24, 20)
         while (label.length > 1 && ctx.measureText(label).width > maxW) label = label.slice(0, -2) + '…'
         const lw = ctx.measureText(label).width + 16
-        ctx.fillStyle = sel ? BLUE : 'rgba(255,255,255,0.9)'
-        ctx.beginPath()
-        ctx.roundRect(s.x + 8, s.y + 8, lw, 22, 6)
-        ctx.fill()
-        ctx.fillStyle = sel ? '#fff' : '#1e1e1e'
-        ctx.textBaseline = 'middle'
-        ctx.fillText(label, s.x + 16, s.y + 19)
+        if (!hidden) {
+          ctx.fillStyle = sel ? BLUE : 'rgba(255,255,255,0.9)'
+          ctx.beginPath()
+          ctx.roundRect(8, 8, lw, 22, 6)
+          ctx.fill()
+          ctx.fillStyle = sel ? '#fff' : '#1e1e1e'
+          ctx.textBaseline = 'middle'
+          ctx.fillText(label, 16, 19)
+        }
         ctx.textBaseline = 'bottom'
         ctx.font = '11px Inter, "Segoe UI", system-ui, sans-serif'
-        this.frameLabels.push({ id, r: { x: s.x + 8, y: s.y + 8, w: lw, h: 22 } })
+        ctx.restore()
+        this.frameLabels.push({ id, r: { x: 8, y: 8, w: lw, h: 22 }, ax: at.x, ay: at.y, rot: at.rot })
         continue
       }
       // components and instances are purple, with Figma's marks in front of the name
@@ -268,8 +293,9 @@ export class CanvasController {
       ctx.fillStyle = comp ? PURPLE : sel ? BLUE : '#8a8a8a'
       const maxW = Math.max(s.w, 20)
       while (label.length > 1 && ctx.measureText(label).width > maxW) label = label.slice(0, -2) + '…'
-      ctx.fillText(label, s.x, s.y - 4)
-      this.frameLabels.push({ id, r: { x: s.x, y: s.y - 18, w: Math.min(ctx.measureText(label).width, maxW), h: 16 } })
+      if (!hidden) ctx.fillText(label, 0, -4)
+      ctx.restore()
+      this.frameLabels.push({ id, r: { x: 0, y: -18, w: Math.max(24, Math.min(ctx.measureText(label).width, maxW)), h: 16 }, ax: at.x, ay: at.y, rot: at.rot })
     }
 
     // component sets: Figma's dashed purple border around the variants
@@ -423,8 +449,35 @@ export class CanvasController {
           ctx.fillRect(hx - HANDLE / 2, hy - HANDLE / 2, HANDLE, HANDLE)
           ctx.strokeRect(hx - HANDLE / 2 + 0.5, hy - HANDLE / 2 + 0.5, HANDLE - 1, HANDLE - 1)
         }
+        // the dots inside the corners: drag one to round them
+        const rn = this.gradEdit() ? null : this.radiusTarget()
+        if (rn) {
+          for (const dot of this.radiusDots(rn, b)) {
+            ctx.beginPath()
+            ctx.arc(dot.x, dot.y, 4, 0, Math.PI * 2)
+            ctx.fillStyle = '#fff'
+            ctx.fill()
+            ctx.stroke()
+          }
+        }
       }
       ctx.restore()
+      this.drawGradient()
+      if (this.drag?.kind === 'radius') {
+        // what the radius is right now, next to the selection (as Figma shows it while dragging)
+        const label = 'Radius ' + this.drag.value
+        ctx.font = '11px Inter, "Segoe UI", system-ui, sans-serif'
+        const lw = ctx.measureText(label).width + 12
+        ctx.fillStyle = accent
+        ctx.beginPath()
+        ctx.roundRect(b.x + b.w / 2 - lw / 2, b.y - 27, lw, 19, 4)
+        ctx.fill()
+        ctx.fillStyle = '#fff'
+        ctx.textBaseline = 'middle'
+        ctx.textAlign = 'center'
+        ctx.fillText(label, b.x + b.w / 2, b.y - 17)
+        ctx.textAlign = 'left'
+      }
       // size pill
       const wb = ed.selectionBounds(sel)!
       const text = `${round2(wb.w)} × ${round2(wb.h)}`
@@ -797,6 +850,328 @@ export class CanvasController {
     ctx.restore()
   }
 
+  // ---------------------------------------------------------------- name labels
+  /** where the top left corner of a layer is on screen once every rotation is applied, and by how much it is turned */
+  private cornerOnScreen(id: string): { x: number; y: number; rot: number } {
+    const n = ed.nodes.get(id)!
+    const w = ed.world(id)
+    let p = { x: w.x, y: w.y }
+    let rot = 0
+    for (const a of [n, ...ed.ancestors(id)]) {
+      if (!a.rotation) continue
+      const aw = ed.world(a.id)
+      p = turn(p.x, p.y, { x: aw.x + aw.w / 2, y: aw.y + aw.h / 2 }, a.rotation)
+      rot += a.rotation
+    }
+    const s = this.toScreen({ x: p.x, y: p.y, w: 0, h: 0 })
+    return { x: s.x, y: s.y, rot }
+  }
+  /** the name label under a screen point */
+  private labelAt(sx: number, sy: number): { id: string } | undefined {
+    return this.frameLabels.find((l) => {
+      const q = l.rot ? turn(sx, sy, { x: l.ax, y: l.ay }, -l.rot) : { x: sx, y: sy }
+      const x = q.x - l.ax
+      const y = q.y - l.ay
+      return x >= l.r.x && x <= l.r.x + l.r.w && y >= l.r.y && y <= l.r.y + l.r.h
+    })
+  }
+  /** where the field for renaming a label goes: the corner of the layer on screen, its turn, and whether it is the pill of a section */
+  labelGeometry(id: string): { x: number; y: number; rot: number; section: boolean; width: number } | null {
+    const n = ed.nodes.get(id)
+    if (!n) return null
+    return { ...this.cornerOnScreen(id), section: n.type === 'SECTION', width: n.width * ed.camera.zoom }
+  }
+
+  // ---------------------------------------------------------------- corner radius on the canvas
+  /** the selected layer whose corners can be rounded by dragging: a rectangle, a frame, a polygon or a star */
+  private radiusTarget(): GNode | null {
+    if (ed.selection.length !== 1 || ed.tool !== 'move' || this.vedit.active || ed.editingTextId) return null
+    const n = ed.nodes.get(ed.selection[0])
+    if (!n || n.locked) return null
+    if (n.type !== 'RECTANGLE' && n.type !== 'FRAME' && !(n.type === 'VECTOR' && n.shape)) return null
+    // too small on screen: the dots would sit on the resize handles
+    if (Math.min(n.width, n.height) * ed.camera.zoom < 44) return null
+    return n
+  }
+  /** the dots, in the space of the (unrotated) selection box on screen. A rectangle has one per corner, a polygon one under its top */
+  private radiusDots(n: GNode, b: Rect): { corner: number; x: number; y: number }[] {
+    const z = ed.camera.zoom
+    const half = Math.min(b.w, b.h) / 2
+    if (n.shape) {
+      const r = Math.min(n.cornerRadius ?? 0, maxShapeRadius(n.shape, n.width, n.height))
+      return [{ corner: 0, x: b.x + b.w / 2, y: b.y + Math.min(16 + r * z, b.h / 2) }]
+    }
+    const radii = cornerRadiiOf(n, { w: n.width, h: n.height }) ?? [0, 0, 0, 0]
+    // a dot sits where the centre of its arc is, but never closer to the corner than a finger's width
+    const at = (i: number) => Math.min(half, Math.max(radii[i] * z, 14))
+    return [
+      { corner: 0, x: b.x + at(0), y: b.y + at(0) },
+      { corner: 1, x: b.x + b.w - at(1), y: b.y + at(1) },
+      { corner: 2, x: b.x + b.w - at(2), y: b.y + b.h - at(2) },
+      { corner: 3, x: b.x + at(3), y: b.y + b.h - at(3) }
+    ]
+  }
+  private radiusDotAt(sx0: number, sy0: number): { n: GNode; corner: number } | null {
+    const n = this.gradEdit() ? null : this.radiusTarget()
+    if (!n) return null
+    const b = this.toScreen(ed.world(n.id))
+    const { x, y } = this.intoBox(sx0, sy0, b)
+    for (const d of this.radiusDots(n, b)) if (Math.hypot(x - d.x, y - d.y) <= 7) return { n, corner: d.corner }
+    return null
+  }
+  /** how far into the layer the pointer is from a corner, in layer pixels (along the diagonal; from the top for a polygon) */
+  private radiusReach(n: GNode, corner: number, sx0: number, sy0: number): number {
+    const b = this.toScreen(ed.world(n.id))
+    const { x, y } = this.intoBox(sx0, sy0, b)
+    const z = ed.camera.zoom
+    if (n.shape) return (y - b.y) / z
+    const dx = corner === 0 || corner === 3 ? x - b.x : b.x + b.w - x
+    const dy = corner === 0 || corner === 1 ? y - b.y : b.y + b.h - y
+    return (dx + dy) / 2 / z
+  }
+
+  // ---------------------------------------------------------------- gradient handles on the canvas
+  /** the gradient fill that is open in the fill popover, when its layer is the one selected */
+  private gradEdit(): { n: GNode; index: number; paint: GradientPaint; b: Rect; rot: number } | null {
+    const pe = ed.paintEdit
+    if (!pe || ed.selection.length !== 1 || ed.selection[0] !== pe.id || ed.tool !== 'move') return null
+    const n = ed.nodes.get(pe.id)
+    const paint = n?.fills[pe.index]
+    if (!n || !paint || !('stops' in paint)) return null
+    return { n, index: pe.index, paint, b: this.toScreen(ed.world(n.id)), rot: n.rotation ?? 0 }
+  }
+  /** a point in the units of the box -> the screen (the rotation of the layer applied) */
+  private unitToScreen(u: UnitPoint, b: Rect, rot: number): { x: number; y: number } {
+    const x = b.x + u.x * b.w
+    const y = b.y + u.y * b.h
+    return rot ? turn(x, y, { x: b.x + b.w / 2, y: b.y + b.h / 2 }, rot) : { x, y }
+  }
+  /** the three handles and the colour stops of the open gradient, on screen */
+  private gradPoints(g: NonNullable<ReturnType<CanvasController['gradEdit']>>) {
+    const hd = handlesOf(g.paint, g.n.width, g.n.height)
+    const [p0, p1, p2] = hd.map((u) => this.unitToScreen(u, g.b, g.rot))
+    const angular = g.paint.type === 'GRADIENT_ANGULAR'
+    const len = Math.hypot(p1.x - p0.x, p1.y - p0.y) || 1
+    // the chips of the stops stand beside the line, on the side the width handle is not on
+    const nx = -(p1.y - p0.y) / len
+    const ny = (p1.x - p0.x) / len
+    const side = (p2.x - p0.x) * nx + (p2.y - p0.y) * ny > 0 ? -1 : 1
+    const stops = g.paint.stops.map((s, i) => {
+      if (angular) {
+        const a = s.position * Math.PI * 2
+        const x = p0.x + Math.cos(a) * (p1.x - p0.x) + Math.sin(a) * (p2.x - p0.x)
+        const y = p0.y + Math.cos(a) * (p1.y - p0.y) + Math.sin(a) * (p2.y - p0.y)
+        const d = Math.hypot(x - p0.x, y - p0.y) || 1
+        return { i, lx: x, ly: y, x: x + ((x - p0.x) / d) * 18, y: y + ((y - p0.y) / d) * 18 }
+      }
+      const lx = p0.x + (p1.x - p0.x) * s.position
+      const ly = p0.y + (p1.y - p0.y) * s.position
+      return { i, lx, ly, x: lx + nx * side * 20, y: ly + ny * side * 20 }
+    })
+    return { hd, p0, p1, p2, stops, angular, linear: g.paint.type === 'GRADIENT_LINEAR' }
+  }
+  private drawGradient(): void {
+    const g = this.gradEdit()
+    if (!g) return
+    const ctx = this.ctx
+    const { p0, p1, p2, stops, angular, linear } = this.gradPoints(g)
+    const sel = ed.paintEdit?.stop ?? 0
+    ctx.save()
+    ctx.lineCap = 'round'
+    // every line is drawn twice: a dark halo under a white core, so it reads on any colour
+    const line = (draw: () => void) => {
+      ctx.strokeStyle = 'rgba(0,0,0,0.45)'
+      ctx.lineWidth = 3.5
+      draw()
+      ctx.stroke()
+      ctx.strokeStyle = '#fff'
+      ctx.lineWidth = 1.5
+      draw()
+      ctx.stroke()
+    }
+    if (!linear) {
+      // the outline of the gradient: an ellipse through the end and the width handle
+      line(() => {
+        ctx.beginPath()
+        for (let i = 0; i <= 64; i++) {
+          const a = (i / 64) * Math.PI * 2
+          const x = p0.x + Math.cos(a) * (p1.x - p0.x) + Math.sin(a) * (p2.x - p0.x)
+          const y = p0.y + Math.cos(a) * (p1.y - p0.y) + Math.sin(a) * (p2.y - p0.y)
+          if (i) ctx.lineTo(x, y)
+          else ctx.moveTo(x, y)
+        }
+      })
+    }
+    line(() => {
+      ctx.beginPath()
+      ctx.moveTo(p0.x, p0.y)
+      ctx.lineTo(p1.x, p1.y)
+    })
+    if (!linear) {
+      line(() => {
+        ctx.beginPath()
+        ctx.moveTo(p0.x, p0.y)
+        ctx.lineTo(p2.x, p2.y)
+      })
+    }
+    const knob = (p: { x: number; y: number }, r: number) => {
+      ctx.beginPath()
+      ctx.arc(p.x, p.y, r, 0, Math.PI * 2)
+      ctx.fillStyle = '#fff'
+      ctx.shadowColor = 'rgba(0,0,0,0.5)'
+      ctx.shadowBlur = 4
+      ctx.fill()
+      ctx.shadowColor = 'transparent'
+      ctx.strokeStyle = 'rgba(0,0,0,0.25)'
+      ctx.lineWidth = 1
+      ctx.stroke()
+    }
+    knob(p0, 5)
+    knob(p1, 5)
+    if (!linear) knob(p2, 4)
+    // colour stops: a chip beside the line, tied to its place on it
+    for (const s of stops) {
+      line(() => {
+        ctx.beginPath()
+        ctx.moveTo(s.lx, s.ly)
+        ctx.lineTo(s.x, s.y)
+      })
+      const on = s.i === sel
+      ctx.beginPath()
+      ctx.roundRect(s.x - 10, s.y - 10, 20, 20, 5)
+      ctx.fillStyle = on ? BLUE : '#fff'
+      ctx.shadowColor = 'rgba(0,0,0,0.5)'
+      ctx.shadowBlur = 5
+      ctx.fill()
+      ctx.shadowColor = 'transparent'
+      ctx.beginPath()
+      ctx.roundRect(s.x - 7.5, s.y - 7.5, 15, 15, 3)
+      ctx.fillStyle = '#fff'
+      ctx.fill()
+      ctx.fillStyle = rgbaToCss(g.paint.stops[s.i].color)
+      ctx.fill()
+      if (!angular) {
+        ctx.beginPath()
+        ctx.arc(s.lx, s.ly, 2.5, 0, Math.PI * 2)
+        ctx.fillStyle = '#fff'
+        ctx.fill()
+      }
+    }
+    ctx.restore()
+  }
+  /** what of the open gradient is under a screen point: a stop, a handle, or a place on the line where a stop can be added */
+  private gradHit(sx: number, sy: number): { part: 'start' | 'end' | 'width' | 'stop'; stop?: number } | { part: 'add'; t: number } | null {
+    const g = this.gradEdit()
+    if (!g) return null
+    const { p0, p1, p2, stops, angular, linear } = this.gradPoints(g)
+    for (const s of [...stops].reverse()) if (Math.abs(sx - s.x) <= 11 && Math.abs(sy - s.y) <= 11) return { part: 'stop', stop: s.i }
+    if (Math.hypot(sx - p1.x, sy - p1.y) <= 9) return { part: 'end' }
+    if (Math.hypot(sx - p0.x, sy - p0.y) <= 9) return { part: 'start' }
+    if (!linear && Math.hypot(sx - p2.x, sy - p2.y) <= 8) return { part: 'width' }
+    const t = this.gradParam(g, sx, sy)
+    if (angular) {
+      const a = t * Math.PI * 2
+      const x = p0.x + Math.cos(a) * (p1.x - p0.x) + Math.sin(a) * (p2.x - p0.x)
+      const y = p0.y + Math.cos(a) * (p1.y - p0.y) + Math.sin(a) * (p2.y - p0.y)
+      return Math.hypot(sx - x, sy - y) <= 6 ? { part: 'add', t } : null
+    }
+    const x = p0.x + (p1.x - p0.x) * t
+    const y = p0.y + (p1.y - p0.y) * t
+    return Math.hypot(sx - x, sy - y) <= 6 ? { part: 'add', t } : null
+  }
+  /** where along the gradient (0..1) a screen point is: along the line, or around the centre of an angular one */
+  private gradParam(g: NonNullable<ReturnType<CanvasController['gradEdit']>>, sx: number, sy: number): number {
+    const { p0, p1, p2, angular } = this.gradPoints(g)
+    const vx = p1.x - p0.x
+    const vy = p1.y - p0.y
+    const dx = sx - p0.x
+    const dy = sy - p0.y
+    let t: number
+    if (angular) {
+      const wx = p2.x - p0.x
+      const wy = p2.y - p0.y
+      const det = vx * wy - vy * wx || 1
+      const a = (dx * wy - dy * wx) / det
+      const b = (vx * dy - vy * dx) / det
+      t = (((Math.atan2(b, a) / (Math.PI * 2)) % 1) + 1) % 1
+    } else t = Math.max(0, Math.min(1, (dx * vx + dy * vy) / (vx * vx + vy * vy || 1)))
+    return Math.round(t * 100) / 100
+  }
+  private setGrad(g: NonNullable<ReturnType<CanvasController['gradEdit']>>, next: GradientPaint): void {
+    ed.updateNode(g.n.id, { fills: g.n.fills.map((f, i) => (i === g.index ? next : f)) })
+    ed.emit('doc')
+  }
+  /** Delete on the canvas while a gradient is open: its selected stop goes (two always stay) */
+  private removeStop(): void {
+    const g = this.gradEdit()
+    const pe = ed.paintEdit
+    if (!g || !pe || g.paint.stops.length <= 2) return
+    const i = Math.min(pe.stop, g.paint.stops.length - 1)
+    ed.act(() => ed.updateNode(g.n.id, { fills: g.n.fills.map((f, k) => (k === g.index ? { ...g.paint, stops: g.paint.stops.filter((_, s) => s !== i) } : f)) }))
+    ed.paintEdit = { ...pe, stop: Math.max(0, i - 1) }
+    ed.emit('doc', 'ui')
+  }
+  /** true while a handle of the gradient is held: the fill popover must not take that press for a click outside */
+  gradBusy(): boolean {
+    return this.drag?.kind === 'grad'
+  }
+  /** move a handle or a stop of the open gradient to the pointer */
+  private dragGradient(d: Extract<Drag, { kind: 'grad' }>, sx: number, sy: number, shift: boolean): void {
+    const g = this.gradEdit()
+    const pe = ed.paintEdit
+    if (!g || !pe) return
+    if (d.part === 'stop') {
+      const t = this.gradParam(g, sx, sy)
+      this.setGrad(g, { ...g.paint, stops: g.paint.stops.map((s, i) => (i === pe.stop ? { ...s, position: t } : s)) })
+      return
+    }
+    const { b, rot } = g
+    const w = b.w || 1
+    const h = b.h || 1
+    // the pointer and the handles in the pixels of the (unrotated) box
+    const q = rot ? turn(sx, sy, { x: b.x + b.w / 2, y: b.y + b.h / 2 }, -rot) : { x: sx, y: sy }
+    const P = { x: q.x - b.x, y: q.y - b.y }
+    const px = (u: UnitPoint) => ({ x: u.x * w, y: u.y * h })
+    const unit = (p: { x: number; y: number }): UnitPoint => ({ x: Math.round((p.x / w) * 1e4) / 1e4, y: Math.round((p.y / h) * 1e4) / 1e4 })
+    const cur = handlesOf(g.paint, g.n.width, g.n.height)
+    const [h0, h1, h2] = cur.map(px)
+    const linear = g.paint.type === 'GRADIENT_LINEAR'
+    // how wide the gradient is compared with its length, and on which side the width handle is: kept while the line moves
+    const lenOld = Math.hypot(h1.x - h0.x, h1.y - h0.y) || 1
+    const k = Math.hypot(h2.x - h0.x, h2.y - h0.y) / lenOld
+    const side = (h1.x - h0.x) * (h2.y - h0.y) - (h1.y - h0.y) * (h2.x - h0.x) < 0 ? -1 : 1
+    const widthFor = (a: { x: number; y: number }, e: { x: number; y: number }) => ({ x: a.x - (e.y - a.y) * k * side, y: a.y + (e.x - a.x) * k * side })
+    const snap = (from: { x: number; y: number }, to: { x: number; y: number }) => {
+      if (!shift) return to
+      // Shift keeps the line on 15° steps
+      const len = Math.hypot(to.x - from.x, to.y - from.y)
+      const a = Math.round(Math.atan2(to.y - from.y, to.x - from.x) / (Math.PI / 12)) * (Math.PI / 12)
+      return { x: from.x + Math.cos(a) * len, y: from.y + Math.sin(a) * len }
+    }
+    let next: Handles
+    if (d.part === 'start') {
+      if (linear) {
+        const s = snap(h1, P)
+        next = [unit(s), cur[1], unit(widthFor(s, h1))]
+      } else {
+        // the centre carries the whole gradient with it
+        const dx = P.x - h0.x
+        const dy = P.y - h0.y
+        next = [unit(P), unit({ x: h1.x + dx, y: h1.y + dy }), unit({ x: h2.x + dx, y: h2.y + dy })]
+      }
+    } else if (d.part === 'end') {
+      const e = snap(h0, P)
+      next = [cur[0], unit(e), unit(widthFor(h0, e))]
+    } else {
+      // the width handle only slides across the line
+      const nx = (-(h1.y - h0.y) / lenOld) * side
+      const ny = ((h1.x - h0.x) / lenOld) * side
+      const len = Math.max(1, (P.x - h0.x) * nx + (P.y - h0.y) * ny)
+      next = [cur[0], cur[1], unit({ x: h0.x + nx * len, y: h0.y + ny * len })]
+    }
+    this.setGrad(g, { ...g.paint, handles: next, angle: angleOf(next, g.n.width, g.n.height) })
+  }
+
   private handles(b: Rect): [Handle, number, number][] {
     const { x, y, w, h } = b
     const list: [Handle, number, number][] = [
@@ -875,7 +1250,8 @@ export class CanvasController {
     else if (e) {
       const p = this.local(e)
       const h = this.handleAt(p.sx, p.sy)
-      if (this.drag?.kind === 'link' || this.specPortAt(p.sx, p.sy)) c = 'crosshair'
+      if (this.drag?.kind === 'grad' || this.drag?.kind === 'radius' || this.gradHit(p.sx, p.sy) || this.radiusDotAt(p.sx, p.sy)) c = ARROW_CURSOR
+      else if (this.drag?.kind === 'link' || this.specPortAt(p.sx, p.sy)) c = 'crosshair'
       else if (h) c = CURSORS[h]
       else if (this.drag?.kind === 'rotate' || this.rotateZoneAt(p.sx, p.sy)) c = ROTATE_CURSOR
     }
@@ -970,6 +1346,35 @@ export class CanvasController {
       this.drag = { kind: 'link', spec: port.spec, side: port.side, x: p.x, y: p.y, target: null }
       return
     }
+    // the gradient open in the fill popover: its handles and stops come first
+    const gh = this.gradHit(p.sx, p.sy)
+    if (gh) {
+      const g = this.gradEdit()!
+      const pe = ed.paintEdit!
+      ed.begin()
+      if (gh.part === 'add') {
+        // a press on the line puts a new stop there, in the colour the gradient has at that place
+        const stops = [...g.paint.stops, { position: gh.t, color: colorAt(g.paint.stops, gh.t) }]
+        ed.paintEdit = { ...pe, stop: stops.length - 1 }
+        this.setGrad(g, { ...g.paint, stops })
+        this.drag = { kind: 'grad', part: 'stop', from: handlesOf(g.paint, g.n.width, g.n.height) }
+      } else {
+        if (gh.part === 'stop') ed.paintEdit = { ...pe, stop: gh.stop! }
+        this.drag = { kind: 'grad', part: gh.part, from: handlesOf(g.paint, g.n.width, g.n.height) }
+      }
+      ed.emit('ui', 'doc')
+      return
+    }
+    // a dot inside a corner: round the corners
+    const dot = this.radiusDotAt(p.sx, p.sy)
+    if (dot) {
+      const n = dot.n
+      const max = n.shape ? maxShapeRadius(n.shape, n.width, n.height) : Math.min(n.width, n.height) / 2
+      const now = n.shape ? Math.min(n.cornerRadius ?? 0, max) : (cornerRadiiOf(n, { w: n.width, h: n.height }) ?? [0, 0, 0, 0])[dot.corner]
+      this.drag = { kind: 'radius', id: n.id, corner: dot.corner, start: now, p0: this.radiusReach(n, dot.corner, p.sx, p.sy), max, value: Math.round(now) }
+      ed.begin()
+      return
+    }
     // move tool
     const handle = this.handleAt(p.sx, p.sy)
     if (handle) {
@@ -1014,7 +1419,7 @@ export class CanvasController {
       this.onEditAnnotation(pin.id)
       return
     }
-    const label = this.frameLabels.find((l) => p.sx >= l.r.x && p.sx <= l.r.x + l.r.w && p.sy >= l.r.y && p.sy <= l.r.y + l.r.h)
+    const label = this.labelAt(p.sx, p.sy)
     let hit = label ? label.id : ed.hitTest(p.x, p.y, e.ctrlKey || e.metaKey)
     // clicking inside the current selection bounds keeps it (drag selection as a whole)
     const sb = ed.selectionBounds()
@@ -1362,6 +1767,25 @@ export class CanvasController {
         this.invalidate()
         break
       }
+      case 'grad':
+        this.dragGradient(d, p.sx, p.sy, e.shiftKey)
+        break
+      case 'radius': {
+        const n = ed.nodes.get(d.id)
+        if (!n) break
+        // whole pixels, never past the point where the corners meet
+        const r = Math.max(0, Math.min(Math.round(d.max * 100) / 100, Math.round(d.start + this.radiusReach(n, d.corner, p.sx, p.sy) - d.p0)))
+        d.value = Math.round(r * 100) / 100
+        if (n.shape) ed.updateNode(n.id, { cornerRadius: r || undefined })
+        else if (e.altKey) {
+          // Alt: only the corner that is held
+          const radii = [...(n.cornerRadii ?? [n.cornerRadius ?? 0, n.cornerRadius ?? 0, n.cornerRadius ?? 0, n.cornerRadius ?? 0])] as [number, number, number, number]
+          radii[d.corner] = r
+          ed.updateNode(n.id, { cornerRadii: radii, cornerRadius: undefined })
+        } else ed.updateNode(n.id, { cornerRadius: r || undefined, cornerRadii: undefined })
+        ed.emit('doc')
+        break
+      }
       case 'pen-handle': {
         const pt = this.pen?.pts[d.index]
         if (pt) {
@@ -1412,9 +1836,9 @@ export class CanvasController {
           arrowEnd: d.tool === 'arrow' || undefined
         })
       case 'polygon':
-        return ed.addNode({ type: 'VECTOR', name: 'Polygon', ...box, path: polygonPath(3, 100, 100), pathBox: { w: 100, h: 100 }, fills: [{ type: 'SOLID', color: grey }] })
+        return ed.addNode({ type: 'VECTOR', name: 'Polygon', ...box, shape: { kind: 'POLYGON', count: 3 }, fills: [{ type: 'SOLID', color: grey }] })
       case 'star':
-        return ed.addNode({ type: 'VECTOR', name: 'Star', ...box, path: starPath(5, 0.382, 100, 100), pathBox: { w: 100, h: 100 }, fills: [{ type: 'SOLID', color: grey }] })
+        return ed.addNode({ type: 'VECTOR', name: 'Star', ...box, shape: { kind: 'STAR', count: 5, ratio: 0.382 }, fills: [{ type: 'SOLID', color: grey }] })
       case 'section':
         return ed.addNode({ type: 'SECTION', name: 'Section', ...box, fills: [{ type: 'SOLID', color: { r: 1, g: 1, b: 1, a: 0.08 } }], strokes: [{ color: { r: 1, g: 1, b: 1, a: 0.25 }, weight: 1, align: 'INSIDE' }], cornerRadius: 4 })
       case 'slice':
@@ -1594,7 +2018,7 @@ export class CanvasController {
         ed.act(() => ed.updateNode(spec.id, { spec: { ...spec.spec!, [mine]: next.length ? next : undefined, [other]: rest.length ? rest : undefined } }))
       }
       this.invalidate()
-    } else if (d.kind === 'resize' || d.kind === 'rotate') ed.commit()
+    } else if (d.kind === 'resize' || d.kind === 'rotate' || d.kind === 'radius' || d.kind === 'grad') ed.commit()
     else if (d.kind === 'create') {
       if (!d.id) {
         // click without drag: default size like Figma (100x100, bigger for cards/sections)
@@ -1624,6 +2048,13 @@ export class CanvasController {
     // inside the point editing a double click turns a corner into a curve, or leaves the mode
     if (this.vedit.active) {
       this.vedit.dbl(p.x, p.y)
+      return
+    }
+    // the name over a frame (or in the pill of a section) is renamed where it stands
+    const label = ed.tool === 'move' ? this.labelAt(p.sx, p.sy) : undefined
+    if (label && !ed.nodes.get(label.id)?.locked) {
+      ed.setSelection([label.id])
+      this.onRenameLabel(label.id)
       return
     }
     const deep = ed.hitTest(p.x, p.y, true)

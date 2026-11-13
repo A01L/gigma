@@ -1,6 +1,6 @@
 // Executes command-bus requests (from MCP now, plugins later) as normal undoable edits.
 import type { CommandName, CommandRequest, CommandResponse } from '@shared/commands'
-import type { Effect, GNode, Paint, TextStyle } from '@shared/types'
+import type { Effect, GNode, GradientPaint, GradientType, Paint, TextStyle } from '@shared/types'
 import { hexToRgba, rgbaToHex } from '@shared/types'
 import { backend } from '../backend'
 import { editor as ed, parseVariant } from './editor'
@@ -8,7 +8,6 @@ import { DEFAULT_TEXT_STYLE } from './text'
 import { exportPng, imageSize } from './render'
 import { nodesToSvg, svgToNodes } from './svg'
 import { framesInReadingOrder, pdfPages } from './pdf'
-import { polygonPath, starPath } from './shapes'
 import { codeBitmapAsync } from './code-render'
 import { aiCursor } from './ai-cursor'
 import { noteSpecClient } from './spec-board'
@@ -577,9 +576,17 @@ const handlers: Record<CommandName, (a: Args) => unknown | Promise<unknown>> = {
             if (!f.imageHash) throw new Error('IMAGE fill needs source or imageHash')
             return { type: 'IMAGE', imageHash: f.imageHash, scaleMode: f.scaleMode ?? 'FILL', visible: f.visible }
           }
-          if (f.type === 'GRADIENT_LINEAR' || f.type === 'GRADIENT_RADIAL') {
+          if (typeof f.type === 'string' && f.type.startsWith('GRADIENT_')) {
             if (!Array.isArray(f.stops) || f.stops.length < 2) throw new Error('gradient fill needs at least 2 stops')
-            return { type: f.type, angle: f.angle ?? 180, stops: f.stops.map((s: Args) => ({ position: s.position, color: hexToRgba(s.color) })), visible: f.visible }
+            return {
+              type: f.type as GradientType,
+              angle: f.angle ?? 180,
+              // start, end and width handle in the units of the box; without them the angle places a linear gradient
+              handles: Array.isArray(f.handles) && f.handles.length === 3 ? (f.handles.map((p: Args) => ({ x: +p.x, y: +p.y })) as GradientPaint['handles']) : undefined,
+              opacity: typeof f.opacity === 'number' && f.opacity < 1 ? Math.max(0, f.opacity) : undefined,
+              stops: f.stops.map((s: Args) => ({ position: s.position, color: hexToRgba(s.color) })),
+              visible: f.visible
+            }
           }
           return { type: 'SOLID', color: hexToRgba(f.color ?? '#D9D9D9'), visible: f.visible }
         })
@@ -683,9 +690,9 @@ const handlers: Record<CommandName, (a: Args) => unknown | Promise<unknown>> = {
               arrowEnd: a.kind === 'arrow' || undefined
             })
           case 'polygon':
-            return ed.addNode({ type: 'VECTOR', ...base, name: a.name ?? 'Polygon', path: polygonPath(a.sides ?? 3, 100, 100), pathBox: { w: 100, h: 100 }, fills, strokes: strokes(a) })
+            return ed.addNode({ type: 'VECTOR', ...base, name: a.name ?? 'Polygon', shape: { kind: 'POLYGON', count: a.sides ?? 3 }, fills, strokes: strokes(a) })
           case 'star':
-            return ed.addNode({ type: 'VECTOR', ...base, name: a.name ?? 'Star', path: starPath(a.sides ?? 5, a.innerRatio ?? 0.382, 100, 100), pathBox: { w: 100, h: 100 }, fills, strokes: strokes(a) })
+            return ed.addNode({ type: 'VECTOR', ...base, name: a.name ?? 'Star', shape: { kind: 'STAR', count: a.sides ?? 5, ratio: a.innerRatio ?? 0.382 }, fills, strokes: strokes(a) })
           case 'section':
             return ed.addNode({ type: 'SECTION', ...base, name: a.name ?? 'Section', fills, strokes: [{ color: { r: 1, g: 1, b: 1, a: 0.25 }, weight: 1, align: 'INSIDE' }], cornerRadius: 4 })
           default:

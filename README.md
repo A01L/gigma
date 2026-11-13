@@ -51,8 +51,11 @@ Its main feature is a **built-in MCP server**. An AI assistant (Claude Desktop, 
 - **Auto layout**: direction, gaps, padding, wrapping, hug and fill
 - **Constraints** when a frame is resized
 - **Components**, instances with overrides and **variants**
-- **Boolean operations** and flatten, masks
-- Fills: colour, linear and radial gradient, image; a fill popover like Figma's (Hex, RGB, HSL, HSB, CSS, eyedropper, colours of the page)
+- **Boolean operations** and flatten, masks (a shape cuts by its outline; a picture, a text or a group by its alpha, as in Figma)
+- Corner radius on the canvas: a dot in each corner of a rectangle or a frame (Alt = one corner), one for a polygon or a star; rounding never gets squashed when the shape is squeezed
+- Fills: colour, linear / radial / angular / diamond gradient, image (cropped images from Figma keep their crop); a fill popover like Figma's (Hex, RGB, HSL, HSB, CSS, eyedropper, colours of the page)
+- Gradients are edited as in Figma: a bar of colour stops and their list in the popover, flip and rotate, and handles right on the canvas (start, end, width, stops; a press on the line adds a stop, Delete removes it, Shift snaps to 15°)
+- The name over a frame turns with the frame; a double click on it renames the frame in place
 - Effects: shadows, inner shadows, layer and background blur, 16 blend modes
 - Linked colour and text **styles**
 - Distances on Alt, smart guides, equal spacing

@@ -14,7 +14,7 @@ async function mcp(name, args = {}) {
 const results = []
 const check = (label, got, want) => (process.env.TRACE && console.error(label), results).push(`${JSON.stringify(got) === JSON.stringify(want) ? 'PASS' : 'FAIL'}  ${label}: ${JSON.stringify(got)}${JSON.stringify(got) === JSON.stringify(want) ? '' : '  want ' + JSON.stringify(want)}`)
 
-await mcp('create_project', { name: 'Picker test' })
+const proj = await mcp('create_project', { name: 'Picker test' })
 const f = await mcp('create_frame', { name: 'F', x: 0, y: 0, width: 600, height: 400, fill: '#FFFFFF' })
 const a = await mcp('create_rectangle', { name: 'a', x: 40, y: 40, width: 200, height: 120, fill: '#D9D9D9', parentId: f.id })
 await mcp('create_rectangle', { name: 'b', x: 300, y: 40, width: 100, height: 100, fill: '#2563EB', parentId: f.id })
@@ -23,7 +23,7 @@ await mcp('create_ellipse', { name: 'd', x: 40, y: 220, width: 100, height: 100,
 await mcp('create_style', { kind: 'color', name: 'Brand / Rose', color: '#E11D48' }).catch(() => mcp('create_style', { type: 'color', name: 'Brand / Rose', color: '#E11D48' }))
 
 const targets = await (await fetch(`http://127.0.0.1:${port}/json`)).json()
-const page = targets.filter((p) => p.type === 'page' && p.url.includes('#doc=')).pop()
+const page = targets.filter((p) => p.type === 'page' && p.url.includes('#doc=' + encodeURIComponent(proj.path))).pop()
 const ws = new WebSocket(page.webSocketDebuggerUrl)
 await new Promise((r) => ws.addEventListener('open', r, { once: true }))
 let id = 0
@@ -53,7 +53,8 @@ await tick()
 await js(`document.querySelector('.panel.right button.swatch').click(), 1`)
 await tick()
 check('the popover opens with both tabs', await js(`[...document.querySelectorAll('.cpick-head > button:not(.cpick-ico)')].map((b) => b.textContent)`), ['Свой', 'Библиотеки'])
-check('fill types are offered', await js(`document.querySelectorAll('.cpick-types button').length`), 3)
+// a colour or a gradient; the kinds of gradient are chosen in the gradient itself
+check('fill types are offered', await js(`document.querySelectorAll('.cpick-types button').length`), 2)
 check('colours of the page, most used first', await js(`[...document.querySelectorAll('.cpick-swatches button')].map((b) => b.title)`), ['#2563EB', '#FFFFFF', '#D9D9D9', '#F59E0B'])
 check('it sits to the left of the panel', await js(`document.querySelector('.cpick').getBoundingClientRect().right <= document.querySelector('.panel.right').getBoundingClientRect().left`), true)
 
