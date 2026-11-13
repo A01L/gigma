@@ -270,16 +270,10 @@ export function drawGuide(ctx: CanvasRenderingContext2D, n: GNode, r: Rect, g: G
   const cx = r.x + r.w / 2
   const cy = r.y + r.h / 2
   const rad = Math.min(r.w, r.h) / 2
+  // neon: the light stays close to the edge, a thin halo instead of a cloud
   ctx.save()
-  const halo = ctx.createRadialGradient(cx, cy, rad * 0.6, cx, cy, rad * 1.7)
-  halo.addColorStop(0, accent + (accent.length === 7 ? '66' : ''))
-  halo.addColorStop(1, accent.length === 7 ? accent + '00' : 'rgba(0,0,0,0)')
-  ctx.fillStyle = halo
-  ctx.beginPath()
-  ctx.arc(cx, cy, rad * 1.7, 0, Math.PI * 2)
-  ctx.fill()
   ctx.shadowColor = accent
-  ctx.shadowBlur = 18 * k
+  ctx.shadowBlur = 7 * k
   ctx.fillStyle = accent
   ctx.beginPath()
   ctx.arc(cx, cy, rad * 0.78, 0, Math.PI * 2)
