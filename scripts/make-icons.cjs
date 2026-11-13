@@ -104,7 +104,7 @@ app.whenReady().then(async () => {
   await generate(win, 'icon', 'icons') // app icon
   await generate(win, 'file-icon') // icon for .gigma documents
   for (const name of ['guide-icon', 'plug-icon']) {
-    await generate(win, name) // icons of .guide.gigma and .plug.gigma files
+    await generate(win, name) // icons of .gguide and .gplug files
     fs.copyFileSync(path.join(root, `build/${name}.svg`), path.join(root, `src/renderer/assets/${name}.svg`))
   }
   fs.copyFileSync(path.join(root, 'build/icon.svg'), path.join(root, 'src/renderer/assets/logo.svg'))

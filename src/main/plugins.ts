@@ -1,4 +1,4 @@
-// Plugins: .plug.gigma packages (zip archives with manifest.json + an HTML page).
+// Plugins: .gplug packages (older ones are called .plug.gigma and install the same way) (zip archives with manifest.json + an HTML page).
 //
 // A plugin is a web page shown in a sandboxed <iframe> inside the editor. It has no access to
 // Node, to the file system or to the application: everything goes through the `gigma` object
@@ -14,7 +14,9 @@ import { commandReference, prepareCommand } from './mcp'
 import guide from '../../docs/PLUGINS.md?raw'
 import { BRIDGE_JS, TEMPLATE_HTML, UI_CSS } from './plugin-runtime'
 
-export const PLUGIN_EXT = '.plug.gigma'
+// Windows picks a file icon by the last extension only, so plugin packages have one of their own
+export const PLUGIN_EXT = '.gplug'
+const OLD_PLUGIN_EXT = '.plug.gigma'
 const ID_RE = /^[a-z0-9][a-z0-9-]{1,48}$/
 
 const pluginsDir = () => {
@@ -81,7 +83,7 @@ export function listPlugins(): PluginInfo[] {
   return [...out.values()].sort((a, b) => a.name.localeCompare(b.name))
 }
 
-/** Install a .plug.gigma package (replaces an installed plugin with the same id). */
+/** Install a .gplug package (replaces an installed plugin with the same id). */
 export function installPackage(file: string): PluginInfo {
   const entries = unzip(readFileSync(file))
   // the files may sit in a single top-level folder (zipping a folder does that)
@@ -142,7 +144,7 @@ export function pluginSizes(): { id: string; name: string; size: number }[] {
     .map((p) => ({ id: p.id, name: p.name, size: sizeOf(join(pluginsDir(), p.id)) }))
 }
 
-/** Pack a plugin folder into a .plug.gigma archive. */
+/** Pack a plugin folder into a .gplug archive. */
 export function packFolder(dir: string): Buffer {
   const entries: ZipEntry[] = []
   const walk = (d: string, prefix: string) => {
@@ -334,7 +336,7 @@ export function registerPlugins(host: {
   }
   ipcMain.handle('plugins:list', () => listPlugins())
   ipcMain.handle('plugins:install', async () => {
-    const r = await dialog.showOpenDialog(host.window()!, { title: 'Install plugin', filters: [{ name: 'Gigma plugin', extensions: ['gigma', 'zip'] }], properties: ['openFile'] })
+    const r = await dialog.showOpenDialog(host.window()!, { title: 'Install plugin', filters: [{ name: 'Gigma plugin', extensions: ['gplug', 'gigma', 'zip'] }], properties: ['openFile'] })
     if (r.canceled || !r.filePaths[0]) return null
     const info = installPackage(r.filePaths[0])
     changed()
@@ -342,7 +344,7 @@ export function registerPlugins(host: {
   })
   // a package dropped onto the settings page
   ipcMain.handle('plugins:installPath', (_e, file: string) => {
-    if (typeof file !== 'string' || !/\.(gigma|zip)$/i.test(file)) throw new Error('not a .plug.gigma file')
+    if (typeof file !== 'string' || !/\.(gplug|gigma|zip)$/i.test(file)) throw new Error('not a .gplug file')
     const info = installPackage(file)
     changed()
     return info
@@ -419,4 +421,4 @@ export function registerPlugins(host: {
   })
 }
 
-export const isPluginFile = (f: string) => basename(f).toLowerCase().endsWith(PLUGIN_EXT)
+export const isPluginFile = (f: string) => basename(f).toLowerCase().endsWith(PLUGIN_EXT) || basename(f).toLowerCase().endsWith(OLD_PLUGIN_EXT)

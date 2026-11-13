@@ -678,7 +678,9 @@ function broadcast(channel: string): void {
 }
 
 // ---------- double-clicked .gigma files: import into the library and open ----------
-const pendingFiles: string[] = process.argv.slice(1).filter((a) => a.toLowerCase().endsWith('.gigma'))
+/** files Gigma opens: projects, guidelines (.gguide) and plugin packages (.gplug) */
+const isGigmaFile = (a: string) => /\.(gigma|gguide|gplug)$/i.test(a)
+const pendingFiles: string[] = process.argv.slice(1).filter(isGigmaFile)
 let shellReady = false
 
 async function openExternalFile(file: string): Promise<void> {
@@ -686,7 +688,7 @@ async function openExternalFile(file: string): Promise<void> {
     pendingFiles.push(file)
     return
   }
-  // a double-clicked .plug.gigma is a plugin package: ask, then install
+  // a double-clicked .gplug is a plugin package: ask, then install
   if (isPluginFile(file)) {
     try {
       const ru = effectiveLang(getSettings()) === 'ru'
@@ -707,7 +709,7 @@ async function openExternalFile(file: string): Promise<void> {
     }
     return
   }
-  // a double-clicked .guide.gigma goes into the guideline library
+  // a double-clicked .gguide goes into the guideline library
   if (isGuideFile(file)) {
     try {
       const g = importGuideFile(file)
@@ -736,7 +738,7 @@ app.on('open-file', (e, file) => {
 
 if (!app.requestSingleInstanceLock()) app.quit()
 app.on('second-instance', (_e, argv) => {
-  for (const a of argv.slice(1)) if (a.toLowerCase().endsWith('.gigma')) void openExternalFile(a)
+  for (const a of argv.slice(1)) if (isGigmaFile(a)) void openExternalFile(a)
   if (win) {
     if (win.isMinimized()) win.restore()
     win.focus()

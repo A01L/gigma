@@ -116,7 +116,7 @@ export function GuidesPalette({ onClose }: { onClose: () => void }) {
           </button>
           <button className={'palette-item' + (active === list.length + 1 ? ' active' : '')} onMouseEnter={() => setActive(list.length + 1)} onClick={() => void importFile()}>
             <span className="pi-icon">{Icons.plus}</span>
-            <span className="pi-label">{t('Import .guide.gigma…')}</span>
+            <span className="pi-label">{t('Import .gguide…')}</span>
             <span className="pi-hint" />
           </button>
         </div>

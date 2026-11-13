@@ -63,7 +63,7 @@ export interface TabsState {
   tabs: TabInfo[]
 }
 
-/** manifest.json of a plugin package (.plug.gigma) */
+/** manifest.json of a plugin package (.gplug) */
 export interface PluginManifest {
   /** unique id: lowercase latin letters, digits and dashes */
   id: string
@@ -103,7 +103,7 @@ export interface PageCapture {
 export interface GigmaApi {
   plugins: {
     list(): Promise<PluginInfo[]>
-    /** pick a .plug.gigma file and install it; null = cancelled */
+    /** pick a .gplug file and install it; null = cancelled */
     install(): Promise<PluginInfo | null>
     /** developer mode: use a folder with manifest.json as a plugin */
     installFolder(): Promise<PluginInfo | null>
@@ -130,9 +130,9 @@ export interface GigmaApi {
     save(data: GuideData): Promise<GuideData>
     /** delete from the library and from every project */
     remove(id: string): Promise<void>
-    /** save as a .guide.gigma file; false = cancelled */
+    /** save as a .gguide file; false = cancelled */
     exportFile(id: string): Promise<boolean>
-    /** pick a .guide.gigma file and add it to the library; null = cancelled */
+    /** pick a .gguide file and add it to the library; null = cancelled */
     importFile(): Promise<GuideData | null>
     onChanged(handler: () => void): void
   }

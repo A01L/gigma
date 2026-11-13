@@ -1,18 +1,31 @@
 // Guideline library: design systems shared by every project on this computer.
-// A guideline is one JSON file (<id>.guide.gigma) in <library>/guides: colours, fonts, logos, rules.
+// A guideline is one JSON file (<id>.gguide) in <library>/guides: colours, fonts, logos, rules.
 // Projects only refer to it by id (and keep a copy for when the file travels to another computer),
 // so an edit shows up everywhere at once. Nothing is uploaded anywhere.
 import { dialog, shell, type BrowserWindow } from 'electron'
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { libraryDir } from './library'
 import type { GuideData } from '../shared/types'
 
-const EXT = '.guide.gigma'
+// Windows picks a file icon by the last extension only, so guidelines have one of their own.
+// Files saved before that were called *.guide.gigma: they are still read and imported.
+const EXT = '.gguide'
+const OLD_EXT = '.guide.gigma'
 
 export function guidesDir(): string {
   const dir = join(libraryDir(), 'guides')
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+  // the library itself moves to the new name once
+  for (const f of readdirSync(dir)) {
+    if (!f.endsWith(OLD_EXT)) continue
+    const to = join(dir, f.slice(0, -OLD_EXT.length) + EXT)
+    try {
+      if (!existsSync(to)) renameSync(join(dir, f), to)
+    } catch {
+      /* stays readable under the old name next time */
+    }
+  }
   return dir
 }
 const fileOf = (id: string) => join(guidesDir(), id + EXT)
@@ -89,21 +102,21 @@ export function guideSizes(): { id: string; name: string; size: number }[] {
 export async function exportGuide(win: BrowserWindow | null, id: string): Promise<boolean> {
   if (!existsSync(fileOf(id))) throw new Error('unknown guideline')
   const g = parse(readFileSync(fileOf(id), 'utf8'))
-  const opts = { defaultPath: g.name.replace(/[\\/:*?"<>|]/g, '_') + EXT, filters: [{ name: 'Gigma guideline', extensions: ['guide.gigma', 'gigma'] }] }
+  const opts = { defaultPath: g.name.replace(/[\\/:*?"<>|]/g, '_') + EXT, filters: [{ name: 'Gigma guideline', extensions: ['gguide', 'gigma'] }] }
   const r = win ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts)
   if (r.canceled || !r.filePath) return false
   writeFileSync(r.filePath, JSON.stringify(g))
   return true
 }
 
-export const isGuideFile = (path: string) => path.toLowerCase().endsWith(EXT)
+export const isGuideFile = (path: string) => path.toLowerCase().endsWith(EXT) || path.toLowerCase().endsWith(OLD_EXT)
 
 export function importGuideFile(path: string): GuideData {
   return saveGuide(parse(readFileSync(path, 'utf8')))
 }
 
 export async function importGuide(win: BrowserWindow | null): Promise<GuideData | null> {
-  const opts = { properties: ['openFile' as const], filters: [{ name: 'Gigma guideline', extensions: ['guide.gigma', 'gigma'] }] }
+  const opts = { properties: ['openFile' as const], filters: [{ name: 'Gigma guideline', extensions: ['gguide', 'gigma'] }] }
   const r = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts)
   if (r.canceled || !r.filePaths[0]) return null
   return importGuideFile(r.filePaths[0])

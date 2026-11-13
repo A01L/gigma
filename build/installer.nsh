@@ -12,8 +12,8 @@
   LangString gigmaWelcomeText ${LANG_RUSSIAN} "Gigma это бесплатный редактор дизайна с открытым кодом. Он работает без интернета и привычен тем, кто знает Figma.$\r$\n$\r$\nПроекты хранятся на этом компьютере. Встроенный MCP-сервер позволяет ИИ-ассистентам рисовать прямо на вашем холсте.$\r$\n$\r$\nНажмите «Далее», чтобы выбрать папку установки."
   LangString gigmaFinishTitle ${LANG_ENGLISH} "Gigma is ready"
   LangString gigmaFinishTitle ${LANG_RUSSIAN} "Gigma установлена"
-  LangString gigmaFinishText ${LANG_ENGLISH} "Files with the .gigma extension now open in Gigma. Plugins (.plug.gigma) are installed from Settings → Plugins."
-  LangString gigmaFinishText ${LANG_RUSSIAN} "Файлы .gigma теперь открываются в Gigma. Плагины (.plug.gigma) устанавливаются в разделе Настройки → Плагины."
+  LangString gigmaFinishText ${LANG_ENGLISH} "Files with the .gigma extension now open in Gigma. Plugins (.gplug) are installed from Settings → Plugins."
+  LangString gigmaFinishText ${LANG_RUSSIAN} "Файлы .gigma теперь открываются в Gigma. Плагины (.gplug) устанавливаются в разделе Настройки → Плагины."
   LangString gigmaFinishLink ${LANG_ENGLISH} "Source code and news: github.com/A01L/gigma"
   LangString gigmaFinishLink ${LANG_RUSSIAN} "Исходный код и новости: github.com/A01L/gigma"
 !macroend

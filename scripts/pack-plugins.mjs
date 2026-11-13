@@ -1,4 +1,4 @@
-// Packs plugin folders into .plug.gigma packages.
+// Packs plugin folders into .gplug packages.
 // Usage: node scripts/pack-plugins.mjs <folder> [output folder]
 //   <folder> is either one plugin (it has manifest.json) or a folder of plugin folders.
 //   Packages are written next to the plugin folders unless an output folder is given.
@@ -74,7 +74,7 @@ for (const dir of folders) {
   }
   walk(dir, '')
   const manifest = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8'))
-  const file = join(out, manifest.id + '.plug.gigma')
+  const file = join(out, manifest.id + '.gplug')
   writeFileSync(file, zip(entries))
   console.log(`${file}  (${entries.length} files, ${manifest.name} ${manifest.version})`)
 }

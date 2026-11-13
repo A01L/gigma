@@ -92,9 +92,9 @@ export function PluginsSection() {
       setError(String((e as Error).message ?? e).replace(/^.*?Error: /, ''))
     }
   }
-  // .plug.gigma files can simply be dropped here
+  // .gplug files can simply be dropped here
   const onDrop = (e: React.DragEvent) => {
-    const files = Array.from(e.dataTransfer.files).filter((f) => /\.plug\.gigma$|\.zip$/i.test(f.name))
+    const files = Array.from(e.dataTransfer.files).filter((f) => /\.gplug$|\.plug\.gigma$|\.zip$/i.test(f.name))
     if (!files.length) return
     e.preventDefault()
     e.stopPropagation()
@@ -108,7 +108,7 @@ export function PluginsSection() {
         <img className="set-head-icon" src={plugIcon} alt="" draggable={false} />
         {t('Plugins')}
       </h2>
-      <p className="muted">{t('Plugins add tools to the editor. A plugin is a .plug.gigma file; it runs in a sandbox and can only change the open project.')}</p>
+      <p className="muted">{t('Plugins add tools to the editor. A plugin is a .gplug file; it runs in a sandbox and can only change the open project.')}</p>
       <div className="set-row" style={{ flexWrap: 'wrap' }}>
         <button className="pill primary" onClick={guard(() => backend.plugins.install())}>
           {t('Install plugin…')}
