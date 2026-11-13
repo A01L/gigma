@@ -84,49 +84,98 @@
   document.querySelectorAll('.reveal').forEach((el) => seen.observe(el))
 
   /**
-   * The line of lightning between the two halves of the window on the first screen.
-   * It glows quietly, and every second or two it strikes: a few jagged flashes that are drawn anew each time.
+   * The line of light between the two halves of the window on the first screen:
+   * small sparks drift slowly down along it, each swaying a little and glimmering.
    */
-  const bolt = document.getElementById('bolt')
-  if (bolt) {
-    const [b1, b2, b3] = bolt.querySelectorAll('path')
-    const wrap = bolt.parentElement
-    // a broken line from top to bottom, wandering up to `amp` px from the middle (less at the ends)
-    const zig = (amp) => {
-      const w = bolt.clientWidth
-      const h = bolt.clientHeight
-      let y = 0
-      let d = `M${w / 2} 0`
-      while (y < h) {
-        y = Math.min(h, y + 8 + Math.random() * 30)
-        const x = w / 2 + (Math.random() - 0.5) * 2 * amp * (0.25 + 0.75 * Math.sin((Math.PI * y) / h))
-        d += `L${x.toFixed(1)} ${y.toFixed(1)}`
-      }
-      return d
-    }
-    const draw = () => {
-      b1.setAttribute('d', zig(4))
-      b2.setAttribute('d', zig(11))
-      b3.setAttribute('d', zig(20))
-    }
-    draw()
-    if (!calm) {
-      const strike = () => {
-        let n = 3 + Math.floor(Math.random() * 4)
-        const flash = () => {
-          draw()
-          wrap.classList.add('strike')
-          setTimeout(() => wrap.classList.remove('strike'), 45 + Math.random() * 50)
-          if (--n > 0) setTimeout(flash, 70 + Math.random() * 110)
-          else setTimeout(strike, 900 + Math.random() * 2200)
+  const stream = document.getElementById('stream')
+  if (stream) {
+    const ctx = stream.getContext('2d')
+    // one soft spark, drawn once and stamped for every particle
+    const dot = document.createElement('canvas')
+    dot.width = dot.height = 32
+    const dctx = dot.getContext('2d')
+    const glow = dctx.createRadialGradient(16, 16, 0, 16, 16, 16)
+    glow.addColorStop(0, 'rgba(255,255,255,1)')
+    glow.addColorStop(0.25, 'rgba(190,215,255,0.8)')
+    glow.addColorStop(0.6, 'rgba(110,140,255,0.22)')
+    glow.addColorStop(1, 'rgba(110,140,255,0)')
+    dctx.fillStyle = glow
+    dctx.fillRect(0, 0, 32, 32)
+
+    let W = 0
+    let H = 0
+    let sparks = []
+    const size = () => {
+      const dpr = Math.min(devicePixelRatio || 1, 2)
+      W = stream.clientWidth
+      H = stream.clientHeight
+      stream.width = Math.round(W * dpr)
+      stream.height = Math.round(H * dpr)
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      // about one spark every 9 px of the line; most of them keep close to it
+      const n = Math.max(14, Math.round(H / 9))
+      sparks = Array.from({ length: n }, () => {
+        const near = Math.random() < 0.7
+        return {
+          y: Math.random() * H,
+          v: 5 + Math.random() * 22, // px a second: slow
+          off: (Math.random() - 0.5) * (near ? 5 : 22), // how far from the line it floats
+          sway: 1 + Math.random() * (near ? 2 : 6),
+          r: (near ? 1.6 : 1) + Math.random() * 2.4,
+          a: near ? 0.5 + Math.random() * 0.5 : 0.18 + Math.random() * 0.3,
+          ph: Math.random() * 6.28,
+          tw: 0.4 + Math.random() * 1.1
         }
-        // nothing strikes in a tab nobody looks at
-        if (document.visibilityState === 'visible') flash()
-        else setTimeout(strike, 1500)
-      }
-      setTimeout(strike, 1200)
+      })
     }
-    new ResizeObserver(draw).observe(bolt)
+    const paint = (t, dt) => {
+      ctx.clearRect(0, 0, W, H)
+      ctx.globalCompositeOperation = 'lighter'
+      for (const p of sparks) {
+        p.y += p.v * dt
+        if (p.y > H) p.y -= H
+        const x = W / 2 + p.off + Math.sin(t * 0.5 + p.ph) * p.sway
+        // sparks are born and fade inside the window: nothing sticks out past its edges
+        const edge = Math.min(1, p.y / 36, (H - p.y) / 36)
+        ctx.globalAlpha = Math.max(0, p.a * edge * (0.55 + 0.45 * Math.sin(t * p.tw + p.ph)))
+        const d = p.r * 4
+        ctx.drawImage(dot, x - d / 2, p.y - d / 2, d, d)
+      }
+      ctx.globalAlpha = 1
+    }
+    size()
+    new ResizeObserver(() => {
+      size()
+      paint(0, 0)
+    }).observe(stream)
+    paint(0, 0)
+    if (!calm) {
+      let seen = true
+      let running = false
+      let last = 0
+      const frame = (now) => {
+        if (!seen || document.visibilityState !== 'visible') {
+          running = false
+          last = 0
+          return
+        }
+        requestAnimationFrame(frame)
+        const dt = Math.min(0.05, last ? (now - last) / 1000 : 0)
+        last = now
+        paint(now / 1000, dt)
+      }
+      const run = () => {
+        if (running || !seen || document.visibilityState !== 'visible') return
+        running = true
+        requestAnimationFrame(frame)
+      }
+      new IntersectionObserver(([e]) => {
+        seen = e.isIntersecting
+        run()
+      }).observe(stream)
+      document.addEventListener('visibilitychange', run)
+      run()
+    }
   }
 
   // the hand of the dial at the end sweeps slowly

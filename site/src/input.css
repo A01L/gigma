@@ -140,104 +140,66 @@ body {
     0 50px 140px -30px rgba(70, 90, 255, 0.55),
     0 0 90px -10px rgba(130, 100, 255, 0.28);
 }
-/* the line of lightning that splits it in two (drawn by app.js) */
-.bolt {
+/* the line of light that splits it in two; it never reaches past the edges of the window */
+.seam {
   position: absolute;
   left: 50%;
-  top: -48px;
-  bottom: -36px;
-  width: 140px;
+  top: -2px;
+  bottom: -2px;
+  width: 72px;
   translate: -50% 0;
   pointer-events: none;
   z-index: 4;
 }
-.bolt-line {
+.seam-line {
   position: absolute;
   left: 50%;
   top: 0;
   bottom: 0;
   width: 2px;
   translate: -50% 0;
-  background: linear-gradient(to bottom, transparent, #dbe8ff 9%, #fff 50%, #dbe8ff 91%, transparent);
+  overflow: hidden;
+  background: linear-gradient(to bottom, transparent, #cfe0ff 6%, #f4f8ff 50%, #cfe0ff 94%, transparent);
   box-shadow:
-    0 0 6px 1px #9cc8ff,
-    0 0 22px 4px rgba(90, 130, 255, 0.8),
-    0 0 60px 12px rgba(120, 90, 255, 0.35);
-  animation: hum 3.2s ease-in-out infinite;
+    0 0 6px 1px rgba(156, 200, 255, 0.9),
+    0 0 20px 3px rgba(90, 130, 255, 0.6),
+    0 0 46px 8px rgba(120, 90, 255, 0.25);
 }
-@keyframes hum {
-  50% {
-    opacity: 0.72;
+/* a slow wave of brighter light runs down the line */
+.seam-line::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 34%;
+  background: linear-gradient(to bottom, transparent, #fff, transparent);
+  animation: seam 7s ease-in-out infinite;
+}
+@keyframes seam {
+  from {
+    top: -34%;
+  }
+  to {
+    top: 100%;
   }
 }
-.bolt-flash {
-  position: absolute;
-  inset: 0 -90px;
-  background: radial-gradient(50% 50% at 50% 50%, rgba(150, 180, 255, 0.4), rgba(120, 100, 255, 0.12) 45%, transparent 70%);
-  opacity: 0;
-  transition: opacity 0.35s ease-out;
-}
-.bolt svg {
+/* the sparks that drift along it (drawn by app.js) */
+.seam canvas {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  overflow: visible;
-  filter: drop-shadow(0 0 3px #a9cdff) drop-shadow(0 0 9px #5d7bff);
 }
-.bolt path {
-  fill: none;
-  stroke-linejoin: round;
-  stroke-linecap: round;
-  transition: opacity 0.3s ease-out;
-}
-.bolt .b1 {
-  stroke: #fff;
-  stroke-width: 1.3;
-  opacity: 0.4;
-}
-.bolt .b2 {
-  stroke: #cfe0ff;
-  stroke-width: 1;
-  opacity: 0.12;
-}
-.bolt .b3 {
-  stroke: #9db8ff;
-  stroke-width: 0.8;
-  opacity: 0;
-}
-/* on a phone the window is small: the line is thinner and stays inside it */
 @media (max-width: 640px) {
-  .bolt {
-    top: -16px;
-    bottom: -16px;
+  .seam {
+    width: 36px;
   }
-  .bolt-line {
+  .seam-line {
     width: 1.5px;
     box-shadow:
       0 0 4px 0 #9cc8ff,
-      0 0 12px 2px rgba(90, 130, 255, 0.7);
+      0 0 12px 2px rgba(90, 130, 255, 0.6);
   }
-  .bolt svg {
-    filter: drop-shadow(0 0 2px #a9cdff);
-  }
-}
-/* a strike: everything lights up at once and dies away slowly */
-.bolt.strike path,
-.bolt.strike .bolt-flash {
-  transition: none;
-}
-.bolt.strike .b1 {
-  opacity: 1;
-}
-.bolt.strike .b2 {
-  opacity: 0.85;
-}
-.bolt.strike .b3 {
-  opacity: 0.55;
-}
-.bolt.strike .bolt-flash {
-  opacity: 1;
 }
 
 /* ================================================================ mockups: fixed design size, scaled to fit */
