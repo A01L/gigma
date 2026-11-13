@@ -525,6 +525,10 @@ export class CanvasController {
   }
   /** where a wire from (px, py) lands on a frame: the middle of the side that faces the card */
   private wireEnd(target: Rect, px: number, py: number): { x: number; y: number; side: 'l' | 'r' | 't' | 'b' } {
+    // a card well above or below the frame is met by the top or bottom edge: the wire does not sneak in from the side
+    const dx = px < target.x ? target.x - px : px > target.x + target.w ? px - target.x - target.w : 0
+    const dy = py < target.y ? target.y - py : py > target.y + target.h ? py - target.y - target.h : 0
+    if (dx > 0 && dy >= dx * 0.35) return py < target.y ? { x: target.x + target.w / 2, y: target.y, side: 't' } : { x: target.x + target.w / 2, y: target.y + target.h, side: 'b' }
     if (px < target.x) return { x: target.x, y: target.y + Math.min(target.h / 2, 60), side: 'l' }
     if (px > target.x + target.w) return { x: target.x + target.w, y: target.y + Math.min(target.h / 2, 60), side: 'r' }
     return py < target.y + target.h / 2 ? { x: target.x + target.w / 2, y: target.y, side: 't' } : { x: target.x + target.w / 2, y: target.y + target.h, side: 'b' }
