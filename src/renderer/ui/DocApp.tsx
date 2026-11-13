@@ -8,6 +8,8 @@ import { initSpecBoard } from '../editor/spec-board'
 import { EditorView } from './EditorView'
 import { saveThumbnail } from './actions'
 import { Preloader } from './Preloader'
+// loaded with the tab, so the list of installed fonts is read while the tab is on screen
+import '../editor/text-outline'
 
 /** a project that opens faster than this never shows the preloader: small ones just appear */
 const PRELOADER_AFTER = 220

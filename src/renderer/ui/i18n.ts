@@ -191,6 +191,8 @@ const RU: Record<string, string> = {
   'Moved to page': 'Перемещено на страницу',
   'Outline stroke': 'Обводка в контур',
   'No stroke to outline': 'У выделенного нет обводки',
+  'The font of this text cannot be read on this computer, so it stays a text': 'Шрифт этого текста не удалось прочитать на этом компьютере, текст остался текстом',
+  'Some glyphs came from another font: the font of the text is not installed or lacks them': 'Часть знаков взята из другого шрифта: шрифт текста не установлен или в нём нет этих знаков',
   'Boolean groups': 'Булевы группы',
   'Create component': 'Создать компонент',
   'Component': 'Компонент',

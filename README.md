@@ -51,6 +51,7 @@ Its main feature is a **built-in MCP server**. An AI assistant (Claude Desktop, 
 - **Auto layout**: direction, gaps, padding, wrapping, hug and fill
 - **Constraints** when a frame is resized
 - **Components**, instances with overrides and **variants**
+- **Text to outlines**: Outline stroke (`Ctrl+Alt+O`) or Flatten on a text turns its glyphs into one vector path, read from the fonts installed on the computer
 - **Boolean operations** and flatten, masks (a shape cuts by its outline; a picture, a text or a group by its alpha, as in Figma)
 - Corner radius on the canvas: a dot in each corner of a rectangle or a frame (Alt = one corner), one for a polygon or a star; rounding never gets squashed when the shape is squeezed
 - Fills: colour, linear / radial / angular / diamond gradient, image (cropped images from Figma keep their crop); a fill popover like Figma's (Hex, RGB, HSL, HSB, CSS, eyedropper, colours of the page)

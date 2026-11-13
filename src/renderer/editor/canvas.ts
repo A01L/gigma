@@ -123,6 +123,13 @@ export class CanvasController {
     ro.observe(canvas)
     this.disposers.push(() => ro.disconnect())
     for (const t of ['doc', 'selection', 'camera', 'ui', 'pages'] as const) this.disposers.push(ed.subscribe(t, () => this.invalidate()))
+    // another tool was picked while a path was being drawn with the pen: the path is kept as a vector (as in Figma),
+    // it does not go on following the pointer
+    this.disposers.push(
+      ed.subscribe('ui', () => {
+        if (this.pen && ed.tool !== 'pen') this.finishPen(false, true)
+      })
+    )
     setImageLoadedCallback(() => this.invalidate())
     setCodeReadyCallback(() => this.invalidate())
 
@@ -1895,7 +1902,8 @@ export class CanvasController {
     return segs
   }
 
-  private finishPen(close: boolean): void {
+  /** keepTool: the pen was left for another tool, which stays chosen */
+  private finishPen(close: boolean, keepTool = false): void {
     const pen = this.pen
     this.pen = null
     this.drag = null
@@ -1907,7 +1915,7 @@ export class CanvasController {
     const world = this.penSegs(close)
     this.pen = null
     this.addPathNode(world, pen.parent, close ? 'Vector' : 'Path', close)
-    ed.setTool('move')
+    if (!keepTool) ed.setTool('move')
   }
 
   private addPathNode(world: Seg[], parent: string | null, name: string, closed: boolean, strokeWeight = 1): void {

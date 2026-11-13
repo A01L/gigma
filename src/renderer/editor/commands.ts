@@ -805,7 +805,7 @@ const handlers: Record<CommandName, (a: Args) => unknown | Promise<unknown>> = {
     a.ids.forEach(requireNode)
     const { layerActions } = await import('../ui/layerActions')
     ed.setSelection(a.ids)
-    layerActions.flatten()
+    await layerActions.flatten()
     const n = ed.nodes.get(ed.selection[0])!
     if (n.type !== 'VECTOR') throw new Error('nothing to flatten: the layers have no area')
     return created(n)
@@ -889,7 +889,7 @@ const handlers: Record<CommandName, (a: Args) => unknown | Promise<unknown>> = {
     a.ids.forEach(requireNode)
     const { layerActions } = await import('../ui/layerActions')
     ed.setSelection(a.ids)
-    layerActions.outlineStroke()
+    await layerActions.outlineStroke()
     return ed.selection.map((id) => created(ed.nodes.get(id)!))
   },
   ungroup_nodes: (a) => {

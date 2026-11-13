@@ -1,7 +1,7 @@
 {
   "name": "gigma",
   "productName": "Gigma",
-  "version": "0.3.17",
+  "version": "0.3.18",
   "description": "Offline, open-source desktop design tool with a built-in MCP server.",
   "license": "MIT",
   "author": "Nuradil Takhirov (A01L)",
@@ -29,6 +29,7 @@
     "@modelcontextprotocol/sdk": "^1.32.2",
     "fzstd": "^0.1.1",
     "kiwi-schema": "^0.5.0",
+    "opentype.js": "^2.0.0",
     "paper": "^0.12.18",
     "pdfjs-dist": "^6.5.438",
     "zod": "^4.6.7"

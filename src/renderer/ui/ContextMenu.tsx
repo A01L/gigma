@@ -145,7 +145,7 @@ export function ContextMenu({ x, y, onClose }: { x: number; y: number; onClose: 
         { label: 'Frame selection', key: 'Ctrl+Alt+G', run: A.frameSelection },
         ...(container ? [{ label: 'Ungroup', key: 'Ctrl+Shift+G', run: A.ungroup } as Item] : []),
         { label: 'Flatten', key: 'Alt+Shift+F', run: A.flatten },
-        { label: 'Outline stroke', key: 'Ctrl+Alt+O', run: A.outlineStroke, disabled: !nodes.some((n) => n.strokes.some((s) => s.visible !== false && s.weight > 0)) },
+        { label: 'Outline stroke', key: 'Ctrl+Alt+O', run: A.outlineStroke, disabled: !nodes.some((n) => n.type === 'TEXT' || n.strokes.some((s) => s.visible !== false && s.weight > 0)) },
         { label: nodes.every((n) => n.isMask) ? 'Remove mask' : 'Use as mask', key: 'Ctrl+Alt+M', run: A.toggleMask },
         {
           label: 'Boolean groups',

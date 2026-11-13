@@ -7,6 +7,55 @@ import { copySelection, copyAsPng, handlePaste } from '../editor/clipboard'
 import { alignNodes } from '../editor/commands'
 import { isAutoLayout } from '../editor/autolayout'
 import { t } from './i18n'
+import { outlineText } from '../editor/text-outline'
+
+/**
+ * Text layers of the selection become vector outlines, in place (same layer, same place in the list).
+ * Returns how many were converted; texts whose font cannot be read on this computer stay texts.
+ */
+async function textsToOutlines(): Promise<{ made: number; failed: number; substituted: boolean }> {
+  const texts = sel().filter((n) => n.type === 'TEXT' && (n.characters ?? '').trim())
+  const done: { n: GNode; o: NonNullable<Awaited<ReturnType<typeof outlineText>>> }[] = []
+  let failed = 0
+  for (const n of texts) {
+    const o = await outlineText(n).catch(() => null)
+    if (o) done.push({ n, o })
+    else failed++
+  }
+  if (done.length)
+    ed.act(() => {
+      for (const { n, o } of done) {
+        if (!ed.nodes.has(n.id)) continue
+        // the outline is tighter than the box of the text: keep it where it is on screen, also for a turned layer
+        // (a layer turns around its centre, so the centre moves by the turned offset)
+        const dx = o.x + o.w / 2 - n.width / 2
+        const dy = o.y + o.h / 2 - n.height / 2
+        const a = (-(n.rotation ?? 0) * Math.PI) / 180
+        const cx = n.x + n.width / 2 + dx * Math.cos(a) - dy * Math.sin(a)
+        const cy = n.y + n.height / 2 + dx * Math.sin(a) + dy * Math.cos(a)
+        ed.updateNode(n.id, {
+          type: 'VECTOR',
+          path: o.d,
+          pathBox: { w: o.w, h: o.h },
+          fillRule: 'nonzero',
+          x: round2(cx - o.w / 2),
+          y: round2(cy - o.h / 2),
+          width: round2(o.w),
+          height: round2(o.h),
+          characters: undefined,
+          textStyle: undefined,
+          textStyleId: undefined,
+          textAutoResize: undefined
+        })
+      }
+    })
+  return { made: done.length, failed, substituted: done.some((d) => d.o.substituted) }
+}
+/** what to tell after texts were outlined (nothing when all went well with their own fonts) */
+function reportTexts(r: { made: number; failed: number; substituted: boolean }): void {
+  if (r.failed) ed.showToast(t('The font of this text cannot be read on this computer, so it stays a text'))
+  else if (r.substituted) ed.showToast(t('Some glyphs came from another font: the font of the text is not installed or lacks them'))
+}
 
 const sel = () => ed.selection.map((id) => ed.nodes.get(id)).filter(Boolean) as GNode[]
 
@@ -82,8 +131,16 @@ export const layerActions = {
       })
     })
   },
-  /** Ctrl+E: replace the selection with one vector path (its outline) */
-  flatten() {
+  /** Ctrl+E: replace the selection with one vector path (its outline). Texts become outlines first, as in Figma */
+  async flatten() {
+    let texts = { made: 0, failed: 0, substituted: false }
+    if (sel().some((n) => n.type === 'TEXT')) {
+      texts = await textsToOutlines()
+      reportTexts(texts)
+      ed.emit('selection', 'doc')
+      // a single text is done: its outline is the flattened result
+      if (ed.selection.length === 1) return
+    }
     const roots = ed.roots(ed.selection).sort((a, b) => (ed.paintOrderKey(a) < ed.paintOrderKey(b) ? -1 : 1))
     if (!roots.length) return
     const res = flattenPath(ed, roots)
@@ -119,11 +176,17 @@ export const layerActions = {
     })
     ed.emit('selection')
   },
-  /** Ctrl+Alt+O: turn strokes into filled shapes */
-  outlineStroke() {
+  /** Ctrl+Alt+O: turn strokes into filled shapes, and texts into outlines of their glyphs */
+  async outlineStroke() {
+    let texts = { made: 0, failed: 0, substituted: false }
+    if (sel().some((n) => n.type === 'TEXT')) {
+      texts = await textsToOutlines()
+      reportTexts(texts)
+      ed.emit('selection', 'doc')
+    }
     const targets = sel().filter((n) => n.strokes.some((s) => s.visible !== false && s.weight > 0))
     if (!targets.length) {
-      ed.showToast(t('No stroke to outline'))
+      if (!texts.made && !texts.failed) ed.showToast(t('No stroke to outline'))
       return
     }
     const made: string[] = []
