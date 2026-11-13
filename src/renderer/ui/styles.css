@@ -63,11 +63,43 @@ svg {
   min-height: 0;
 }
 .panel.left {
+  width: var(--left-panel-w, var(--panel-w));
   border-right: 1px solid var(--border);
 }
 .panel.right {
+  width: var(--right-panel-w, var(--panel-w));
   border-left: 1px solid var(--border);
   overflow-y: auto;
+}
+/* the edge of a side panel: drag to widen it (see PanelGrip.tsx) */
+.panel-grip {
+  position: relative;
+  flex: none;
+  width: 0;
+  z-index: 6;
+}
+.panel-grip-hit {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  width: 8px;
+  cursor: ew-resize;
+}
+.panel-grip-hit::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 2px;
+  background: var(--accent, #0c8ce9);
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.panel-grip-hit:hover::after,
+.panel-grip.dragging .panel-grip-hit::after {
+  opacity: 1;
 }
 .canvas-wrap {
   position: relative;

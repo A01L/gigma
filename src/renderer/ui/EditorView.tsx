@@ -15,6 +15,7 @@ import { useT } from './i18n'
 import { AnnotationEditor } from './AnnotationEditor'
 import { ActionsPalette } from './ActionsPalette'
 import { GuidesPalette } from './GuidesPalette'
+import { PanelGrip } from './PanelGrip'
 import { PluginHost } from './PluginHost'
 import { backend } from '../backend'
 import { imageFillOf, replaceImageFill } from '../editor/figma-images'
@@ -122,6 +123,7 @@ export function EditorView({ onHome }: { onHome: () => void }) {
   return (
     <div className="editor">
       {ed.leftOpen && <LeftPanel onHome={onHome} />}
+      {ed.leftOpen && <PanelGrip side="left" />}
       <div className="canvas-wrap" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
         <canvas
           ref={canvasRef}
@@ -188,6 +190,7 @@ export function EditorView({ onHome }: { onHome: () => void }) {
           </div>
         )}
       </div>
+      {ed.rightOpen && <PanelGrip side="right" />}
       {ed.rightOpen && <RightPanel />}
     </div>
   )
