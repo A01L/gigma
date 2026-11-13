@@ -312,7 +312,24 @@ export interface BaseNode {
   shape?: { kind: 'POLYGON' | 'STAR'; count: number; ratio?: number }
   /** VECTOR lines/paths: arrowhead at the end point (Arrow tool) */
   arrowEnd?: boolean
+  /** older documents: one cap for both ends of an open path. strokeStartCap / strokeEndCap win over it */
   strokeCap?: 'NONE' | 'ROUND' | 'SQUARE'
+  // ---- stroke settings (Figma's "Stroke settings"); undefined = the default of each
+  /** what the start and the end of an open path look like */
+  strokeStartCap?: CapKind
+  strokeEndCap?: CapKind
+  /** how corners are joined; default MITER */
+  strokeJoin?: 'MITER' | 'BEVEL' | 'ROUND'
+  /** degrees: corners sharper than this are cut off instead of mitered; default 28.96 */
+  strokeMiterAngle?: number
+  /** [dash, gap] in pixels; absent = a solid line */
+  dashPattern?: [number, number]
+  /** the ends of every dash; default NONE */
+  dashCap?: 'NONE' | 'SQUARE' | 'ROUND'
+  /** how the width of the stroke changes along a path; default UNIFORM */
+  strokeProfile?: 'UNIFORM' | 'TAPER' | 'LENS' | 'WEDGE'
+  /** the profile runs from the end of the path to its start */
+  strokeProfileFlip?: boolean
   /** SPEC node payload */
   spec?: SpecData
   /** CODE node payload */
@@ -331,6 +348,9 @@ export interface BaseNode {
   pathBox?: { w: number; h: number }
   fillRule?: 'nonzero' | 'evenodd'
 }
+
+/** the end of an open path: a plain cap or an arrow */
+export type CapKind = 'NONE' | 'ROUND' | 'SQUARE' | 'LINE_ARROW' | 'TRIANGLE_ARROW' | 'REVERSED_TRIANGLE' | 'CIRCLE_ARROW' | 'DIAMOND_ARROW'
 
 export type GNode = BaseNode
 

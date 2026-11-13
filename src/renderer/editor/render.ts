@@ -13,8 +13,8 @@ import { backend } from '../backend'
 import type { Editor } from './editor'
 import { cssFont, layoutText, DEFAULT_TEXT_STYLE, justifyWords, lineX, measureWord, textBaseline, verticalOffset } from './text'
 import { rectsIntersect, unionRects, type Rect } from './util'
-import { arrowHeadPoints } from './shapes'
-import { parsePath, transformSegs } from './svgpath'
+import { capsOf, dashOf, endCut, endShape, isOpenPath, joinOf, miterLimitOf, nodeEnds, plainCap, profileOutline, sizedPath } from './stroke'
+import { segsToD } from './svgpath'
 import { getCodeBitmap, codeBitmapAsync } from './code-render'
 import { booleanAsVector, isBooleanGroup } from './boolean'
 import { drawGuide, guideStore } from './guide-render'
@@ -378,8 +378,25 @@ function drawStrokes(ctx: CanvasRenderingContext2D, n: GNode, r: Rect, path: Pat
     if (s.visible === false || s.weight <= 0) continue
     ctx.save()
     ctx.strokeStyle = rgbaToCss(s.color)
-    ctx.lineJoin = n.strokeCap === 'ROUND' ? 'round' : 'miter'
-    ctx.lineCap = n.strokeCap === 'ROUND' ? 'round' : n.strokeCap === 'SQUARE' ? 'square' : 'butt'
+    ctx.fillStyle = ctx.strokeStyle
+    // a stroke whose width changes along the path is an area of its own, filled
+    const profiled = n.type === 'VECTOR' && n.path && n.strokeProfile && n.strokeProfile !== 'UNIFORM' ? profileOutline(segsToD(sizedPath(n)), s.weight, n.strokeProfile, !!n.strokeProfileFlip) : null
+    if (profiled) {
+      ctx.translate(r.x, r.y)
+      ctx.fill(pathOf(profiled))
+      ctx.restore()
+      continue
+    }
+    ctx.lineJoin = joinOf(n)
+    ctx.miterLimit = miterLimitOf(n)
+    const dash = dashOf(n)
+    const open = !closed && isOpenPath(n)
+    const caps = open ? capsOf(n) : null
+    // the canvas has one cap for both ends (and for every dash). Ends that differ, and arrows, are drawn after the line
+    const both = caps && caps.start === caps.end ? plainCap(caps.start) : null
+    const native = dash ? (plainCap(n.dashCap ?? 'NONE') ?? 'butt') : (both ?? 'butt')
+    ctx.lineCap = native
+    if (dash) ctx.setLineDash(dash)
     const align = closed ? (s.align ?? 'CENTER') : 'CENTER'
     if (align === 'CENTER') ctx.lineWidth = s.weight
     else {
@@ -387,7 +404,54 @@ function drawStrokes(ctx: CanvasRenderingContext2D, n: GNode, r: Rect, path: Pat
       if (align === 'INSIDE') ctx.clip(path, n.fillRule ?? 'nonzero')
       else ctx.clip(inverseOf(path, r, s.weight * 2 + 2), 'evenodd')
     }
-    ctx.stroke(path)
+    const ends = caps && (dash || !both) ? nodeEnds(n) : null
+    const cuts = ends ? [endCut(caps!.start, ends.start, s.weight), endCut(caps!.end, ends.end, s.weight)].filter((c): c is [number, number][] => !!c) : []
+    if (cuts.length) {
+      // the line stops short under an arrow head (see endCut)
+      const keep = new Path2D()
+      const far = s.weight * 8 + 40
+      keep.rect(r.x - far, r.y - far, r.w + far * 2, r.h + far * 2)
+      for (const c of cuts) {
+        c.forEach(([x, y], i) => (i ? keep.lineTo(r.x + x, r.y + y) : keep.moveTo(r.x + x, r.y + y)))
+        keep.closePath()
+      }
+      ctx.save()
+      ctx.clip(keep, 'evenodd')
+      ctx.stroke(path)
+      ctx.restore()
+    } else ctx.stroke(path)
+    if (caps && (dash || !both)) {
+      if (ends) {
+        ctx.setLineDash([])
+        ctx.translate(r.x, r.y)
+        for (const [kind, e] of [[caps.start, ends.start], [caps.end, ends.end]] as const) {
+          // a dashed line already has the plain caps on each of its dashes
+          if (dash && plainCap(kind)) continue
+          const shape = endShape(kind, e, s.weight)
+          if (!shape) continue
+          for (const poly of shape.polys) {
+            ctx.beginPath()
+            poly.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)))
+            ctx.closePath()
+            ctx.fill()
+          }
+          if (shape.circle) {
+            ctx.beginPath()
+            ctx.arc(shape.circle.x, shape.circle.y, shape.circle.r, 0, Math.PI * 2)
+            ctx.fill()
+          }
+          if (shape.line) {
+            ctx.lineWidth = s.weight
+            ctx.lineCap = 'butt'
+            ctx.lineJoin = 'miter'
+            ctx.miterLimit = 10
+            ctx.beginPath()
+            shape.line.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)))
+            ctx.stroke()
+          }
+        }
+      }
+    }
     ctx.restore()
   }
 }
@@ -520,7 +584,6 @@ function drawNodeInner(ctx: CanvasRenderingContext2D, ed: Editor, id: string, o:
     drawFills(ctx, n, r, shape)
     drawInnerShadows(ctx, n, r, shape, effects)
     if (!isContainer) drawStrokes(ctx, n, r, shape)
-    if (n.arrowEnd && n.type === 'VECTOR' && n.path) drawArrowHead(ctx, n, r)
   } else if (n.type === 'TEXT') {
     const s = n.textStyle ?? DEFAULT_TEXT_STYLE
     // the top visible fill colours the text: a solid colour or a gradient
@@ -606,22 +669,6 @@ function drawNodeInner(ctx: CanvasRenderingContext2D, ed: Editor, id: string, o:
 function clipsOrGroup(ed: Editor, id: string): boolean {
   const n = ed.nodes.get(id)!
   return !(n.type === 'FRAME' && n.clipsContent === false)
-}
-
-function drawArrowHead(ctx: CanvasRenderingContext2D, n: GNode, r: Rect): void {
-  const st = n.strokes.find((s) => s.visible !== false && s.weight > 0)
-  if (!st) return
-  const sx = r.w / (n.pathBox?.w || r.w || 1)
-  const sy = r.h / (n.pathBox?.h || r.h || 1)
-  const head = arrowHeadPoints(transformSegs(parsePath(n.path!), [sx, 0, 0, sy, r.x, r.y]), st.weight)
-  if (!head) return
-  ctx.fillStyle = rgbaToCss(st.color)
-  ctx.beginPath()
-  ctx.moveTo(head[0][0], head[0][1])
-  ctx.lineTo(head[1][0], head[1][1])
-  ctx.lineTo(head[2][0], head[2][1])
-  ctx.closePath()
-  ctx.fill()
 }
 
 /** height of the dark title bar of a Spec card */

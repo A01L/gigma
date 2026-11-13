@@ -3,7 +3,8 @@
 // group is drawn as one shape computed from them, exactly like Figma's boolean groups.
 // The geometry is exact (Bézier curves stay curves): paper.js does the path maths.
 import paper from 'paper/dist/paper-core'
-import type { BooleanOperation, GNode } from '@shared/types'
+import type { BooleanOperation, CapKind, GNode } from '@shared/types'
+import { capsOf, endCut, endShape, joinOf, miterLimitOf, profileOutline } from './stroke'
 import type { Editor } from './editor'
 import { cornerRadiiOf } from './render'
 import { parsePath, segsToD, transformSegs } from './svgpath'
@@ -107,10 +108,14 @@ function unionAll(items: PathItem[]): PathItem | null {
 }
 
 /** Area covered by a stroke of `weight` centred on the outline of `item` (curves are followed in small steps). */
-function centerStroke(item: PathItem, weight: number, round: boolean, cap: GNode['strokeCap']): PathItem | null {
+function centerStroke(item: PathItem, weight: number, join: 'miter' | 'bevel' | 'round', limit: number, caps: { start: CapKind; end: CapKind }): PathItem | null {
   const hw = weight / 2
+  const round = join === 'round'
   const pieces: PathItem[] = []
   const poly = (pts: number[][]) => pieces.push(new paper.Path({ segments: pts, closed: true }))
+  // what is added at the ends of open paths goes on top of the line, after the part an arrow head hides is cut away
+  const tips: PathItem[] = []
+  const cuts: PathItem[] = []
   for (const src of item instanceof paper.CompoundPath ? (item.children as PPath[]) : [item as PPath]) {
     const p = src.clone() as PPath
     p.flatten(0.2)
@@ -148,24 +153,33 @@ function centerStroke(item: PathItem, weight: number, round: boolean, cap: GNode
       const k = sum.length / 2 // cos of half the turning angle
       const p1 = v.add(n1.multiply(hw))
       const p2 = v.add(n2.multiply(hw))
-      if (k > 0.25) {
+      // a miter as long as the limit allows, a bevel past it
+      if (join === 'miter' && k > 1e-6 && 1 / k <= limit) {
         const m = v.add(sum.normalize().multiply(hw / k))
         poly([[v.x, v.y], [p1.x, p1.y], [m.x, m.y], [p2.x, p2.y]])
       } else poly([[v.x, v.y], [p1.x, p1.y], [p2.x, p2.y]])
     }
     // caps of open paths
-    if (!closed && cap && cap !== 'NONE') {
-      for (const [v, u] of [[pts[0], dir(0).multiply(-1)], [pts[n - 1], dir(n - 2)]] as const) {
-        if (cap === 'ROUND') pieces.push(new paper.Path.Circle(v, hw))
-        else {
-          const nx = -u.y * hw
-          const ny = u.x * hw
-          poly([[v.x + nx, v.y + ny], [v.x + nx + u.x * hw, v.y + ny + u.y * hw], [v.x - nx + u.x * hw, v.y - ny + u.y * hw], [v.x - nx, v.y - ny]])
+    if (!closed) {
+      for (const [v, u, kind] of [[pts[0], dir(0).multiply(-1), caps.start], [pts[n - 1], dir(n - 2), caps.end]] as const) {
+        // the same shapes the canvas draws at the ends: plain caps and arrows
+        const end = { x: v.x, y: v.y, dx: u.x, dy: u.y }
+        const shape = endShape(kind, end, weight)
+        if (!shape) continue
+        const cut = endCut(kind, end, weight)
+        if (cut) cuts.push(new paper.Path({ segments: cut, closed: true }))
+        for (const p of shape.polys) tips.push(new paper.Path({ segments: p, closed: true }))
+        if (shape.circle) tips.push(new paper.Path.Circle(new paper.Point(shape.circle.x, shape.circle.y), shape.circle.r))
+        if (shape.line) {
+          const arrow = centerStroke(new paper.Path({ segments: shape.line, closed: false }), weight, 'miter', 10, { start: 'NONE', end: 'NONE' })
+          if (arrow) tips.push(arrow)
         }
       }
     }
   }
-  return unionAll(pieces)
+  let line = unionAll(pieces)
+  if (line) for (const c of cuts) line = line.subtract(c)
+  return unionAll(line ? [line, ...tips] : tips)
 }
 
 export interface OutlineResult {
@@ -227,10 +241,15 @@ export function strokeOutline(ed: Editor, id: string): OutlineResult | null {
       shape = paper.PathItem.create(segsToD(transformSegs(parsePath(n.path), [sx, 0, 0, sy, 0, 0])))
     }
     if (!shape) return null
-    const round = n.strokeCap === 'ROUND'
-    if (align === 'CENTER') ring = centerStroke(shape, w, round, n.strokeCap)
+    const join = joinOf(n)
+    const limit = miterLimitOf(n)
+    const caps = capsOf(n)
+    // a stroke with a width profile is already an area
+    const profiled = !bool && n.strokeProfile && n.strokeProfile !== 'UNIFORM' ? profileOutline(shape.pathData, w, n.strokeProfile, !!n.strokeProfileFlip) : null
+    if (profiled) ring = paper.PathItem.create(profiled)
+    else if (align === 'CENTER') ring = centerStroke(shape, w, join, limit, caps)
     else {
-      const wide = centerStroke(shape, w * 2, round, n.strokeCap)
+      const wide = centerStroke(shape, w * 2, join, limit, caps)
       ring = wide ? (align === 'INSIDE' ? wide.intersect(shape) : wide.subtract(shape)) : null
     }
   }

@@ -220,6 +220,7 @@
   font-size: 11px;
 }
 .row .sub-label,
+.stroke-grid .sub-label,
 .grid2 .sub-label {
   padding: 0 0 4px;
   white-space: nowrap;
@@ -725,4 +726,59 @@
   max-width: 30px;
   padding: 0;
   justify-content: center;
+}
+
+/* ---- stroke: the row with position, weight and the settings button; the "Stroke settings" popover ---- */
+.stroke-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 28px;
+  gap: 8px;
+  align-items: end;
+  padding: 0 12px;
+  margin-top: 4px;
+}
+.stroke-grid > .icon-btn {
+  margin-bottom: 0;
+}
+.cap-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  white-space: nowrap;
+}
+.cap-icon {
+  flex: none;
+}
+/* a closed select of an end point shows the picture alone, as in Figma */
+.cap-field .gsel .cap-opt {
+  font-size: 0;
+  gap: 0;
+}
+.stroke-set .tset-head b {
+  font-weight: 600;
+  padding-left: 2px;
+}
+.stroke-set-field {
+  width: 150px;
+}
+.stroke-set-pair {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.stroke-set-pair .stroke-set-field {
+  width: 116px;
+}
+.stroke-set-pair .cap-field {
+  width: 72px;
+}
+.stroke-set-line {
+  height: 1px;
+  margin: 6px -12px;
+  background: var(--border);
+}
+.stroke-set .icon-btn:disabled {
+  opacity: 0.35;
+  pointer-events: none;
 }

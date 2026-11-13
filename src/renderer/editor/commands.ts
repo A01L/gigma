@@ -596,6 +596,17 @@ const handlers: Record<CommandName, (a: Args) => unknown | Promise<unknown>> = {
       if (n.type === 'CODE' && (a.html !== undefined || a.css !== undefined))
         patch.code = { html: a.html ?? n.code?.html ?? '', css: a.css ?? n.code?.css ?? '' }
       if (a.arrowEnd !== undefined) patch.arrowEnd = a.arrowEnd || undefined
+      if (a.strokeStartCap !== undefined) patch.strokeStartCap = a.strokeStartCap
+      if (a.strokeEndCap !== undefined) {
+        patch.strokeEndCap = a.strokeEndCap
+        patch.arrowEnd = undefined
+      }
+      if (a.strokeJoin !== undefined) patch.strokeJoin = a.strokeJoin === 'MITER' ? undefined : a.strokeJoin
+      if (a.strokeMiterAngle !== undefined) patch.strokeMiterAngle = a.strokeMiterAngle
+      if (Array.isArray(a.dashPattern)) patch.dashPattern = a.dashPattern[0] > 0 ? [a.dashPattern[0], a.dashPattern[1] ?? a.dashPattern[0]] : undefined
+      if (a.dashCap !== undefined) patch.dashCap = a.dashCap === 'NONE' ? undefined : a.dashCap
+      if (a.strokeProfile !== undefined) patch.strokeProfile = a.strokeProfile === 'UNIFORM' ? undefined : a.strokeProfile
+      if (a.strokeProfileFlip !== undefined) patch.strokeProfileFlip = a.strokeProfileFlip || undefined
       if (Array.isArray(a.cornerRadii)) {
         patch.cornerRadii = a.cornerRadii as [number, number, number, number]
         patch.cornerRadius = undefined

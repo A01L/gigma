@@ -11,7 +11,7 @@ import type { Editor } from './editor'
 import { layoutText, DEFAULT_TEXT_STYLE, justifyWords, lineX, textBaseline, verticalOffset } from './text'
 import { base64ToBytes, bytesToBase64, uid, unionRects, keyBetween } from './util'
 import { parsePath, segsBounds, segsToD, transformSegs, type Mat, type Seg } from './svgpath'
-import { arrowHeadPoints } from './shapes'
+import { capsOf, dashOf, endShape, isOpenPath, joinOf, miterLimitOf, pathEnds, plainCap, profileOutline } from './stroke'
 import { clipsAsShape, cornerRadiiOf } from './render'
 import { codeToPngDataUrl } from './code-render'
 
@@ -324,6 +324,15 @@ function paintAttrs(n: GNode): string {
   if (st) {
     s += ` stroke="${rgbaToHex(st.color)}" stroke-width="${f(st.weight)}"`
     if (st.color.a < 1) s += ` stroke-opacity="${f(st.color.a)}"`
+    const join = joinOf(n)
+    if (join !== 'miter') s += ` stroke-linejoin="${join}"`
+    else s += ` stroke-miterlimit="${f(miterLimitOf(n))}"`
+    const dash = dashOf(n)
+    if (dash) s += ` stroke-dasharray="${f(dash[0])} ${f(dash[1])}"`
+    // one cap for both ends is all SVG has; ends that differ and arrows are separate shapes (see the VECTOR case)
+    const caps = isOpenPath(n) ? capsOf(n) : null
+    const cap = dash ? plainCap(n.dashCap ?? 'NONE') : caps && caps.start === caps.end ? plainCap(caps.start) : null
+    if (cap && cap !== 'butt') s += ` stroke-linecap="${cap}"`
   }
   if (n.opacity < 1) s += ` opacity="${f(n.opacity)}"`
   if (n.blendMode && n.blendMode !== 'NORMAL') s += ` style="mix-blend-mode:${blendCss(n.blendMode)}"`
@@ -464,12 +473,28 @@ async function nodeSvgInner(ed: Editor, id: string, ox: number, oy: number, defs
       const sy = w.h / (n.pathBox?.h || w.h || 1)
       const segs = transformSegs(parsePath(n.path), [sx, 0, 0, sy, x, y])
       const d = segsToD(segs)
-      const cap = n.strokeCap === 'ROUND' ? ' stroke-linecap="round" stroke-linejoin="round"' : ''
-      let out = `<path d="${d}"${n.fillRule === 'evenodd' ? ' fill-rule="evenodd"' : ''}${paintAttrs(n)}${cap}${name}/>`
-      const st = n.strokes.find((s) => s.visible !== false)
-      if (n.arrowEnd && st) {
-        const head = arrowHeadPoints(segs, st.weight)
-        if (head) out += `<path d="M${head.map((p) => f(p[0]) + ' ' + f(p[1])).join('L')}Z" fill="${rgbaToHex(st.color)}"/>`
+      const st = n.strokes.find((s) => s.visible !== false && s.weight > 0)
+      const ink = st ? ` fill="${rgbaToHex(st.color)}"${st.color.a < 1 ? ` fill-opacity="${f(st.color.a)}"` : ''}` : ''
+      // a stroke with a width profile is an area: the path keeps its fill only, the stroke goes out as its outline
+      const profiled = st && n.strokeProfile && n.strokeProfile !== 'UNIFORM' ? profileOutline(d, st.weight, n.strokeProfile, !!n.strokeProfileFlip) : null
+      if (profiled) {
+        const body = n.fills.some((p) => p.visible !== false) ? `<path d="${d}"${n.fillRule === 'evenodd' ? ' fill-rule="evenodd"' : ''}${paintAttrs({ ...n, strokes: [] })}${name}/>` : ''
+        return body + `<path d="${profiled}"${ink}${n.opacity < 1 ? ` opacity="${f(n.opacity)}"` : ''}${body ? '' : name}/>`
+      }
+      let out = `<path d="${d}"${n.fillRule === 'evenodd' ? ' fill-rule="evenodd"' : ''}${paintAttrs(n)}${name}/>`
+      const caps = st && isOpenPath(n) ? capsOf(n) : null
+      const ends = caps ? pathEnds(segs) : null
+      if (st && caps && ends) {
+        const dash = dashOf(n)
+        const both = caps.start === caps.end ? plainCap(caps.start) : null
+        for (const [kind, e] of [[caps.start, ends.start], [caps.end, ends.end]] as const) {
+          if (dash ? plainCap(kind) : both) continue
+          const shape = endShape(kind, e, st.weight)
+          if (!shape) continue
+          for (const poly of shape.polys) out += `<path d="M${poly.map((p) => f(p[0]) + ' ' + f(p[1])).join('L')}Z"${ink}/>`
+          if (shape.circle) out += `<circle cx="${f(shape.circle.x)}" cy="${f(shape.circle.y)}" r="${f(shape.circle.r)}"${ink}/>`
+          if (shape.line) out += `<path d="M${shape.line.map((p) => f(p[0]) + ' ' + f(p[1])).join('L')}" fill="none" stroke="${rgbaToHex(st.color)}" stroke-width="${f(st.weight)}"${st.color.a < 1 ? ` stroke-opacity="${f(st.color.a)}"` : ''}/>`
+        }
       }
       return out
     }

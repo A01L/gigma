@@ -20,6 +20,8 @@ import { ColorPicker, gradientLabel } from './ColorPicker'
 import { handlesOf, previewCss } from '../editor/gradient'
 import { maxShapeRadius } from '../editor/shapes'
 import { TypeSettings } from './TypeSettings'
+import { StrokeSettings, capOptions, setCaps } from './StrokeSettings'
+import { capsOf, isOpenPath } from '../editor/stroke'
 import { GuideInspector } from './GuideInspector'
 
 type Mixed = number | 'mixed'
@@ -1040,6 +1042,8 @@ function NodeInspector({ nodes }: { nodes: GNode[] }) {
   const frames = nodes.filter((n) => n.type === 'FRAME')
   const [scale, setScale] = useState(2)
   const [cornersOpen, setCornersOpen] = useState(false)
+  const [strokeSetOpen, setStrokeSetOpen] = useState(false)
+  const strokeSetBtn = useRef<HTMLButtonElement>(null)
   const showCorners = hasRadius && !shapes && (cornersOpen || nodes.some((n) => n.cornerRadii))
   const locked = nodes.every((n) => n.constrainProportions)
   const visible = nodes.every((n) => n.visible)
@@ -1392,7 +1396,7 @@ function NodeInspector({ nodes }: { nodes: GNode[] }) {
                     onRemove={() => ed.act(() => setStrokes(strokes.filter((_, k) => k !== i)))}
                   />
                 ))}
-              <div className="grid2">
+              <div className="stroke-grid">
                 <div>
                   <SubLabel>{t('Position')}</SubLabel>
                   <div className="field">
@@ -1421,7 +1425,41 @@ function NodeInspector({ nodes }: { nodes: GNode[] }) {
                     apply={(v) => setStrokes(strokes.map((s) => ({ ...s, weight: v })))}
                   />
                 </div>
+                <button ref={strokeSetBtn} className={'icon-btn' + (strokeSetOpen ? ' active-soft' : '')} title={t('Stroke settings')} onClick={() => setStrokeSetOpen(!strokeSetOpen)}>
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeLinecap="round">
+                    <path d="M5 2.5v2M5 8.5v5M11 2.5v5M11 11.5v2" />
+                    <circle cx="5" cy="6.5" r="2" />
+                    <circle cx="11" cy="9.5" r="2" />
+                  </svg>
+                </button>
               </div>
+              {nodes.every(isOpenPath) && (
+                <div className="grid2">
+                  <div>
+                    <SubLabel>{t('Start point')}</SubLabel>
+                    <div className="field cap-field">
+                      <Select
+                        value={same(nodes.map((n) => capsOf(n).start)) === 'mixed' ? null : capsOf(nodes[0]).start}
+                        minWidth={190}
+                        onChange={(v) => ed.act(() => each((n) => setCaps(n, { start: v })))}
+                        options={capOptions(true)}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <SubLabel>{t('End point')}</SubLabel>
+                    <div className="field cap-field">
+                      <Select
+                        value={same(nodes.map((n) => capsOf(n).end)) === 'mixed' ? null : capsOf(nodes[0]).end}
+                        minWidth={190}
+                        onChange={(v) => ed.act(() => each((n) => setCaps(n, { end: v })))}
+                        options={capOptions(false)}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+              {strokeSetOpen && strokeSetBtn.current && <StrokeSettings nodes={nodes} anchor={strokeSetBtn.current} onClose={() => setStrokeSetOpen(false)} />}
             </>
           )
         )}
