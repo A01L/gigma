@@ -204,52 +204,59 @@
 
     <!-- ================================================================ work together -->
     <section id="together" class="relative overflow-hidden bg-paper pb-[130px] pt-[90px] text-[#0b0b0e]">
-      <div class="pointer-events-none absolute inset-x-0 top-[260px] h-[760px]">
-        <!-- the glass wall -->
-        <div class="beam-white left-[2%] top-[110px] h-[5px] w-[30%]"></div>
-        <div class="beam-white left-[18%] top-[0px] h-[560px] w-[5px]"></div>
-        <div class="beam-white left-[3%] top-[380px] h-[5px] w-[27%]"></div>
-        <div class="beam-white left-[66%] top-[60px] h-[5px] w-[34%]"></div>
-        <div class="beam-white left-[83%] top-[-80px] h-[600px] w-[5px]"></div>
-        <div class="beam-white left-[68%] top-[340px] h-[5px] w-[30%]"></div>
-        <div class="glass left-[3%] top-[130px] hidden h-[230px] w-[14%] xl:block"><div class="glow"></div><div class="rings"></div><div class="absolute inset-x-0 top-[38%] text-center text-[20px] font-medium text-white drop-shadow">Claude</div><div class="absolute inset-x-0 top-[56%] flex justify-center -space-x-1.5"><span class="h-6 w-6 rounded-full bg-[#0c8ce9] ring-2 ring-white"></span><span class="h-6 w-6 rounded-full bg-[#f97316] ring-2 ring-white"></span></div></div>
-        <div class="glass left-[19%] top-[130px] hidden h-[230px] w-[12%] xl:block"><div class="glow"></div><div class="rings"></div><div class="absolute inset-x-0 top-[34%] text-center text-[10px] text-white/90">Started 2 min ago</div><div class="absolute inset-x-0 top-[44%] text-center text-[20px] font-medium text-white drop-shadow">Landing</div></div>
-        <div class="glass left-[3%] top-[400px] hidden h-[200px] w-[28%] opacity-60 xl:block"><div class="glow"></div><div class="absolute inset-x-0 top-[44%] text-center text-[18px] text-white/80">Checkout flow</div></div>
-        <div class="glass left-[69%] top-[80px] hidden h-[240px] w-[13%] xl:block"><div class="glow"></div><div class="rings"></div><div class="absolute inset-x-0 top-[38%] text-center text-[20px] font-medium text-white drop-shadow">Codex</div><div class="absolute inset-x-0 top-[56%] flex justify-center -space-x-1.5"><span class="h-6 w-6 rounded-full bg-[#a98bff] ring-2 ring-white"></span></div></div>
-        <div class="glass left-[84.5%] top-[80px] hidden h-[240px] w-[13%] xl:block"><div class="glow"></div><div class="rings"></div><div class="absolute inset-x-0 top-[38%] text-center text-[20px] font-medium text-white drop-shadow">Cursor</div></div>
-        <div class="glass left-[69%] top-[360px] hidden h-[220px] w-[29%] xl:block"><div class="glow"></div><div class="rings"></div><div class="absolute inset-x-0 top-[42%] text-center text-[20px] font-medium text-white drop-shadow">You</div><div class="absolute inset-x-0 top-[58%] flex justify-center"><span class="h-6 w-6 rounded-full bg-[#1c1917] ring-2 ring-white"></span></div></div>
-      </div>
-      <div class="relative mx-auto max-w-[760px] px-6">
+      <div class="pointer-events-none absolute left-1/2 top-[38%] h-[760px] w-[1100px] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(120,170,255,0.22),transparent)]"></div>
+      <div class="relative mx-auto max-w-[1216px] px-6">
         <h2 class="h-display reveal text-[52px] sm:text-[80px] lg:text-[88px]">Work together.<br />With your AI.</h2>
-        <p class="reveal lead mt-4 max-w-[480px] text-[17px] text-[#3f3f46]" style="--d: 0.08s">Ask an assistant to build a screen and keep designing right next to it, on the same canvas.</p>
-      </div>
-      <div class="relative mx-auto mt-10 max-w-[760px] px-6">
-        <div class="reveal rounded-[16px] bg-white/80 p-[8px] shadow-[0_40px_90px_-30px_rgba(60,90,150,0.45)] ring-1 ring-white" style="--d: 0.1s">
-          <div class="relative overflow-hidden rounded-[10px]">
-            <img src="assets/img/tandem.jpg" alt="Claude writes the headline of a landing page while the user moves a card next to it" loading="lazy" width="2400" height="1350" class="block w-full" />
-            <div class="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/55 p-1.5 pr-4 text-[12px] font-medium whitespace-nowrap text-white backdrop-blur">
-              <span class="flex -space-x-1.5"><span class="flex h-7 w-7 items-center justify-center rounded-full bg-[#1c1917] text-[10px] ring-2 ring-black/40">You</span><span class="flex h-7 w-7 items-center justify-center rounded-full bg-[#0c8ce9] text-[10px] ring-2 ring-black/40">C</span><span class="flex h-7 w-7 items-center justify-center rounded-full bg-[#a98bff] text-[10px] ring-2 ring-black/40">Cx</span></span>
-              <span class="h-2 w-2 rounded-full bg-[#22c55e] shadow-[0_0_8px_#22c55e]"></span>3 on this canvas
+        <p class="reveal lead mt-5 max-w-[640px] text-[#3f3f46]" style="--d: 0.08s">Claude, Codex or any MCP client builds while you work, on the same canvas. Every change lands in the same history, so one Ctrl+Z takes back anything you do not like.</p>
+
+        <!-- bento: who is on the canvas around the canvas itself, and what keeps the work in order under it -->
+        <div class="mt-12 grid gap-4 lg:grid-cols-[230px_1fr_230px]">
+          <div class="order-2 grid grid-cols-2 gap-4 lg:order-1 lg:grid-cols-1 lg:grid-rows-2">
+          <article class="who reveal" style="--c: #0c8ce9">
+            <div class="ripple"><i></i><i></i><i></i><i></i><span class="who-dot">C</span></div>
+            <div class="who-cap"><b>Claude</b><span>Building the landing page</span></div>
+          </article>
+          <article class="who reveal" style="--c: #f97316; --d: 0.06s">
+            <div class="ripple"><i></i><i></i><i></i><i></i><span class="who-dot">Y</span></div>
+            <div class="who-cap"><b>You</b><span>Moving a card</span></div>
+          </article>
+          </div>
+          <div class="reveal order-1 rounded-[18px] bg-white p-[8px] shadow-[0_40px_90px_-40px_rgba(60,90,150,0.5)] ring-1 ring-black/5 lg:order-2" style="--d: 0.05s">
+            <div class="relative h-full overflow-hidden rounded-[12px] bg-[#444]">
+              <img src="assets/img/tandem.jpg" alt="Claude writes the headline of a landing page while the user moves a card next to it" loading="lazy" width="2400" height="1350" class="block h-full w-full object-cover" />
+              <div class="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-full bg-black/55 p-1.5 pr-4 text-[12px] font-medium text-white backdrop-blur">
+                <span class="flex -space-x-1.5"><span class="flex h-7 w-7 items-center justify-center rounded-full bg-[#f97316] text-[10px] ring-2 ring-black/40">You</span><span class="flex h-7 w-7 items-center justify-center rounded-full bg-[#0c8ce9] text-[10px] ring-2 ring-black/40">C</span><span class="flex h-7 w-7 items-center justify-center rounded-full bg-[#a98bff] text-[10px] ring-2 ring-black/40">Cx</span></span>
+                <span class="h-2 w-2 rounded-full bg-[#22c55e] shadow-[0_0_8px_#22c55e]"></span>3 on this canvas
+              </div>
             </div>
           </div>
+          <div class="order-3 grid grid-cols-2 gap-4 lg:grid-cols-1 lg:grid-rows-2">
+          <article class="who reveal" style="--c: #8b6cff; --d: 0.1s">
+            <div class="ripple"><i></i><i></i><i></i><i></i><span class="who-dot">Cx</span></div>
+            <div class="who-cap"><b>Codex</b><span>Drawing the light theme</span></div>
+          </article>
+          <article class="who reveal" style="--c: #14b8a6; --d: 0.14s">
+            <div class="ripple"><i></i><i></i><i></i><i></i><span class="who-dot">Cu</span></div>
+            <div class="who-cap"><b>Cursor</b><span>Reading the canvas</span></div>
+          </article>
+          </div>
         </div>
-        <p class="reveal mt-12 text-[22px] font-medium leading-[1.35] tracking-[-0.01em] text-[#27272a]">Claude, Codex or any MCP client builds while you work. Every change lands in the same history, so one Ctrl+Z takes back anything you do not like.</p>
-        <div class="mt-10 grid grid-cols-2 gap-x-6 gap-y-10 sm:grid-cols-3 sm:gap-10">
-          <div class="reveal">
+        <div class="mt-4 grid gap-4 sm:grid-cols-3">
+          <article class="perk reveal">
             <svg class="h-[34px] w-[34px]" viewBox="0 0 34 34"><defs><linearGradient id="g1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7dd3fc" /><stop offset="1" stop-color="#2563eb" /></linearGradient></defs><rect x="2" y="9" width="14" height="16" rx="3" fill="url(#g1)" /><circle cx="27" cy="9" r="5" fill="url(#g1)" opacity="0.7" /><circle cx="27" cy="25" r="5" fill="url(#g1)" /><path d="M16 17h4c3 0 3-8 7-8M20 17c3 0 3 8 7 8" stroke="#3b82f6" stroke-width="2" fill="none" /></svg>
-            <h3 class="mt-4 text-[22px] font-medium leading-[1.1] tracking-[-0.02em]">Spec<br />nodes</h3>
-            <p class="mt-3 text-[14px] leading-[1.45] text-[#52525b]">Wire a task to the frames it is about, and materials into it.</p>
-          </div>
-          <div class="reveal" style="--d: 0.06s">
+            <h3>Spec nodes</h3>
+            <p>Wire a task to the frames it is about, and materials into it.</p>
+          </article>
+          <article class="perk reveal" style="--d: 0.06s">
             <svg class="h-[34px] w-[34px]" viewBox="0 0 34 34"><defs><radialGradient id="g2" cx="35%" cy="30%"><stop offset="0" stop-color="#ffe4c4" /><stop offset="0.6" stop-color="#f97316" /><stop offset="1" stop-color="#c2410c" /></radialGradient></defs><circle cx="17" cy="17" r="13" fill="url(#g2)" /><circle cx="17" cy="17" r="15.5" fill="none" stroke="#fdba74" stroke-opacity="0.6" /></svg>
-            <h3 class="mt-4 text-[22px] font-medium leading-[1.1] tracking-[-0.02em]">Shared<br />guidelines</h3>
-            <p class="mt-3 text-[14px] leading-[1.45] text-[#52525b]">One brand for every project, read by the AI before it designs.</p>
-          </div>
-          <div class="reveal" style="--d: 0.12s">
+            <h3>Shared guidelines</h3>
+            <p>One brand for every project, read by the AI before it designs.</p>
+          </article>
+          <article class="perk reveal" style="--d: 0.12s">
             <svg class="h-[34px] w-[34px]" viewBox="0 0 34 34"><defs><linearGradient id="g3" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#93c5fd" /><stop offset="1" stop-color="#6366f1" /></linearGradient></defs><circle cx="13" cy="11" r="6" fill="url(#g3)" /><path d="M2 30c0-6 5-10 11-10s11 4 11 10z" fill="url(#g3)" /><circle cx="26" cy="25" r="6" fill="#bfdbfe" /><path d="M23.5 25l2 2 3.5-4" stroke="#2563eb" stroke-width="1.8" fill="none" /></svg>
-            <h3 class="mt-4 text-[22px] font-medium leading-[1.1] tracking-[-0.02em]">Undo<br />anything</h3>
-            <p class="mt-3 text-[14px] leading-[1.45] text-[#52525b]">Every AI step is an ordinary edit in your history, never a black box.</p>
-          </div>
+            <h3>Undo anything</h3>
+            <p>Every AI step is an ordinary edit in your history, never a black box.</p>
+          </article>
         </div>
       </div>
     </section>

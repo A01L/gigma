@@ -406,33 +406,144 @@ body {
   }
 }
 
-/* ================================================================ the glass wall */
-.glass {
-  position: absolute;
-  border-radius: 10px;
+/* ================================================================ bento around the demo */
+/* a tile for everyone on the canvas: rings spread from it like ripples on water */
+.who {
+  position: relative;
+  min-height: 170px;
   overflow: hidden;
-  background: linear-gradient(160deg, rgba(255, 255, 255, 0.92), rgba(240, 246, 252, 0.55));
-  box-shadow: 0 30px 70px -20px rgba(80, 120, 180, 0.35), inset 0 0 0 1px rgba(255, 255, 255, 0.95);
+  border-radius: 18px;
+  background: linear-gradient(160deg, #fff, #f3f6fb);
+  box-shadow:
+    0 24px 60px -34px rgba(60, 90, 150, 0.45),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.9),
+    0 0 0 1px rgba(10, 20, 40, 0.05);
+  isolation: isolate;
 }
-.glass .glow {
+/* the rings fade out behind the caption, so it stays easy to read */
+.who::after {
+  content: "";
   position: absolute;
-  inset: 8% 6%;
+  inset: auto 0 0 0;
+  height: 78px;
+  background: linear-gradient(to top, #f6f8fc 38%, rgba(246, 248, 252, 0));
+  z-index: 1;
+}
+.ripple {
+  position: absolute;
+  inset: 0 0 34px 0;
+  display: grid;
+  place-items: center;
+}
+.ripple::before {
+  content: "";
+  position: absolute;
+  width: 190px;
+  height: 190px;
   border-radius: 50%;
-  background: radial-gradient(closest-side, rgba(20, 160, 255, 0.95), rgba(60, 170, 255, 0.55) 45%, rgba(120, 190, 255, 0.2) 70%, transparent);
-  filter: blur(6px);
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--c) 26%, transparent), transparent);
 }
-.glass .rings {
+.ripple i {
   position: absolute;
-  inset: 6% 2%;
+  width: 46px;
+  height: 46px;
   border-radius: 50%;
-  background: repeating-radial-gradient(circle, transparent 0 10px, rgba(255, 255, 255, 0.5) 11px 12px);
-  -webkit-mask: radial-gradient(closest-side, #000 40%, transparent);
-  mask: radial-gradient(closest-side, #000 40%, transparent);
+  border: 1.5px solid var(--c);
+  /* without motion the rings simply stand around the dot */
+  opacity: 0.22;
+  animation: ripple 4.8s cubic-bezier(0.2, 0.55, 0.35, 1) infinite;
 }
-.beam-white {
+.ripple i:nth-child(1) {
+  scale: 1.5;
+}
+.ripple i:nth-child(2) {
+  scale: 2.3;
+  animation-delay: -1.2s;
+}
+.ripple i:nth-child(3) {
+  scale: 3.1;
+  animation-delay: -2.4s;
+}
+.ripple i:nth-child(4) {
+  scale: 3.9;
+  animation-delay: -3.6s;
+}
+@keyframes ripple {
+  from {
+    scale: 0.9;
+    opacity: 0.75;
+  }
+  to {
+    scale: 5;
+    opacity: 0;
+  }
+}
+.who-dot {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: var(--c);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  box-shadow:
+    0 0 0 4px #fff,
+    0 8px 20px color-mix(in srgb, var(--c) 45%, transparent);
+  animation: beat 4.8s ease-in-out infinite;
+}
+@keyframes beat {
+  0%,
+  100% {
+    scale: 1;
+  }
+  8% {
+    scale: 1.07;
+  }
+  20% {
+    scale: 1;
+  }
+}
+.who-cap {
   position: absolute;
-  background: linear-gradient(#fff, #eef1f6);
-  box-shadow: 0 12px 30px rgba(120, 140, 180, 0.22), inset 0 0 0 1px rgba(255, 255, 255, 0.95);
+  left: 16px;
+  right: 16px;
+  bottom: 13px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  font-size: 12.5px;
+  line-height: 1.3;
+  color: #62626d;
+}
+.who-cap b {
+  font-size: 15px;
+  font-weight: 600;
+  color: #0b0b0e;
+}
+/* the three things that keep the work in order */
+.perk {
+  border-radius: 18px;
+  padding: 22px 22px 24px;
+  background: linear-gradient(160deg, #fff, #f3f6fb);
+  box-shadow:
+    0 24px 60px -34px rgba(60, 90, 150, 0.45),
+    0 0 0 1px rgba(10, 20, 40, 0.05);
+}
+.perk h3 {
+  margin-top: 14px;
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+.perk p {
+  margin-top: 6px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: #52525b;
 }
 
 /* ================================================================ the neon frame */
