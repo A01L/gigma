@@ -1,4 +1,6 @@
 // Settings → Plugins: install / remove packages and read the plugin documentation.
+import plugIcon from '../assets/plug-icon.svg'
+import './guide.css'
 import { useEffect, useState } from 'react'
 import { backend, isDesktop } from '../backend'
 import { useT } from './i18n'
@@ -102,7 +104,10 @@ export function PluginsSection() {
   }
   return (
     <section onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
-      <h2>{t('Plugins')}</h2>
+      <h2>
+        <img className="set-head-icon" src={plugIcon} alt="" draggable={false} />
+        {t('Plugins')}
+      </h2>
       <p className="muted">{t('Plugins add tools to the editor. A plugin is a .plug.gigma file; it runs in a sandbox and can only change the open project.')}</p>
       <div className="set-row" style={{ flexWrap: 'wrap' }}>
         <button className="pill primary" onClick={guard(() => backend.plugins.install())}>

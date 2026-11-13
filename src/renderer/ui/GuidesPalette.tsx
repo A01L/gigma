@@ -7,6 +7,7 @@ import { guideAccent } from '../editor/guide-render'
 import { backend } from '../backend'
 import { Icons } from './icons'
 import { useT } from './i18n'
+import guideIcon from '../assets/guide-icon.svg'
 import './guide.css'
 
 export function GuidesPalette({ onClose }: { onClose: () => void }) {
@@ -68,10 +69,14 @@ export function GuidesPalette({ onClose }: { onClose: () => void }) {
         <div className="palette-list">
           {guides.size === 0 ? (
             <div className="palette-empty">
+              <img src={guideIcon} alt="" width={56} height={56} draggable={false} />
               <span className="muted">{t('No guidelines yet. A guideline keeps the colours, fonts, logo and rules of a brand in one place, for every project.')}</span>
             </div>
           ) : (
-            <div className="palette-section">{t('Guidelines')}</div>
+            <div className="palette-section palette-head">
+              <img src={guideIcon} alt="" width={18} height={18} draggable={false} />
+              {t('Guidelines')}
+            </div>
           )}
           {list.map((g, i) => (
             <button key={g.id} className={'palette-item' + (i === active ? ' active' : '')} onMouseEnter={() => setActive(i)} onClick={() => place(g.id)}>

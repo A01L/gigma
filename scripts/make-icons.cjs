@@ -2,6 +2,7 @@
 // Run: npx electron scripts/make-icons.cjs
 // App icon:  build/icon.svg      -> build/icon.{png,ico,icns}, build/icons/<size>.png, src/renderer/assets/logo.svg
 // File icon: build/file-icon.svg -> build/file-icon.{png,ico,icns} (used for .gigma documents)
+// Guideline and plugin files: build/guide-icon.svg, build/plug-icon.svg -> the same set, and src/renderer/assets/
 const { app, BrowserWindow } = require('electron')
 const fs = require('node:fs')
 const path = require('node:path')
@@ -102,6 +103,10 @@ app.whenReady().then(async () => {
   await win.loadURL('data:text/html,<html><body></body></html>')
   await generate(win, 'icon', 'icons') // app icon
   await generate(win, 'file-icon') // icon for .gigma documents
+  for (const name of ['guide-icon', 'plug-icon']) {
+    await generate(win, name) // icons of .guide.gigma and .plug.gigma files
+    fs.copyFileSync(path.join(root, `build/${name}.svg`), path.join(root, `src/renderer/assets/${name}.svg`))
+  }
   fs.copyFileSync(path.join(root, 'build/icon.svg'), path.join(root, 'src/renderer/assets/logo.svg'))
   console.log('icons written to build/')
   app.quit()

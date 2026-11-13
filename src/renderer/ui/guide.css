@@ -200,3 +200,14 @@ textarea.g-in {
   background: var(--border);
   margin: 0 4px;
 }
+.palette-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.set-head-icon {
+  width: 26px;
+  height: 26px;
+  vertical-align: -6px;
+  margin-right: 8px;
+}
