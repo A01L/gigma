@@ -189,10 +189,11 @@ export function handleKey(e: KeyboardEvent): void {
   // shortcuts follow the physical key, so they work on any keyboard layout (Russian included)
   const PHYSICAL: Record<string, string> = { BracketLeft: '[', BracketRight: ']', Backslash: '\\', Equal: '=', Minus: '-', NumpadAdd: '+', NumpadSubtract: '-' }
   const k = /^Key[A-Z]$/.test(e.code) ? e.code.slice(3).toLowerCase() : /^Digit\d$/.test(e.code) && mod ? e.code.slice(5) : (PHYSICAL[e.code] ?? e.key.toLowerCase())
-  const menuOwned = isDesktop // in the desktop app these come from the native menu accelerators
+  // handled here in every build: the native menu only shows these shortcuts (its accelerators are matched
+  // by the typed character and would not fire on a non-Latin layout)
   const act = (a: string) => {
     e.preventDefault()
-    if (!menuOwned) runAction(a)
+    runAction(a)
   }
   if (mod && k === 'z' && !e.shiftKey) return act('undo')
   if (mod && ((k === 'z' && e.shiftKey) || k === 'y')) return act('redo')

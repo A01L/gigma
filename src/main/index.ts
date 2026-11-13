@@ -547,32 +547,35 @@ function buildMenu(): void {
         { label: L('Export Selection as PDF...', 'Экспорт выделения в PDF...'), click: toTab('export-pdf') },
         { label: L('Export Frames to PDF...', 'Экспорт фреймов в PDF...'), click: toTab('export-frames-pdf') },
         { type: 'separator' },
-        { label: L('Place Image...', 'Вставить изображение...'), accelerator: 'CmdOrCtrl+Shift+K', click: toTab('place-image') },
+        { label: L('Place Image...', 'Вставить изображение...'), accelerator: 'CmdOrCtrl+Shift+K', registerAccelerator: false, click: toTab('place-image') },
         { type: 'separator' },
         isMac ? { role: 'close' } : { role: 'quit', label: L('Exit', 'Выход') }
       ]
     },
+    // Items with registerAccelerator: false only SHOW their shortcut. The editor handles those keys itself,
+    // by physical key, so they work on any keyboard layout (a menu accelerator "Ctrl+Z" does not fire on a
+    // Russian layout, where that key types "я") and never steal keys from text fields.
     {
       label: L('Edit', 'Правка'),
       submenu: [
-        { label: L('Undo', 'Отменить'), accelerator: 'CmdOrCtrl+Z', click: toTab('undo') },
-        { label: L('Redo', 'Повторить'), accelerator: 'CmdOrCtrl+Shift+Z', click: toTab('redo') },
+        { label: L('Undo', 'Отменить'), accelerator: 'CmdOrCtrl+Z', registerAccelerator: false, click: toTab('undo') },
+        { label: L('Redo', 'Повторить'), accelerator: 'CmdOrCtrl+Shift+Z', registerAccelerator: false, click: toTab('redo') },
         { type: 'separator' },
         { role: 'cut', label: L('Cut', 'Вырезать') },
         { role: 'copy', label: L('Copy', 'Копировать') },
         { role: 'paste', label: L('Paste', 'Вставить') },
-        { label: L('Duplicate', 'Дублировать'), accelerator: 'CmdOrCtrl+D', click: toTab('duplicate') },
-        { label: L('Select All', 'Выделить всё'), accelerator: 'CmdOrCtrl+A', click: toTab('select-all') }
+        { label: L('Duplicate', 'Дублировать'), accelerator: 'CmdOrCtrl+D', registerAccelerator: false, click: toTab('duplicate') },
+        { label: L('Select All', 'Выделить всё'), accelerator: 'CmdOrCtrl+A', registerAccelerator: false, click: toTab('select-all') }
       ]
     },
     {
       label: L('View', 'Вид'),
       submenu: [
-        { label: L('Toggle Left Panel', 'Левая панель'), accelerator: 'CmdOrCtrl+\\', click: toTab('toggle-left') },
-        { label: L('Toggle Right Panel', 'Правая панель'), accelerator: 'CmdOrCtrl+Alt+\\', click: toTab('toggle-right') },
+        { label: L('Toggle Left Panel', 'Левая панель'), accelerator: 'CmdOrCtrl+\\', registerAccelerator: false, click: toTab('toggle-left') },
+        { label: L('Toggle Right Panel', 'Правая панель'), accelerator: 'CmdOrCtrl+Alt+\\', registerAccelerator: false, click: toTab('toggle-right') },
         { type: 'separator' },
-        { label: L('Zoom to Fit', 'Показать всё'), accelerator: 'Shift+1', click: toTab('zoom-fit') },
-        { label: L('Zoom to 100%', 'Масштаб 100%'), accelerator: 'Shift+0', click: toTab('zoom-100') },
+        { label: L('Zoom to Fit', 'Показать всё'), accelerator: 'Shift+1', registerAccelerator: false, click: toTab('zoom-fit') },
+        { label: L('Zoom to 100%', 'Масштаб 100%'), accelerator: 'Shift+0', registerAccelerator: false, click: toTab('zoom-100') },
         { type: 'separator' },
         { label: L('Next Tab', 'Следующая вкладка'), accelerator: 'Ctrl+Tab', click: () => cycleTab(1) },
         { label: L('Previous Tab', 'Предыдущая вкладка'), accelerator: 'Ctrl+Shift+Tab', click: () => cycleTab(-1) },

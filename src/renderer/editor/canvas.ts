@@ -630,6 +630,11 @@ export class CanvasController {
 
   private down(e: PointerEvent): void {
     if (ed.editingTextId) return
+    // working on the canvas takes the keyboard away from the fields of the panels (their value is committed
+    // on blur), so Ctrl+Z, Delete and the tool keys act on the canvas again
+    const active = document.activeElement as HTMLElement | null
+    if (active && active !== this.canvas && isTyping()) active.blur()
+    this.canvas.focus({ preventScroll: true })
     try {
       this.canvas.setPointerCapture(e.pointerId)
     } catch {

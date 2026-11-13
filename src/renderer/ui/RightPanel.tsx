@@ -25,6 +25,20 @@ const same = <T,>(vals: T[]): T | 'mixed' => (vals.every((v) => v === vals[0]) ?
 /** the id shared by the whole selection, or null */
 const sameId = (ids: (string | null)[]): string | null => (ids.every((v) => v === ids[0]) ? ids[0] : null)
 
+/**
+ * Undo keys pressed inside a field of the inspector. With nothing typed in the field they belong to the
+ * canvas (Figma does the same); with typed text they stay with the field. Returns true when handled.
+ */
+function undoFromField(e: React.KeyboardEvent<HTMLInputElement>, dirty: boolean): boolean {
+  if (!(e.ctrlKey || e.metaKey) || dirty) return false
+  const redo = (e.code === 'KeyZ' && e.shiftKey) || e.code === 'KeyY'
+  if (e.code !== 'KeyZ' && !redo) return false
+  e.preventDefault()
+  ;(e.target as HTMLInputElement).blur()
+  runAction(redo ? 'redo' : 'undo')
+  return true
+}
+
 /** Number input with Figma-like label scrubbing. `apply` runs inside a transaction. */
 function NumberField({ label, value, apply, min, step = 1, suffix }: { label: React.ReactNode; value: Mixed; apply: (v: number) => void; min?: number; step?: number; suffix?: string }) {
   const [text, setText] = useState('')
@@ -43,6 +57,8 @@ function NumberField({ label, value, apply, min, step = 1, suffix }: { label: Re
     ed.act(() => apply(v))
   }
   const scrub = useRef<{ x: number; v: number } | null>(null)
+  /** true once the user has typed in the focused field */
+  const dirty = useRef(false)
   return (
     <label className="field">
       <span
@@ -72,18 +88,30 @@ function NumberField({ label, value, apply, min, step = 1, suffix }: { label: Re
         value={focus ? text : shown}
         onFocus={(e) => {
           setFocus(true)
+          dirty.current = false
           setText(value === 'mixed' ? '' : String(round2(value)))
           requestAnimationFrame(() => e.target.select())
         }}
-        onChange={(e) => setText(e.target.value)}
-        onBlur={() => {
+        onChange={(e) => {
+          dirty.current = true
+          setText(e.target.value)
+        }}
+        onBlur={(e) => {
           setFocus(false)
-          if (text.trim() && text !== String(value)) commit(text)
+          // only what the user typed is applied: a field that was merely focused must never write back the
+          // value it showed when it got the focus (the layer may have been moved on the canvas since then)
+          if (!dirty.current) return
+          dirty.current = false
+          const raw = e.target.value
+          if (raw.trim() && raw !== String(value)) commit(raw)
         }}
         onKeyDown={(e) => {
           e.stopPropagation()
+          // Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y in a field with nothing typed undo on the canvas, as in Figma
+          if (undoFromField(e, dirty.current)) return
           if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
           if (e.key === 'Escape') {
+            dirty.current = false
             setText(String(value))
             ;(e.target as HTMLInputElement).blur()
           }
@@ -104,6 +132,7 @@ function ColorField({ color, apply, onRemove, visible, onToggleVisible, onType }
   const hex = color === 'mixed' ? 'Mixed' : rgbaToHex(color).slice(1).toUpperCase()
   const alpha = color === 'mixed' ? 1 : color.a
   const swatchRef = useRef<HTMLButtonElement>(null)
+  const hexDirty = useRef(false)
   const [picking, setPicking] = useState(false)
   return (
     <div className={'row tight' + (visible === false ? ' dimmed' : '')}>
@@ -148,13 +177,21 @@ function ColorField({ color, apply, onRemove, visible, onToggleVisible, onType }
             setText(hex === 'Mixed' ? '' : hex)
             requestAnimationFrame(() => e.target.select())
           }}
-          onChange={(e) => setText(e.target.value)}
-          onBlur={() => {
-            if (text && /^#?[0-9a-f]{3,8}$/i.test(text.trim())) ed.act(() => apply({ ...hexToRgba(text.trim()), a: alpha }))
+          onChange={(e) => {
+            hexDirty.current = true
+            setText(e.target.value)
+          }}
+          onBlur={(e) => {
+            // apply only a colour the user typed: re-applying the shown hex would round the colour,
+            // add an empty step to the history and detach a linked style
+            const raw = e.target.value.trim()
+            if (hexDirty.current && /^#?[0-9a-f]{3,8}$/i.test(raw) && raw.replace('#', '').toUpperCase() !== hex) ed.act(() => apply({ ...hexToRgba(raw), a: alpha }))
+            hexDirty.current = false
             setText(null)
           }}
           onKeyDown={(e) => {
             e.stopPropagation()
+            if (undoFromField(e, hexDirty.current)) return
             if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
           }}
         />
