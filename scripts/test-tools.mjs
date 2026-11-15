@@ -17,6 +17,8 @@ async function call(name, args = {}) {
 const json = (c) => JSON.parse(c[0].text)
 
 await call('create_project', { name: 'Tools test' })
+// an AI works in a background tab; the test drives the mouse, so the tab is brought in front
+await call('show_tab', {})
 const sec = json(await call('create_shape', { kind: 'section', name: 'Landing', x: -40, y: -80, width: 1400, height: 760 }))
 const f = json(await call('create_frame', { name: 'Hero', x: 0, y: 0, width: 640, height: 420, fill: '#F8FAFC', parentId: sec.id }))
 await call('create_shape', { kind: 'line', x: 40, y: 40, width: 200, height: 0.01, stroke: '#0F172A', strokeWeight: 3, parentId: f.id })

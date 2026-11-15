@@ -10,12 +10,17 @@ export interface ProjectInfo {
   trashedAt?: number
   /** size of the project file on disk, bytes */
   size?: number
+  /** archived projects: when it was put away, and how large it was before it was packed */
+  archivedAt?: number
+  originalSize?: number
 }
 
 /** what Gigma keeps on disk, for Settings → Storage (sizes in bytes) */
 export interface StorageStats {
   projects: number
   trash: number
+  /** projects packed away in the archive */
+  archive: number
   plugins: { id: string; name: string; size: number }[]
   /** the guideline library, one entry per guideline */
   guides: { id: string; name: string; size: number }[]
@@ -56,6 +61,8 @@ export interface TabInfo {
   id: string
   name: string
   path: string
+  /** an AI client has just worked in this tab (over MCP): the tab bar marks it */
+  ai?: boolean
 }
 
 /** a Spec task (not RULES) of an open project, as the Home board shows it */
@@ -78,6 +85,8 @@ export interface SpecBoardItem extends SpecTask {
 
 export interface TabsState {
   activeId: string | null // null = Home
+  /** the tab MCP commands act on: the AI works there in the background, whatever tab the user looks at */
+  aiTabId?: string | null
   tabs: TabInfo[]
 }
 
@@ -170,6 +179,11 @@ export interface GigmaApi {
     restore(path: string): Promise<string>
     deleteForever(path: string): Promise<void>
     emptyTrash(): Promise<void>
+    /** the archive: projects packed away to save space. They leave Home and come back with unarchive */
+    listArchive(): Promise<ProjectInfo[]>
+    archive(path: string): Promise<void>
+    unarchive(path: string): Promise<string>
+    deleteArchived(path: string): Promise<void>
   }
   settings: {
     get(): Promise<AppSettings>

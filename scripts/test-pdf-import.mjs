@@ -21,6 +21,8 @@ const near = (a, b, tol = 1.5) => Math.abs(a - b) <= tol
 
 // ---- a document of two pages, drawn in Gigma
 const proj = await mcp('create_project', { name: 'PDF source' })
+// an AI works in a background tab; the test drives the mouse, so the tab is brought in front
+await mcp('show_tab', {})
 const p1 = await mcp('create_frame', { name: 'Invoice', x: 0, y: 0, width: 400, height: 300, fill: '#FFFFFF' })
 await mcp('create_text', { parentId: p1.id, text: 'Invoice 0010', x: 30, y: 24, fontSize: 28, fontWeight: 700, fontFamily: 'Arial', color: '#C2410C' })
 await mcp('create_text', { parentId: p1.id, text: 'Design of a landing page', x: 30, y: 80, fontSize: 14, fontFamily: 'Arial', color: '#1C1917' })
@@ -36,6 +38,8 @@ check('the source PDF has two pages', made.pages.length, 2)
 
 // ---- drop it into a new project
 const dest = await mcp('create_project', { name: 'PDF import test' })
+// an AI works in a background tab; the test drives the mouse, so the tab is brought in front
+await mcp('show_tab', {})
 const targets = await (await fetch(`http://127.0.0.1:${port}/json`)).json()
 const page = targets.filter((p) => p.type === 'page' && p.url.includes('#doc=' + encodeURIComponent(dest.path))).pop()
 const ws = new WebSocket(page.webSocketDebuggerUrl)

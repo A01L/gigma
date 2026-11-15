@@ -22,6 +22,8 @@ const check = (label, got, want) => results.push(`${same(got, want) ? 'PASS' : '
 const wait = (ms) => new Promise((r) => setTimeout(r, ms))
 
 const proj = await mcp('create_project', { name: 'Stroke art test' })
+// an AI works in a background tab; the test drives the mouse, so the tab is brought in front
+await mcp('show_tab', {})
 const frame = await mcp('create_frame', { name: 'Sheet', x: 0, y: 0, width: 1100, height: 900, fill: '#FFFFFF' })
 const line = await mcp('create_shape', { kind: 'line', parentId: frame.id, x: 60, y: 60, width: 300, height: 0.01 })
 await mcp('update_node', { id: line.id, strokes: [{ color: '#000000', weight: 16, align: 'CENTER' }] })

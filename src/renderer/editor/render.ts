@@ -192,6 +192,17 @@ function drawImagePaint(ctx: CanvasRenderingContext2D, p: Extract<Paint, { type:
     if (e.missing) drawMissingImage(ctx, r)
     return
   }
+  // zoomed in far enough, a picture shows its own pixels as squares (as in Figma) instead of a blur
+  const fit = p.scaleMode === 'FIT' ? Math.min(r.w / bmp.width, r.h / bmp.height) : Math.max(r.w / bmp.width, r.h / bmp.height)
+  const wasSmooth = ctx.imageSmoothingEnabled
+  if (fit * deviceScale(ctx) >= 6) ctx.imageSmoothingEnabled = false
+  try {
+    paintImage(ctx, p, r, bmp)
+  } finally {
+    ctx.imageSmoothingEnabled = wasSmooth
+  }
+}
+function paintImage(ctx: CanvasRenderingContext2D, p: Extract<Paint, { type: 'IMAGE' }>, r: Rect, bmp: ImageBitmap): void {
   if (p.scaleMode === 'STRETCH' && p.transform) {
     // Figma's crop: the matrix takes a point of the box to a point of the picture, so the picture is drawn through its inverse
     const [a, b, c, d, e, f] = p.transform
@@ -566,9 +577,21 @@ function drawNodeInner(ctx: CanvasRenderingContext2D, ed: Editor, id: string, o:
     return
   }
   const effects = (n.effects ?? []).filter((e) => e.visible !== false)
-  // effects spill outside the bounds; grow the culling rect accordingly
+  // A layer paints outside its box: effects, a stroke with its arrows and brushes, and text (letters reach past the
+  // line box, and a text in a box of fixed size simply runs out of it). The view is zoomed into exactly such a part
+  // when someone looks at a detail up close, so the layer must not be dropped there: its box is grown by all of that.
   let spill = 0
   for (const e of effects) spill = Math.max(spill, e.radius * 2 + ('offset' in e ? Math.abs(e.offset.x) + Math.abs(e.offset.y) + Math.abs(e.spread) : 0))
+  for (const st of n.strokes) if (st.visible !== false && st.weight > 0) spill = Math.max(spill, st.weight * 6 + 8)
+  if (n.type === 'TEXT') {
+    const ts = n.textStyle ?? DEFAULT_TEXT_STYLE
+    let over = ts.fontSize * 2
+    if ((n.textAutoResize ?? 'WIDTH_AND_HEIGHT') === 'NONE' && !ts.truncate) {
+      const l = layoutText(n)
+      over += Math.max(0, l.height - r.h, l.width - r.w)
+    }
+    spill = Math.max(spill, over)
+  }
   const cullR = spill ? { x: r.x - spill, y: r.y - spill, w: r.w + spill * 2, h: r.h + spill * 2 } : r
   // culling: a node (and, if it clips, its subtree) outside the view is skipped
   if (!rectsIntersect(cullR, o.view)) {

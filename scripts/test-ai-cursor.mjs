@@ -18,6 +18,8 @@ const check = (label, got, want) => results.push(`${JSON.stringify(got) === JSON
 // the client says who it is once, like every MCP client does
 await rpc('initialize', { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'claude-code', version: '2.0.0' } })
 await mcp('create_project', { name: 'Cursor test' })
+// an AI works in a background tab; the test drives the mouse, so the tab is brought in front
+await mcp('show_tab', {})
 
 const targets = await (await fetch(`http://127.0.0.1:${port}/json`)).json()
 const page = targets.filter((p) => p.type === 'page' && p.url.includes('#doc=')).pop()

@@ -13,7 +13,11 @@ import {
   listTrash,
   purgeOldTrash,
   restoreProject,
-  trashProject
+  trashProject,
+  archiveProject,
+  deleteArchived,
+  listArchive,
+  unarchiveProject,
 } from './library'
 import { getSettings, setSettings } from './settings'
 import { startMcpServer, type McpHandle } from './mcp'
@@ -63,6 +67,23 @@ let activeId: string | null = null // null = Home
 
 const tabOf = (wc: WebContents): Tab | undefined => tabs.find((t) => t.view.webContents.id === wc.id)
 const activeTab = (): Tab | undefined => tabs.find((t) => t.id === activeId)
+/**
+ * The tab an AI client works in over MCP. It is chosen by the AI's own create_project / open_project / switch_tab, or is
+ * the tab that was in front at its first command. From then on the user can look at any other tab or at Home:
+ * the AI goes on in its own tab, in the background, and never changes what the user sees.
+ */
+let aiTabId: string | null = null
+/** when an AI client last worked in a tab (the tab bar shows a mark for a few seconds after) */
+const aiAt = new Map<string, number>()
+let aiMarkTimer: NodeJS.Timeout | null = null
+function markAi(id: string): void {
+  const fresh = Date.now() - (aiAt.get(id) ?? 0) > AI_MARK_MS
+  aiAt.set(id, Date.now())
+  if (fresh) broadcastTabs()
+  if (aiMarkTimer) clearTimeout(aiMarkTimer)
+  aiMarkTimer = setTimeout(() => broadcastTabs(), AI_MARK_MS + 200)
+}
+const AI_MARK_MS = 6000
 
 function fileOf(wc: WebContents): GigmaFile {
   const f = tabOf(wc)?.file
@@ -82,7 +103,8 @@ function loadInto(wc: WebContents, hash: string): void {
 }
 
 function tabsState(): TabsState {
-  return { activeId, tabs: tabs.map((t): TabInfo => ({ id: t.id, name: t.name, path: t.path })) }
+  const now = Date.now()
+  return { activeId, aiTabId: tabs.some((t) => t.id === aiTabId) ? aiTabId : null, tabs: tabs.map((t): TabInfo => ({ id: t.id, name: t.name, path: t.path, ai: now - (aiAt.get(t.id) ?? 0) < AI_MARK_MS || undefined })) }
 }
 
 /** Spec tasks of every open tab, in tab order */
@@ -106,7 +128,8 @@ function layout(): void {
   for (const t of tabs) {
     const visible = t.id === activeId
     t.view.setVisible(visible)
-    if (visible) t.view.setBounds({ x: 0, y: TAB_BAR_H, width: w, height: Math.max(0, h - TAB_BAR_H) })
+    // hidden tabs keep their size too: an AI may be working in one, and its canvas must know how large it is
+    t.view.setBounds({ x: 0, y: TAB_BAR_H, width: w, height: Math.max(0, h - TAB_BAR_H) })
   }
 }
 
@@ -120,11 +143,14 @@ function activate(id: string | null): void {
   if (!t) win?.webContents.send('library:changed')
 }
 
-/** Open a library project in a tab (or focus it if already open). Resolves when the editor is ready. */
-async function openTab(path: string): Promise<Tab> {
+/**
+ * Open a library project in a tab (or focus it if already open). Resolves when the editor is ready.
+ * show = false opens it in the background: the tab appears in the tab bar, what the user looks at stays.
+ */
+async function openTab(path: string, show = true): Promise<Tab> {
   const existing = tabs.find((t) => t.path === path)
   if (existing) {
-    activate(existing.id)
+    if (show) activate(existing.id)
     await existing.ready
     return existing
   }
@@ -151,7 +177,11 @@ async function openTab(path: string): Promise<Tab> {
   })
   view.webContents.on('render-process-gone', () => void closeTab(id, true))
   loadInto(view.webContents, 'doc=' + encodeURIComponent(path))
-  activate(id)
+  if (show) activate(id)
+  else {
+    layout()
+    broadcastTabs()
+  }
   await Promise.race([ready, new Promise((_, rej) => setTimeout(() => rej(new Error('Editor did not open the project')), 20_000))])
   return tab
 }
@@ -179,6 +209,8 @@ async function closeTab(id: string, force = false): Promise<void> {
   }
   win?.contentView.removeChildView(t.view)
   if (!t.view.webContents.isDestroyed()) t.view.webContents.close()
+  if (aiTabId === id) aiTabId = null
+  aiAt.delete(id)
   if (activeId === id) activeId = tabs[Math.min(i, tabs.length - 1)]?.id ?? null
   layout()
   broadcastTabs()
@@ -224,27 +256,55 @@ async function runCommand(name: CommandName, args: Record<string, unknown>, clie
       updatedAt: new Date(updatedAt).toISOString(),
       open: tabs.some((t) => t.path === path)
     }))
+  // an AI client (MCP) names itself; plugins and the app's own calls do not, and act on what the user sees
+  const ai = client !== undefined
   if (name === 'list_tabs') return tabsState()
   if (name === 'create_project') {
     const path = createProject(String(args.name ?? 'Untitled'))
-    const t = await openTab(path)
-    return { path, tabId: t.id, name: args.name ?? 'Untitled', opened: true }
+    // the AI's project opens in the background: its tab appears, the user stays where they are
+    const t = await openTab(path, !ai)
+    if (ai) {
+      aiTabId = t.id
+      markAi(t.id)
+    }
+    return { path, tabId: t.id, name: args.name ?? 'Untitled', opened: true, shown: activeId === t.id }
   }
   if (name === 'open_project') {
     const path = String(args.path)
     if (!listProjects().some((p) => p.path === path)) throw new Error('Unknown project path; use list_projects')
-    const t = await openTab(path)
-    return { path, tabId: t.id, opened: true }
+    const t = await openTab(path, !ai)
+    if (ai) {
+      aiTabId = t.id
+      markAi(t.id)
+    }
+    return { path, tabId: t.id, opened: true, shown: activeId === t.id }
   }
   if (name === 'switch_tab') {
     const id = (args.tabId as string | null) ?? null
     if (id && !tabs.some((t) => t.id === id)) throw new Error('Unknown tab id; use list_tabs')
+    // for an AI this chooses where its commands go; the screen of the user does not change
+    if (ai) aiTabId = id
+    else activate(id)
+    return tabsState()
+  }
+  if (name === 'show_tab') {
+    // null = Home; nothing given = the tab the AI works in
+    const id = args.tabId === null ? null : ((args.tabId as string | undefined) ?? aiTabId)
+    if (id !== null && !tabs.some((t) => t.id === id)) throw new Error('Unknown tab id; use list_tabs')
+    if (args.tabId === undefined && id === null) throw new Error('No tab to show; pass tabId (see list_tabs)')
     activate(id)
     return tabsState()
   }
-  // document commands go to the active tab (or an explicit tabId)
-  const tab = args.tabId ? tabs.find((t) => t.id === args.tabId) : activeTab()
-  if (!tab?.file) throw new Error('No project tab is active in Gigma. Use list_projects + open_project, create_project, or switch_tab.')
+  // document commands go to an explicit tabId, to the tab the AI works in, or (the app's own calls) to the tab in front
+  let tab = args.tabId ? tabs.find((t) => t.id === args.tabId) : undefined
+  if (!tab && ai) {
+    // the first command of an AI takes the tab the user has in front; after that it stays with that tab
+    if (!tabs.some((t) => t.id === aiTabId)) aiTabId = activeId
+    tab = tabs.find((t) => t.id === aiTabId)
+  }
+  if (!tab && !args.tabId) tab = activeTab()
+  if (!tab?.file) throw new Error('No project tab to work in. Use list_projects + open_project, create_project, or switch_tab.')
+  if (ai) markAi(tab.id)
   // Resolve image sources in main (renderers have no file system access).
   const toHash = (source: string): string => {
     const src = source.trim()
@@ -317,6 +377,23 @@ ipcMain.handle('trash:list', () => listTrash())
 ipcMain.handle('trash:restore', (_e, path: string) => restoreProject(path))
 ipcMain.handle('trash:delete', (_e, path: string) => deleteForever(path))
 ipcMain.handle('trash:empty', () => emptyTrash())
+ipcMain.handle('archive:list', () => listArchive())
+ipcMain.handle('archive:add', async (_e, path: string) => {
+  // an open project is saved and closed first: its file is about to be packed
+  const open = tabs.find((t) => t.path === path)
+  if (open) await closeTab(open.id)
+  await archiveProject(path)
+  broadcast('library:changed')
+})
+ipcMain.handle('archive:restore', async (_e, path: string) => {
+  const to = await unarchiveProject(path)
+  broadcast('library:changed')
+  return to
+})
+ipcMain.handle('archive:delete', async (_e, path: string) => {
+  await deleteArchived(path)
+  broadcast('library:changed')
+})
 ipcMain.handle('library:stats', (): StorageStats => {
   const sum = (list: { size?: number }[]) => list.reduce((s, p) => s + (p.size ?? 0), 0)
   let diskFree = 0
@@ -328,7 +405,7 @@ ipcMain.handle('library:stats', (): StorageStats => {
   } catch {
     /* unknown disk: the page simply hides that line */
   }
-  return { projects: sum(listProjects()), trash: sum(listTrash()), plugins: pluginSizes(), guides: guideSizes(), diskFree, diskTotal }
+  return { projects: sum(listProjects()), trash: sum(listTrash()), archive: sum(listArchive()), plugins: pluginSizes(), guides: guideSizes(), diskFree, diskTotal }
 })
 // ---------- guideline library ----------
 ipcMain.handle('guides:list', () => ({ guides: listGuides(), deleted: deletedGuides() }))

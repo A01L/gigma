@@ -38,6 +38,8 @@ function inspect(file) {
 }
 
 await mcp('create_project', { name: 'PDF test' })
+// an AI works in a background tab; the test drives the mouse, so the tab is brought in front
+await mcp('show_tab', {})
 // three frames: two in the first row (created right one first), one below; plus a loose shape
 const b = json(await mcp('create_frame', { name: 'B', x: 700, y: 20, width: 400, height: 300, fill: '#0F172A' }))
 const a = json(await mcp('create_frame', { name: 'A', x: 0, y: 0, width: 595, height: 842, fill: '#FFFFFF' }))

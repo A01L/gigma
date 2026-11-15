@@ -19,6 +19,8 @@ const check = (label, got, want) => results.push(`${JSON.stringify(got) === JSON
 const get = async (id) => json(await mcp('get_node', { id }))
 
 await mcp('create_project', { name: 'Components test' })
+// an AI works in a background tab; the test drives the mouse, so the tab is brought in front
+await mcp('show_tab', {})
 const bg = json(await mcp('create_frame', { name: 'BG', x: 0, y: 0, width: 760, height: 300, fill: '#F8FAFC' }))
 
 // ---- a button component: auto layout frame with a label ----

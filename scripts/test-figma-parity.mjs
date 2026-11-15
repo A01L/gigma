@@ -18,6 +18,8 @@ const check = (label, got, want) => results.push(`${same(got, want) ? 'PASS' : '
 const wait = (ms) => new Promise((r) => setTimeout(r, ms))
 
 const proj = await mcp('create_project', { name: 'Figma parity test' })
+// an AI works in a background tab; the test drives the mouse, so the tab is brought in front
+await mcp('show_tab', {})
 const frame = await mcp('create_frame', { name: 'Tilted', x: 0, y: 0, width: 400, height: 260, fill: '#FFFFFF' })
 const board = await mcp('create_frame', { name: 'Board', x: 0, y: 420, width: 900, height: 420, fill: '#FFFFFF' })
 const rect = await mcp('create_rectangle', { parentId: board.id, x: 600, y: 40, width: 240, height: 160, fill: '#D9D9D9' })

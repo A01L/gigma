@@ -5,7 +5,8 @@ import { hexToRgba, rgbaToHex } from '@shared/types'
 import { backend } from '../backend'
 import { editor as ed, parseVariant } from './editor'
 import { DEFAULT_TEXT_STYLE } from './text'
-import { exportPng, imageSize } from './render'
+import { exportPng, imageSize, renderToCanvas } from './render'
+import { unionRects } from './util'
 import { nodesToSvg, svgToNodes } from './svg'
 import { framesInReadingOrder, pdfPages } from './pdf'
 import { codeBitmapAsync } from './code-render'
@@ -289,6 +290,7 @@ const handlers: Record<CommandName, (a: Args) => unknown | Promise<unknown>> = {
   open_project: mainOnly,
   list_tabs: mainOnly,
   switch_tab: mainOnly,
+  show_tab: mainOnly,
   get_document: (a) => {
     const pageId = a.pageId ?? ed.currentPageId
     return {
@@ -967,8 +969,20 @@ const handlers: Record<CommandName, (a: Args) => unknown | Promise<unknown>> = {
     // exactly what the user sees: the live canvas including selection and frame labels
     const src = document.querySelector<HTMLCanvasElement>('.canvas-wrap canvas')
     if (!src) throw new Error('canvas not ready')
-    await new Promise((r) => requestAnimationFrame(r))
+    // a tab in the background draws no frames (the AI may be working there): draw the canvas now instead of waiting for one
+    ;(window as unknown as { canvasView?: { redraw(): void } }).canvasView?.redraw()
     const maxSize = a.maxSize ?? 1400
+    if (src.width < 64 || src.height < 64) {
+      // the tab has never been in front, so its canvas has no size yet: show the page itself, as it would be fitted
+      const top = ed.children(null)
+      if (!top.length) throw new Error('the page is empty')
+      const b = unionRects(top.map((id) => ed.world(id)))!
+      const k = Math.min(2, maxSize / Math.max(b.w, b.h, 1))
+      const bg = ed.page.background
+      const pic = await renderToCanvas(ed, top, k, `rgb(${Math.round(bg.r * 255)},${Math.round(bg.g * 255)},${Math.round(bg.b * 255)})`)
+      const u = pic.toDataURL('image/png')
+      return { pngBase64: u.slice(u.indexOf(',') + 1), width: pic.width, height: pic.height }
+    }
     const s = Math.min(1, maxSize / Math.max(src.width, src.height))
     const c = document.createElement('canvas')
     c.width = Math.round(src.width * s)

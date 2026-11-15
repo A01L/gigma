@@ -210,6 +210,13 @@ export class CanvasController {
     this.invalidate()
   }
 
+  /** draw right now, without waiting for a frame (a hidden tab gets none) */
+  redraw(): void {
+    cancelAnimationFrame(this.raf)
+    this.raf = 0
+    this.draw()
+  }
+
   invalidate(): void {
     if (this.raf) return
     this.raf = requestAnimationFrame(() => {
@@ -231,12 +238,14 @@ export class CanvasController {
     ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, dpr * cx, dpr * cy)
     ctx.imageSmoothingQuality = zoom < 1 ? 'medium' : 'high'
     const view = ed.visibleWorldRect()
-    const visible = new Set(ed.query(view))
     // wires run behind the layers they connect
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     this.drawSpecWires()
     ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, dpr * cx, dpr * cy)
-    drawScene(ctx, ed, { view, zoom: zoom * dpr, visible })
+    // every layer decides by itself whether it is in view, by its box grown by what it paints outside it (see drawNodeInner).
+    // (A pre-made list of the layers whose plain box touches the view dropped text and strokes when the view was zoomed
+    // into the part of them that lies outside the box.)
+    drawScene(ctx, ed, { view, zoom: zoom * dpr })
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     this.drawOverlay(view)
@@ -1187,8 +1196,6 @@ export class CanvasController {
       ['se', x + w, y + h],
       ['sw', x, y + h]
     ]
-    if (w > 30) list.push(['n', x + w / 2, y], ['s', x + w / 2, y + h])
-    if (h > 30) list.push(['e', x + w, y + h / 2], ['w', x, y + h / 2])
     return list
   }
 
@@ -1494,24 +1501,49 @@ export class CanvasController {
       return n.visible && !n.locked && n.type !== 'ANNOTATION' && n.type !== 'SLICE'
     }
     const encloses = (w: Rect) => r.x <= w.x && r.y <= w.y && r.x + r.w >= w.x + w.w && r.y + r.h >= w.y + w.h
-    const out: string[] = []
-    const collect = (parentId: string | null, insideScope: boolean) => {
+    const cut = (a: Rect, b: Rect): Rect => {
+      const x = Math.max(a.x, b.x)
+      const y = Math.max(a.y, b.y)
+      return { x, y, w: Math.max(0, Math.min(a.x + a.w, b.x + b.w) - x), h: Math.max(0, Math.min(a.y + a.h, b.y + b.h) - y) }
+    }
+    /**
+     * what a container gives: `whole` = it was swallowed by the marquee and is taken itself, otherwise the layers
+     * inside it that the marquee touches. `clip` = the part of the canvas where the layers of this level can be seen:
+     * a picture that hangs out of its frame is hidden there, so the marquee cannot catch it by that part.
+     */
+    const collect = (parentId: string | null, clip: Rect | null): string[] => {
+      const whole: string[] = []
+      const dived: { id: string; hits: string[] }[] = []
+      const loose: string[] = []
       for (const id of ed.children(parentId)) {
         if (!ok(id)) continue
         const w = ed.world(id)
-        if (!rectsIntersect(r, w)) continue
+        const seen = clip ? cut(w, clip) : w
+        if (clip && !(seen.w > 0 && seen.h > 0)) continue
+        if (!rectsIntersect(r, seen)) continue
         // reach into top-level containers unless the marquee swallows them whole;
         // the frame the marquee started in is never selected itself
         if (this.isBackground(id) && (id === scope || !encloses(w))) {
-          collect(id, insideScope || id === scope)
+          const n = ed.nodes.get(id)!
+          const inner = n.type === 'FRAME' && n.clipsContent !== false ? seen : clip
+          dived.push({ id, hits: collect(id, inner) })
           continue
         }
         if (id === scope) continue
-        out.push(id)
+        if (this.isBackground(id)) whole.push(id)
+        else loose.push(id)
       }
+      // Whole frames together with loose layers of the frames next to them is never what was meant: dragging such a
+      // selection pulls the pictures out of their frames. When the marquee has swallowed at least one frame, the frames
+      // it only touched are taken whole too.
+      const out = [...whole, ...loose]
+      for (const d of dived) {
+        if (whole.length && d.id !== scope && d.hits.length) out.push(d.id)
+        else out.push(...d.hits)
+      }
+      return out
     }
-    collect(null, false)
-    return out
+    return collect(null, null)
   }
 
   /** Frame/section the dragged layers would land in at this point (null = the page). */
@@ -1682,6 +1714,19 @@ export class CanvasController {
             const nw = h * ratio
             if (d.handle.includes('w')) x1 = x2 - nw * Math.sign(x2 - x1 || 1)
             else x2 = x1 + nw * Math.sign(x2 - x1 || 1)
+          }
+        }
+        if (e.shiftKey && d.handle.length === 1 && b.w && b.h) {
+          // a side with Shift: the other dimension follows, growing evenly to both sides of the middle
+          const ratio = b.w / b.h
+          if (d.handle === 'e' || d.handle === 'w') {
+            const nh = Math.abs(x2 - x1) / ratio
+            y1 = b.y + b.h / 2 - nh / 2
+            y2 = b.y + b.h / 2 + nh / 2
+          } else {
+            const nw = Math.abs(y2 - y1) * ratio
+            x1 = b.x + b.w / 2 - nw / 2
+            x2 = b.x + b.w / 2 + nw / 2
           }
         }
         const nb = { x: Math.min(x1, x2), y: Math.min(y1, y2), w: Math.max(1, Math.abs(x2 - x1)), h: Math.max(1, Math.abs(y2 - y1)) }

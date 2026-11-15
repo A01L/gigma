@@ -20,6 +20,8 @@ const get = async (id) => json(await mcp('get_node', { id }))
 const box = (n) => [n.x, n.y, n.width, n.height]
 
 await mcp('create_project', { name: 'Batch2 test' })
+// an AI works in a background tab; the test drives the mouse, so the tab is brought in front
+await mcp('show_tab', {})
 const bg = json(await mcp('create_frame', { name: 'BG', x: 0, y: 0, width: 700, height: 420, fill: '#F1F5F9' }))
 
 // ---- horizontal, hug both, padding + gap ----

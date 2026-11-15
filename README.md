@@ -70,6 +70,7 @@ Its main feature is a **built-in MCP server**. An AI assistant (Claude Desktop, 
 ### AI and automation
 - **MCP server** on `127.0.0.1:7331`: 60+ tools, from creating a frame to exporting a PDF
 - The AI sees the canvas: a screenshot and an export of any layer
+- The AI works in a tab of its own, in the background: it never switches the tab you look at, and keeps working in its project while you open another
 - **Spec** cards as nodes: the right port leads to the frames to work in, the left port takes materials; a card is a task or a set of standing rules
 - A task board on Home: the Spec tasks of every open project grouped into in progress, queue and done, with a progress bar in the sidebar; a click jumps to the task on its canvas
 - **AI cursor**: shows which client (Claude, Codex and others) is working and on which layer
@@ -82,6 +83,7 @@ Its main feature is a **built-in MCP server**. An AI assistant (Claude Desktop, 
 - Copy **to Figma and from Figma**, images included
 - **PDF import**: drop a PDF on the canvas and every page becomes a frame, with its text, shapes and pictures as separate layers
 - Export to **PNG**, **SVG** and **PDF** (vector, text stays text)
+- **Archive**: Settings → Storage packs projects you do not need for now into a compressed archive and brings them back
 - Batch export: several selected layers become a file each (named after the layer) in a folder you choose; one layer opens a Save dialog
 - "Export frames to PDF": every frame of a page in one file
 - The `.gigma` format: a project or selected pages in one file, with images

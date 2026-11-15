@@ -8,6 +8,7 @@ export type CommandName =
   | 'open_project'
   | 'list_tabs'
   | 'switch_tab'
+  | 'show_tab'
   | 'get_document'
   | 'list_pages'
   | 'create_page'

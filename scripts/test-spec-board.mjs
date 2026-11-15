@@ -38,6 +38,8 @@ const before = await shell.js(`window.gigma.specs.list().then((l) => l.length)`)
 
 // ---- project A: three tasks and a page of its own for the last one ----
 const a = await mcp('create_project', { name: 'Board A' })
+// an AI works in a background tab; the test drives the mouse, so the tab is brought in front
+await mcp('show_tab', {})
 const home = await mcp('create_frame', { name: 'Home', x: 600, y: 0, width: 360, height: 300, fill: '#FFFFFF' })
 const s1 = await mcp('create_spec', { title: 'Hero block', body: 'A warm headline and **one** button', x: 0, y: 0, frameIds: [home.id] })
 const s2 = await mcp('create_spec', { title: 'Footer', body: 'Links and a copyright line', x: 0, y: 300 })
@@ -49,9 +51,11 @@ await mcp('set_current_page', { pageId: page2.id })
 const s4 = await mcp('create_spec', { title: 'Payment form', body: 'Card, name, pay button', x: 2000, y: 2000 })
 // ---- project B: one task and a card of rules, which is not a task ----
 const b = await mcp('create_project', { name: 'Board B' })
+// an AI works in a background tab; the test drives the mouse, so the tab is brought in front
+await mcp('show_tab', {})
 const s5 = await mcp('create_spec', { title: 'Pricing table', body: 'Three plans', x: 0, y: 0 })
 await mcp('create_spec', { title: 'Brand rules', body: 'Only blue', kind: 'RULES', x: 0, y: 300 })
-await mcp('switch_tab', { tabId: null })
+await mcp('show_tab', { tabId: null })
 await wait(700)
 
 const mine = (l) => l.filter((s) => s.tabId === a.tabId || s.tabId === b.tabId)
@@ -118,7 +122,7 @@ const docA = await attach('#doc=' + encodeURIComponent(a.path))
 check('its page is the current one, the card selected', [await docA.js(`editor.page.name`), await docA.js(`editor.selection`)], ['Checkout', [s4.id]])
 check('the card is in view', await docA.js(`(() => { const w = editor.world('${s4.id}'), c = editor.camera, v = editor.viewport; const x = (w.x + w.w / 2) * c.zoom + c.x, y = (w.y + w.h / 2) * c.zoom + c.y; return x > 0 && x < v.w && y > 0 && y < v.h })()`), true)
 // back on Home the board is still open
-await mcp('switch_tab', { tabId: null })
+await mcp('show_tab', { tabId: null })
 await wait(500)
 check('Home comes back to the board', await shell.js(`!!document.querySelector('.home-main .specs-page')`), true)
 await clickRow('Hero block')
@@ -127,6 +131,8 @@ check('a task with frames: page 1 again, the card selected', [await docA.js(`edi
 check('the card and its frame are both in view', await docA.js(`(() => { const c = editor.camera, v = editor.viewport; return ['${s1.id}', '${home.id}'].every((id) => { const w = editor.world(id); return w.x * c.zoom + c.x >= 0 && (w.x + w.w) * c.zoom + c.x <= v.w && w.y * c.zoom + c.y >= 0 && (w.y + w.h) * c.zoom + c.y <= v.h }) })()`), true)
 
 // ---- it follows the work live ----
+// the assistant goes back to project A; the user stays where they are
+await mcp('switch_tab', { tabId: a.tabId })
 await mcp('update_spec', { id: s1.id, status: 'DONE', result: 'Built' })
 await mcp('update_spec', { id: s2.id, status: 'IN_PROGRESS' }, { 'x-gigma-client': 'codex-mcp-client' })
 await wait(600)
@@ -137,7 +143,7 @@ check('status changes reach the board', live.filter((s) => s.tabId === a.tabId).
   ['Old banner', 'DONE', 'Codex'],
   ['Payment form', 'TODO', null]
 ])
-await mcp('switch_tab', { tabId: null })
+await mcp('show_tab', { tabId: null })
 await wait(400)
 check('the page shows the new state', [only(await group('in_progress')), only(await group('done')).includes('Hero block')], [['Footer'], true])
 await wait(500)

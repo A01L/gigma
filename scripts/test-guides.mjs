@@ -16,11 +16,13 @@ const results = []
 const check = (label, got, want) => (process.env.TRACE && console.error(label), results).push(`${JSON.stringify(got) === JSON.stringify(want) ? 'PASS' : 'FAIL'}  ${label}: ${JSON.stringify(got)}${JSON.stringify(got) === JSON.stringify(want) ? '' : '  want ' + JSON.stringify(want)}`)
 const wait = (ms) => new Promise((r) => setTimeout(r, ms))
 
-await mcp('create_project', { name: 'Guide test' })
+const proj = await mcp('create_project', { name: 'Guide test' })
+// an AI works in a background tab; the test drives the mouse, so the tab is brought in front
+await mcp('show_tab', {})
 // the library is shared by every project: guidelines made earlier may already be in it
 const before = (await mcp('list_guidelines')).length
 const targets = await (await fetch(`http://127.0.0.1:${port}/json`)).json()
-const page = targets.filter((p) => p.type === 'page' && p.url.includes('#doc=')).pop()
+const page = targets.filter((p) => p.type === 'page' && p.url.includes('#doc=' + encodeURIComponent(proj.path))).pop()
 const ws = new WebSocket(page.webSocketDebuggerUrl)
 await new Promise((r) => ws.addEventListener('open', r, { once: true }))
 let id = 0

@@ -50,7 +50,11 @@ const api: GigmaApi = {
     stats: () => ipcRenderer.invoke('library:stats'),
     restore: (path) => ipcRenderer.invoke('trash:restore', path),
     deleteForever: (path) => ipcRenderer.invoke('trash:delete', path),
-    emptyTrash: () => ipcRenderer.invoke('trash:empty')
+    emptyTrash: () => ipcRenderer.invoke('trash:empty'),
+    listArchive: () => ipcRenderer.invoke('archive:list'),
+    archive: (path) => ipcRenderer.invoke('archive:add', path),
+    unarchive: (path) => ipcRenderer.invoke('archive:restore', path),
+    deleteArchived: (path) => ipcRenderer.invoke('archive:delete', path)
   },
   settings: {
     get: () => ipcRenderer.invoke('settings:get'),

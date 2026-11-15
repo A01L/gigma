@@ -14,6 +14,8 @@ async function call(name, args = {}) {
 }
 const json = (c) => JSON.parse(c[0].text)
 await call('create_project', { name: 'Trim test' })
+// an AI works in a background tab; the test drives the mouse, so the tab is brought in front
+await call('show_tab', {})
 const f = json(await call('create_frame', { name: 'Trim', x: 0, y: 0, width: 900, height: 520, fill: '#FFFFFF' }))
 // trim: the box (shown by a tinted rectangle of the same size) hugs the capitals
 for (const [i, trim] of ['STANDARD', 'CAP_HEIGHT'].entries()) {

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { backend } from '../backend'
 import { editor } from '../editor/editor'
 import { installCommandBus } from '../editor/commands'
-import { initGuides } from '../editor/guides'
+import { flushGuides, initGuides } from '../editor/guides'
 import { initSpecBoard } from '../editor/spec-board'
 import { EditorView } from './EditorView'
 import { saveThumbnail } from './actions'
@@ -26,6 +26,7 @@ export function DocApp({ path }: { path: string }) {
     installCommandBus()
     backend.onMenu((action) => window.dispatchEvent(new CustomEvent('gigma-menu', { detail: action })))
     backend.onBeforeClose(async () => {
+      await flushGuides()
       await editor.flush()
       await saveThumbnail()
     })
@@ -77,7 +78,7 @@ export function DocApp({ path }: { path: string }) {
     const h = () => void editor.flush()
     window.addEventListener('beforeunload', h)
     // keep the Home thumbnail fresh when the user switches away from this tab
-    const vis = () => document.visibilityState === 'hidden' && void editor.flush().then(saveThumbnail)
+    const vis = () => document.visibilityState === 'hidden' && void flushGuides().then(() => editor.flush()).then(saveThumbnail)
     document.addEventListener('visibilitychange', vis)
     return () => {
       done = true

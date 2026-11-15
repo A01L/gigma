@@ -16,6 +16,8 @@ async function call(name, args = {}) {
 const json = (c) => JSON.parse(c[0].text)
 
 await call('create_project', { name: 'Typography test' })
+// an AI works in a background tab; the test drives the mouse, so the tab is brought in front
+await call('show_tab', {})
 const f = json(await call('create_frame', { name: 'Type', x: 0, y: 0, width: 960, height: 620, fill: '#FFFFFF' }))
 const T = (args) => call('create_text', { parentId: f.id, color: '#111827', ...args })
 await T({ text: 'uppercase title, -2% tracking', x: 40, y: 32, fontSize: 40, fontWeight: 800, textCase: 'UPPER', letterSpacingPercent: -2 })

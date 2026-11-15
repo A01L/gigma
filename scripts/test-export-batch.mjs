@@ -28,6 +28,8 @@ const pngSize = (f) => {
 clear()
 
 const proj = await mcp('create_project', { name: 'Export test' })
+// an AI works in a background tab; the test drives the mouse, so the tab is brought in front
+await mcp('show_tab', {})
 // two rows of frames; two of them share a name, one has a character a file name cannot have
 const mk = (name, x, y, w, h) => mcp('create_frame', { name, x, y, width: w, height: h, fill: '#3355FF' })
 const a = await mk('01 · Алый закат', 0, 0, 108, 135)

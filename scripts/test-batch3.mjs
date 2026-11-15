@@ -21,6 +21,8 @@ const box = (n) => [n.x, n.y, n.width, n.height]
 const rect = (name, x, y, w, h, parentId, fill = '#94A3B8') => mcp('create_rectangle', { name, x, y, width: w, height: h, fill, parentId }).then(json)
 
 await mcp('create_project', { name: 'Batch3 test' })
+// an AI works in a background tab; the test drives the mouse, so the tab is brought in front
+await mcp('show_tab', {})
 
 // ================= constraints =================
 const card = json(await mcp('create_frame', { name: 'Card', x: 0, y: 0, width: 400, height: 300, fill: '#FFFFFF' }))

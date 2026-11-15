@@ -18,6 +18,8 @@ const check = (label, got, want) => results.push(`${same(got, want) ? 'PASS' : '
 const wait = (ms) => new Promise((r) => setTimeout(r, ms))
 
 const proj = await mcp('create_project', { name: 'Spacing test' })
+// an AI works in a background tab; the test drives the mouse, so the tab is brought in front
+await mcp('show_tab', {})
 // two columns of pictures on the page: the right one is complete (rows 132 apart), the left one waits for its third
 const box = (x, y, w = 160, h = 100) => mcp('create_rectangle', { x, y, width: w, height: h, fill: '#E8743B' })
 const l1 = await box(0, 0)

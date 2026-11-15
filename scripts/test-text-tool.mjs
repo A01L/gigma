@@ -16,6 +16,8 @@ const check = (label, got, want) => results.push(`${JSON.stringify(got) === JSON
 const wait = (ms) => new Promise((r) => setTimeout(r, ms))
 
 const proj = await mcp('create_project', { name: 'Text tool test' })
+// an AI works in a background tab; the test drives the mouse, so the tab is brought in front
+await mcp('show_tab', {})
 const frame = await mcp('create_frame', { name: 'Card', x: 0, y: 0, width: 600, height: 500, fill: '#FFFFFF' })
 await mcp('zoom_to', { ids: [frame.id] })
 await mcp('set_selection', { ids: [] })

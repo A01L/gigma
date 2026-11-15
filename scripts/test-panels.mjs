@@ -15,6 +15,8 @@ const results = []
 const check = (label, got, want) => results.push(`${JSON.stringify(got) === JSON.stringify(want) ? 'PASS' : 'FAIL'}  ${label}: ${JSON.stringify(got)}${JSON.stringify(got) === JSON.stringify(want) ? '' : '  want ' + JSON.stringify(want)}`)
 
 await mcp('create_project', { name: 'Panels test' })
+// an AI works in a background tab; the test drives the mouse, so the tab is brought in front
+await mcp('show_tab', {})
 const f = await mcp('create_frame', { name: 'A frame with a rather long name to see the layers panel', x: 0, y: 0, width: 400, height: 300, fill: '#FFFFFF' })
 const r = await mcp('create_rectangle', { name: 'rect', x: 40, y: 40, width: 200, height: 120, fill: '#2563EB', parentId: f.id })
 const targets = await (await fetch(`http://127.0.0.1:${port}/json`)).json()

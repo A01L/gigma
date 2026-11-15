@@ -71,6 +71,17 @@ export function saveGuide(g: GuideData): void {
   changed()
 }
 
+/** write every edit that is still waiting to the library now (the tab is closing or going to the background) */
+export async function flushGuides(): Promise<void> {
+  const ids = [...saving.keys()]
+  for (const id of ids) {
+    clearTimeout(saving.get(id))
+    saving.delete(id)
+    const g = guides.get(id)
+    if (g) await backend.guides.save(g).catch(() => {})
+  }
+}
+
 export async function removeGuide(id: string): Promise<void> {
   clearTimeout(saving.get(id))
   saving.delete(id)

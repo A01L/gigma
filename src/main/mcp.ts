@@ -103,7 +103,9 @@ function buildServer(run: RunCommand, client = 'AI'): McpServer {
     {
       instructions:
         'Gigma is a local Figma-like design tool. Coordinates are in pixels; x/y of a child are relative to its parent frame. ' +
-        'Projects open in tabs; document tools act on the active tab (see list_tabs / switch_tab). ' +
+        'Projects open in tabs. You work in a tab of your own, in the background: create_project and open_project open the project there without changing what the user looks at, ' +
+        'and your document tools keep acting on that tab even when the user switches to another project (list_tabs shows it as aiTabId; switch_tab moves you to another tab). ' +
+        'Never bring a tab in front of the user unless they ask to see it (show_tab). ' +
         'Typical flow: create_frame (e.g. 1080x1080 for an Instagram post) -> add shapes/text/svg/images with parentId = frame id -> export_png to check the result. ' +
         'Use get_document / get_selection to inspect what the user is working on, get_screenshot to see exactly what is on their screen, ' +
         'and export_png to look at a node or the whole page after your changes. update_node exposes every inspector property ' +
@@ -146,10 +148,11 @@ function buildServer(run: RunCommand, client = 'AI'): McpServer {
   }
 
   tool('list_projects', 'List design projects in the local Gigma library.', {})
-  tool('create_project', 'Create a new project in the library and open it in the editor.', { name: z.string().default('Untitled') })
-  tool('open_project', 'Open a project from list_projects in a tab (or focus its tab if already open).', { path: z.string() })
-  tool('list_tabs', 'List open project tabs and which one is active. Document tools act on the active tab.', {})
-  tool('switch_tab', 'Activate a project tab by id (null = Home).', { tabId: z.string().nullable() })
+  tool('create_project', 'Create a new project in the library and open it in a background tab. Your document tools act on it from now on; the screen of the user does not change.', { name: z.string().default('Untitled') })
+  tool('open_project', 'Open a project from list_projects in a background tab (or take its tab if already open). Your document tools act on it from now on; the screen of the user does not change.', { path: z.string() })
+  tool('list_tabs', 'List open project tabs: activeId is the tab the user looks at, aiTabId is the tab your document tools act on.', {})
+  tool('switch_tab', 'Choose the tab your document tools act on, by id. The screen of the user does not change.', { tabId: z.string().nullable() })
+  tool('show_tab', 'Bring a tab in front of the user (default: the tab you work in; null = Home). Use only when the user asks to see it.', { tabId: z.string().nullable().optional() })
   tool('get_document','Get pages and a compact tree of nodes on the current page (or a given page).', {
     pageId: z.string().optional(),
     depth: z.number().int().min(1).max(20).default(4)

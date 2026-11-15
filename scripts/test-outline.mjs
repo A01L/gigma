@@ -17,6 +17,8 @@ const check = (label, got, want) => results.push(`${same(got, want) ? 'PASS' : '
 const wait = (ms) => new Promise((r) => setTimeout(r, ms))
 
 const proj = await mcp('create_project', { name: 'Outline test' })
+// an AI works in a background tab; the test drives the mouse, so the tab is brought in front
+await mcp('show_tab', {})
 const frame = await mcp('create_frame', { name: 'Sheet', x: 0, y: 0, width: 900, height: 700, fill: '#FFFFFF' })
 const mk = (args) => mcp('create_text', { parentId: frame.id, fill: '#111111', ...args })
 const t1 = await mk({ x: 40, y: 40, text: 'Hamburgefonts 123', fontFamily: 'Arial', fontSize: 48, fontWeight: 700 })

@@ -17,6 +17,8 @@ const check = (label, got, want) => (process.env.TRACE && console.error(label), 
 const svg = (d, w, h, fill = 'none') => `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><path d="${d}" fill="${fill}" stroke="#000"/></svg>`
 
 const proj = await mcp('create_project', { name: 'Vector test' })
+// an AI works in a background tab; the test drives the mouse, so the tab is brought in front
+await mcp('show_tab', {})
 const made = await mcp('create_svg', { svg: svg('M0 0L200 0L200 100L0 100Z', 200, 100, '#D9D9D9'), x: 100, y: 100 })
 const rect = await mcp('create_rectangle', { name: 'rect', x: 400, y: 100, width: 120, height: 80, fill: '#2563EB' })
 const ell = await mcp('create_ellipse', { name: 'ell', x: 600, y: 100, width: 100, height: 100, fill: '#F59E0B' })

@@ -63,9 +63,19 @@ interface IndexItem {
   id: string
 }
 
+/** the part of the document's meta that has a history: its name and the styles made by hand */
+type MetaPick = { name: string; colorStyles: NonNullable<DocMeta['colorStyles']>; textStyles: NonNullable<DocMeta['textStyles']> }
+/** styles that come from a guideline are derived (see guides.ts): they follow the library, not the history */
+const derived = (id: string) => id.startsWith('guide:')
+const pickMeta = (m: DocMeta): MetaPick => ({ name: m.name, colorStyles: (m.colorStyles ?? []).filter((s) => !derived(s.id)), textStyles: (m.textStyles ?? []).filter((s) => !derived(s.id)) })
+
 interface HistoryEntry {
   nodes: Map<string, { before: GNode | null; after: GNode | null }>
   pages: Map<string, { before: Page | null; after: Page | null }>
+  /** the meta as it was when the step began (meta objects are replaced, never changed, so this is a snapshot) */
+  metaWas?: DocMeta
+  /** set when the step changed the name of the project or its styles */
+  meta?: { before: MetaPick; after: MetaPick }
   selBefore: string[]
   selAfter: string[]
   pageBefore: string
@@ -393,6 +403,7 @@ export class Editor {
       this.tx = {
         nodes: new Map(),
         pages: new Map(),
+        metaWas: this.meta,
         selBefore: [...this.selection],
         selAfter: [],
         pageBefore: this.currentPageId,
@@ -441,7 +452,13 @@ export class Editor {
     for (const [id, e] of tx.nodes) if (JSON.stringify(e.before) === JSON.stringify(e.after)) tx.nodes.delete(id)
     tx.selAfter = [...this.selection]
     tx.pageAfter = this.currentPageId
-    if (tx.nodes.size || tx.pages.size) {
+    if (tx.metaWas && tx.metaWas !== this.meta) {
+      const before = pickMeta(tx.metaWas)
+      const after = pickMeta(this.meta)
+      if (JSON.stringify(before) !== JSON.stringify(after)) tx.meta = { before, after }
+    }
+    tx.metaWas = undefined
+    if (tx.nodes.size || tx.pages.size || tx.meta) {
       this.undoStack.push(tx)
       if (this.undoStack.length > 300) this.undoStack.shift()
       this.redoStack = []
@@ -894,6 +911,17 @@ export class Editor {
     this.undoStack.push(e)
   }
   private applyHistory(e: HistoryEntry, side: 'before' | 'after'): void {
+    if (e.meta) {
+      // the name and the hand-made styles go back; styles that follow a guideline stay as the library has them
+      const m = e.meta[side]
+      const patch = {
+        name: m.name,
+        colorStyles: [...clone(m.colorStyles), ...(this.meta.colorStyles ?? []).filter((s) => derived(s.id))],
+        textStyles: [...clone(m.textStyles), ...(this.meta.textStyles ?? []).filter((s) => derived(s.id))]
+      }
+      this.meta = { ...this.meta, ...patch }
+      this.pendingMeta = { ...(this.pendingMeta ?? {}), ...patch }
+    }
     for (const [id, v] of e.pages) {
       const p = v[side]
       if (p) this.pages.set(id, clone(p))
@@ -953,15 +981,20 @@ export class Editor {
     }
   }
   rename(name: string): void {
-    this.meta = { ...this.meta, name }
-    this.pendingMeta = { ...(this.pendingMeta ?? {}), name }
+    // inside a step of history, so Ctrl+Z brings the old name back
+    this.act(() => {
+      this.meta = { ...this.meta, name }
+      this.pendingMeta = { ...(this.pendingMeta ?? {}), name }
+    })
     this.scheduleFlush()
     this.emit('pages')
   }
   /** Saved color styles live in the document file. */
   setColorStyles(colorStyles: NonNullable<DocMeta['colorStyles']>): void {
-    this.meta = { ...this.meta, colorStyles }
-    this.pendingMeta = { ...(this.pendingMeta ?? {}), colorStyles }
+    this.act(() => {
+      this.meta = { ...this.meta, colorStyles }
+      this.pendingMeta = { ...(this.pendingMeta ?? {}), colorStyles }
+    })
     this.scheduleFlush()
     this.emit('doc')
   }
@@ -990,8 +1023,10 @@ export class Editor {
   }
 
   setTextStyles(textStyles: NonNullable<DocMeta['textStyles']>): void {
-    this.meta = { ...this.meta, textStyles }
-    this.pendingMeta = { ...(this.pendingMeta ?? {}), textStyles }
+    this.act(() => {
+      this.meta = { ...this.meta, textStyles }
+      this.pendingMeta = { ...(this.pendingMeta ?? {}), textStyles }
+    })
     this.scheduleFlush()
     this.emit('doc')
   }
@@ -1005,11 +1040,12 @@ export class Editor {
     const styles = (this.meta.colorStyles ?? []).map((s) => (s.id === id ? { ...s, ...patch } : s))
     const style = styles.find((s) => s.id === id)
     if (!style) return
-    this.setColorStyles(styles)
-    if (!patch.color) return
     this.applyingStyle = true
     try {
+      // the style and the layers that follow it change in one step of history
       this.act(() => {
+        this.setColorStyles(styles)
+        if (!patch.color) return
         for (const n of [...this.nodes.values()]) {
           if (n.fillStyleId === id) {
             // the style drives the top solid fill; other fills (images, gradients) stay
@@ -1029,12 +1065,12 @@ export class Editor {
     const styles = (this.meta.textStyles ?? []).map((s) => (s.id === id ? { ...s, ...patch } : s))
     const style = styles.find((s) => s.id === id)
     if (!style) return
-    this.setTextStyles(styles)
-    if (!patch.style) return
     this.applyingStyle = true
     try {
       this.act(() => {
-        for (const n of [...this.nodes.values()]) if (n.textStyleId === id && n.type === 'TEXT') this.updateNode(n.id, { textStyle: clone(style.style) })
+        this.setTextStyles(styles)
+        if (!patch.style) return
+        for (const n of [...this.nodes.values()]) if (n.textStyleId === id && n.type === 'TEXT') this.updateNode(n.id, { textStyleId: id, textStyle: clone(style.style) })
       })
     } finally {
       this.applyingStyle = false
@@ -1050,12 +1086,12 @@ export class Editor {
           if (kind === 'color' && (n.fillStyleId === id || n.strokeStyleId === id)) this.updateNode(n.id, { fillStyleId: n.fillStyleId === id ? undefined : n.fillStyleId, strokeStyleId: n.strokeStyleId === id ? undefined : n.strokeStyleId })
           if (kind === 'text' && n.textStyleId === id) this.updateNode(n.id, { textStyleId: undefined })
         }
+        if (kind === 'color') this.setColorStyles((this.meta.colorStyles ?? []).filter((s) => s.id !== id))
+        else this.setTextStyles((this.meta.textStyles ?? []).filter((s) => s.id !== id))
       })
     } finally {
       this.applyingStyle = false
     }
-    if (kind === 'color') this.setColorStyles((this.meta.colorStyles ?? []).filter((s) => s.id !== id))
-    else this.setTextStyles((this.meta.textStyles ?? []).filter((s) => s.id !== id))
   }
 
   /** A layer edited by hand no longer follows its style (Figma detaches the style the same way). */

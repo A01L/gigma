@@ -1194,3 +1194,25 @@ svg {
     animation: none;
   }
 }
+
+/* an AI client is working in this tab (in the background, over MCP) */
+.tab-ai {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #0d99ff;
+  box-shadow: 0 0 0 0 rgba(13, 153, 255, 0.6);
+  animation: tab-ai 1.4s ease-out infinite;
+}
+@keyframes tab-ai {
+  to {
+    box-shadow: 0 0 0 6px rgba(13, 153, 255, 0);
+  }
+}
+
+/* the archive in Settings → Storage */
+.stor-bar.big i.archive,
+.stor-bar.archive i {
+  background: #8b6fe8;
+}

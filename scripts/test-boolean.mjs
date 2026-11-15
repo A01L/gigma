@@ -18,6 +18,8 @@ const results = []
 const check = (label, got, want) => results.push(`${JSON.stringify(got) === JSON.stringify(want) ? 'PASS' : 'FAIL'}  ${label}: ${JSON.stringify(got)}${JSON.stringify(got) === JSON.stringify(want) ? '' : '  want ' + JSON.stringify(want)}`)
 
 await mcp('create_project', { name: 'Boolean test' })
+// an AI works in a background tab; the test drives the mouse, so the tab is brought in front
+await mcp('show_tab', {})
 const bg = json(await mcp('create_frame', { name: 'BG', x: 0, y: 0, width: 880, height: 240, fill: '#0F172A' }))
 // four pairs: a 120x120 square with a circle overlapping its right half
 const ops = ['UNION', 'SUBTRACT', 'INTERSECT', 'EXCLUDE']

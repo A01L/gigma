@@ -36,6 +36,8 @@ const tools = await rpc('tools/list', {})
 console.log('tools:', tools.result.tools.map((t) => t.name).join(', '))
 
 await call('create_project', { name: 'MCP smoke test' })
+// an AI works in a background tab; the test drives the mouse, so the tab is brought in front
+await call('show_tab', {})
 const f = json(await call('create_frame', { name: 'Post', x: 0, y: 0, width: 1080, height: 1080, fill: '#1E1B4B' }))
 await call('create_ellipse', { x: 640, y: -120, width: 600, height: 600, fill: '#7C3AED', opacity: 0.6, parentId: f.id })
 await call('create_rectangle', { x: 80, y: 760, width: 420, height: 110, fill: '#FACC15', cornerRadius: 55, parentId: f.id })
@@ -54,6 +56,8 @@ const first = json(await call('list_tabs')).activeId
 
 // second project in another tab, then switch back
 await call('create_project', { name: 'MCP smoke test 2' })
+// an AI works in a background tab; the test drives the mouse, so the tab is brought in front
+await call('show_tab', {})
 const f2 = json(await call('create_frame', { name: 'Story', x: 0, y: 0, width: 1080, height: 1920, fill: '#0EA5E9' }))
 await call('create_text', { text: 'Second tab', x: 80, y: 120, fontSize: 120, fontWeight: 800, color: '#FFFFFF', parentId: f2.id })
 await call('zoom_to', { ids: [f2.id] })

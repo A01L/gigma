@@ -16,6 +16,8 @@ async function call(name, args = {}) {
 const json = (c) => JSON.parse(c[0].text)
 
 await call('create_project', { name: 'Effects test' })
+// an AI works in a background tab; the test drives the mouse, so the tab is brought in front
+await call('show_tab', {})
 const f = json(await call('create_frame', { name: 'Effects', x: 0, y: 0, width: 900, height: 520, fill: '#EEF1F6' }))
 // photo-like backdrop to show background blur
 await call('create_image', { source: process.cwd().replace(/\\/g, '/') + '/build/icons/512x512.png', x: 560, y: 120, width: 300, height: 300, parentId: f.id })

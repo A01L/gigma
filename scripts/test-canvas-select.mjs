@@ -12,6 +12,8 @@ async function mcp(name, args = {}) {
   return JSON.parse(j.result.content[0].text)
 }
 await mcp('create_project', { name: 'Select test' })
+// an AI works in a background tab; the test drives the mouse, so the tab is brought in front
+await mcp('show_tab', {})
 const A = await mcp('create_frame', { name: 'A', x: 0, y: 0, width: 300, height: 300 })
 const B = await mcp('create_frame', { name: 'B', x: 400, y: 0, width: 300, height: 300 })
 const a1 = await mcp('create_rectangle', { name: 'a1', x: 30, y: 30, width: 80, height: 80, fill: '#EF4444', parentId: A.id })

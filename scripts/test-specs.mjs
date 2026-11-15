@@ -16,6 +16,8 @@ const results = []
 const check = (label, got, want) => (process.env.TRACE && console.error(label), results).push(`${JSON.stringify(got) === JSON.stringify(want) ? 'PASS' : 'FAIL'}  ${label}: ${JSON.stringify(got)}${JSON.stringify(got) === JSON.stringify(want) ? '' : '  want ' + JSON.stringify(want)}`)
 
 await mcp('create_project', { name: 'Spec test' })
+// an AI works in a background tab; the test drives the mouse, so the tab is brought in front
+await mcp('show_tab', {})
 const home = await mcp('create_frame', { name: 'Home', x: 500, y: 0, width: 360, height: 300, fill: '#FFFFFF' })
 const cart = await mcp('create_frame', { name: 'Cart', x: 500, y: 380, width: 360, height: 300, fill: '#FFFFFF' })
 const other = await mcp('create_frame', { name: 'Other', x: 960, y: 0, width: 360, height: 300, fill: '#FFFFFF' })

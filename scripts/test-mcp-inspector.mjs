@@ -25,6 +25,8 @@ const tools = await fetch('http://127.0.0.1:7331/mcp', {
 log('tools:', tools.result.tools.length)
 
 await call('create_project', { name: 'MCP inspector test' })
+// an AI works in a background tab; the test drives the mouse, so the tab is brought in front
+await call('show_tab', {})
 await call('update_page', { name: 'Main', background: '#1F2937' })
 const f = json(await call('create_frame', { name: 'Grid', x: 0, y: 0, width: 800, height: 400, fill: '#F8FAFC', cornerRadius: 24 }))
 await call('update_node', { id: f.id, clipsContent: true, effects: [{ type: 'DROP_SHADOW', color: '#00000066', y: 20, radius: 40 }] })

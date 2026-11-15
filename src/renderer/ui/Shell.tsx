@@ -55,7 +55,7 @@ export function Shell() {
             <div
               key={tab.id}
               className={'tab no-drag' + (tab.id === state.activeId ? ' active' : '')}
-              title={tab.name}
+              title={tab.name + (tab.ai ? ' · ' + t('AI is working here') : '')}
               onMouseDown={(e) => {
                 if (e.button === 1) {
                   e.preventDefault()
@@ -64,6 +64,7 @@ export function Shell() {
               }}
               onClick={() => backend.tabs.activate(tab.id)}
             >
+              {tab.ai && <span className="tab-ai" />}
               <span className="tab-name">{tab.name}</span>
               <button
                 className="tab-close"
