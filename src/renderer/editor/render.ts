@@ -164,6 +164,11 @@ function drawMissingImage(ctx: CanvasRenderingContext2D, r: Rect): void {
   }
   ctx.restore()
 }
+/** the size of a picture that is already loaded (null while it is not) */
+export function imageDims(key: string): { w: number; h: number } | null {
+  const b = liveImages.get(key) ?? images.get(key)?.bmp
+  return b ? { w: b.width, h: b.height } : null
+}
 export function imageSize(hash: string): Promise<{ w: number; h: number } | null> {
   return loadImage(hash).then((b) => (b ? { w: b.width, h: b.height } : null))
 }

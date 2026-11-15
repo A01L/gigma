@@ -36,16 +36,34 @@ function pasteTarget(): string | null {
   return null
 }
 
-function placeNodes(nodes: GNode[]): string[] {
+/**
+ * Puts pasted layers on the page, always where the user is looking.
+ * `foreign`: the layers come from another program (Figma, an SVG), so their coordinates mean nothing here
+ * (in Figma they are counted from the parent of the copied layer): they go to the middle of the view,
+ * or into the selected frame at the same place inside it when they fit there.
+ */
+function placeNodes(nodes: GNode[], foreign = false): string[] {
   const roots = nodes.filter((n) => !n.parentId || !nodes.some((m) => m.id === n.parentId))
   const b = unionRects(roots.map((n) => ({ x: n.x, y: n.y, w: n.width, h: n.height })))!
-  const target = pasteTarget()
   const view = ed.visibleWorldRect()
+  const middle = { x: view.x + view.w / 2, y: view.y + view.h / 2 }
+  let target = pasteTarget()
+  // a selected frame that was scrolled out of sight is not where the paste is wanted
+  if (target && !rectsIntersect(ed.world(target), view)) target = null
   let at: { x: number; y: number } | undefined
   if (target) {
     const tw = ed.world(target)
-    if (!rectsIntersect(b, tw)) at = { x: tw.x + tw.w / 2, y: tw.y + tw.h / 2 }
-  } else if (!rectsIntersect(b, view)) at = { x: view.x + view.w / 2, y: view.y + view.h / 2 }
+    if (foreign) {
+      const fits = b.x >= 0 && b.y >= 0 && b.x + b.w <= tw.w && b.y + b.h <= tw.h
+      at = fits ? { x: tw.x + b.x + b.w / 2, y: tw.y + b.y + b.h / 2 } : { x: tw.x + tw.w / 2, y: tw.y + tw.h / 2 }
+      // the frame is in view but that spot of it is not: the middle of what is seen of the frame
+      if (!rectsIntersect({ x: at.x - b.w / 2, y: at.y - b.h / 2, w: b.w, h: b.h }, view)) {
+        const x1 = Math.max(tw.x, view.x), x2 = Math.min(tw.x + tw.w, view.x + view.w)
+        const y1 = Math.max(tw.y, view.y), y2 = Math.min(tw.y + tw.h, view.y + view.h)
+        at = { x: (x1 + x2) / 2, y: (y1 + y2) / 2 }
+      }
+    } else if (!rectsIntersect(b, tw) || !rectsIntersect(b, view)) at = middle.x >= tw.x && middle.y >= tw.y && middle.x <= tw.x + tw.w && middle.y <= tw.y + tw.h ? middle : { x: tw.x + tw.w / 2, y: tw.y + tw.h / 2 }
+  } else if (foreign || !rectsIntersect(b, view)) at = middle
   return ed.pasteNodes(nodes, target, at)
 }
 
@@ -88,7 +106,7 @@ export async function handlePaste(e: ClipboardEvent): Promise<void> {
     if (html && html.includes('(figma)')) {
       const nodes = await decodeFigmaClipboard(html)
       if (nodes?.length) {
-        const ids = placeNodes(nodes)
+        const ids = placeNodes(nodes, true)
         // Figma's clipboard has no image bytes: let the UI offer to fetch them
         window.dispatchEvent(new CustomEvent('gigma-figma-pasted', { detail: ids }))
         return
@@ -104,7 +122,7 @@ export async function handlePaste(e: ClipboardEvent): Promise<void> {
         return
       }
       if (/^\s*(<\?xml[^>]*>\s*)?(<!--[\s\S]*?-->\s*)*<svg[\s>]/i.test(text)) {
-        placeNodes(await svgToNodes(text))
+        placeNodes(await svgToNodes(text), true)
         return
       }
     }

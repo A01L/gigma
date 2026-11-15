@@ -1,13 +1,13 @@
 // Canvas controller: render loop + pointer interactions (select, move, resize, create,
 // marquee, pan/zoom, snapping) for the main editor canvas. Plain TS, no React, so input
 // handling never waits for UI re-renders.
-import type { GNode, GradientPaint, UnitPoint } from '@shared/types'
+import type { GNode, GradientPaint, Paint, UnitPoint } from '@shared/types'
 import { rgbaToCss } from '@shared/types'
 import { editor as ed } from './editor'
 import { guides, placeGuide, newGuide, saveGuide, setGuideOpen } from './guides'
 import { guideAccent } from './guide-render'
 import { VectorEdit, vectorEdit } from './vector-edit'
-import { applyNodeTransform, cornerRadiiOf, drawScene, hasTransform, outlineShape, setImageLoadedCallback } from './render'
+import { applyNodeTransform, cornerRadiiOf, drawScene, hasTransform, imageDims, imageKey, outlineShape, setImageLoadedCallback } from './render'
 import { across, angleOf, colorAt, handlesOf, type Handles } from './gradient'
 import { rectsIntersect, round2, unionRects, type Rect } from './util'
 import { maxShapeRadius, smoothPath } from './shapes'
@@ -61,7 +61,7 @@ const CURSORS: Record<Handle, string> = { nw: 'nwse-resize', se: 'nwse-resize', 
 type Drag =
   | { kind: 'pan'; sx: number; sy: number }
   | { kind: 'move'; sx: number; sy: number; ids: string[]; orig: Map<string, Rect>; box: Rect; moved: boolean; dup: boolean }
-  | { kind: 'resize'; handle: Handle; box: Rect; ids: string[]; orig: Map<string, Rect>; snap?: Map<string, GNode>; rot: number }
+  | { kind: 'resize'; handle: Handle; box: Rect; ids: string[]; orig: Map<string, Rect>; snap?: Map<string, GNode>; rot: number; keepRatio: boolean; crop?: { fills: Paint[]; index: number; part: Rect } }
   | { kind: 'rotate'; cx: number; cy: number; a0: number; orig: Map<string, { cx: number; cy: number; rot: number }> }
   /** dragging a wire out of a Spec card towards a frame (world coordinates of the loose end) */
   | { kind: 'link'; spec: string; side: 'l' | 'r'; x: number; y: number; target: string | null }
@@ -1200,6 +1200,39 @@ export class CanvasController {
   }
 
   /** rotation of the selection box: a single rotated layer shows its box rotated with it */
+  /** the picture a layer shows (its topmost visible image fill), for layers that are pictures and not containers */
+  private pictureOf(id: string): { index: number } | null {
+    const n = ed.nodes.get(id)
+    if (!n || n.type === 'FRAME' || n.type === 'GROUP' || n.type === 'TEXT' || n.type === 'SECTION') return null
+    for (let i = n.fills.length - 1; i >= 0; i--) {
+      const f = n.fills[i]
+      if (f.visible === false) continue
+      return f.type === 'IMAGE' ? { index: i } : null
+    }
+    return null
+  }
+  /** what part of its picture a layer shows (in units of the picture), so that Ctrl on a handle can crop it */
+  private cropOf(id: string): { fills: Paint[]; index: number; part: Rect } | undefined {
+    const at = this.pictureOf(id)
+    const n = ed.nodes.get(id)
+    if (!at || !n) return undefined
+    const f = n.fills[at.index]
+    if (f.type !== 'IMAGE') return undefined
+    let part: Rect | null = null
+    if (f.scaleMode === 'STRETCH') {
+      const t = f.transform
+      if (!t) part = { x: 0, y: 0, w: 1, h: 1 }
+      else if (Math.abs(t[1]) < 1e-6 && Math.abs(t[2]) < 1e-6 && t[0] > 0 && t[3] > 0) part = { x: t[4], y: t[5], w: t[0], h: t[3] }
+    } else if (f.scaleMode === 'FILL') {
+      const s = imageDims(imageKey(f))
+      if (s && n.width && n.height) {
+        const k = Math.max(n.width / s.w, n.height / s.h)
+        const w = n.width / (s.w * k), h = n.height / (s.h * k)
+        part = { x: (1 - w) / 2, y: (1 - h) / 2, w, h }
+      }
+    }
+    return part ? { fills: n.fills, index: at.index, part } : undefined
+  }
   private boxRotation(): number {
     return ed.selection.length === 1 ? (ed.nodes.get(ed.selection[0])?.rotation ?? 0) : 0
   }
@@ -1402,7 +1435,10 @@ export class CanvasController {
         ids,
         orig: new Map(all.map((id) => [id, { ...ed.world(id) }])),
         snap: ed.tool === 'scale' ? new Map(all.map((id) => [id, structuredClone(ed.nodes.get(id)!)])) : undefined,
-        rot: this.boxRotation()
+        rot: this.boxRotation(),
+        // pictures never get squashed: they keep their proportions without Shift, and Ctrl crops them
+        keepRatio: ed.tool !== 'scale' && ids.every((id) => this.pictureOf(id)),
+        crop: ed.tool !== 'scale' && ids.length === 1 ? this.cropOf(ids[0]) : undefined
       }
       ed.begin()
       return
@@ -1703,7 +1739,17 @@ export class CanvasController {
         if (d.handle.includes('e')) x2 = p.x
         if (d.handle.includes('n')) y1 = p.y
         if (d.handle.includes('s')) y2 = p.y
-        if (e.shiftKey && d.handle.length === 2 && b.w && b.h) {
+        const cropping = !!d.crop && (e.ctrlKey || e.metaKey)
+        const keep = !cropping && (e.shiftKey || d.keepRatio)
+        // the whole picture in the space of the box: a crop never goes past its edges
+        const pic = d.crop ? { x: b.x - (d.crop.part.x * b.w) / d.crop.part.w, y: b.y - (d.crop.part.y * b.h) / d.crop.part.h, w: b.w / d.crop.part.w, h: b.h / d.crop.part.h } : null
+        if (cropping && pic) {
+          if (d.handle.includes('w')) x1 = Math.min(Math.max(x1, pic.x), x2 - 1)
+          if (d.handle.includes('e')) x2 = Math.max(Math.min(x2, pic.x + pic.w), x1 + 1)
+          if (d.handle.includes('n')) y1 = Math.min(Math.max(y1, pic.y), y2 - 1)
+          if (d.handle.includes('s')) y2 = Math.max(Math.min(y2, pic.y + pic.h), y1 + 1)
+        }
+        if (keep && d.handle.length === 2 && b.w && b.h) {
           const ratio = b.w / b.h
           const w = Math.abs(x2 - x1), h = Math.abs(y2 - y1)
           if (w / h > ratio) {
@@ -1716,7 +1762,7 @@ export class CanvasController {
             else x2 = x1 + nw * Math.sign(x2 - x1 || 1)
           }
         }
-        if (e.shiftKey && d.handle.length === 1 && b.w && b.h) {
+        if (keep && d.handle.length === 1 && b.w && b.h) {
           // a side with Shift: the other dimension follows, growing evenly to both sides of the middle
           const ratio = b.w / b.h
           if (d.handle === 'e' || d.handle === 'w') {
@@ -1763,6 +1809,13 @@ export class CanvasController {
           }
           ed.emit('doc')
           break
+        }
+        if (d.crop && pic) {
+          // Ctrl: the picture stays where it is and the moved edge cuts it; without Ctrl the fill is as it was
+          const fills = d.crop.fills.slice()
+          const f = fills[d.crop.index]
+          if (cropping && f.type === 'IMAGE') fills[d.crop.index] = { ...f, scaleMode: 'STRETCH', transform: [nb.w / pic.w, 0, 0, nb.h / pic.h, (nb.x - pic.x) / pic.w, (nb.y - pic.y) / pic.h] }
+          ed.updateNode(d.ids[0], { fills })
         }
         if (d.rot) {
           // keep the opposite corner where it is on screen: the new center is the rotated image of the box center
