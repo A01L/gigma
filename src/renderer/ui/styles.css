@@ -1295,3 +1295,35 @@ svg {
 .mask-bar .seg button {
   padding: 0 10px;
 }
+
+/* ---- search in the list of layers ---- */
+.layer-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  margin-left: -4px;
+  color: var(--text-2);
+}
+.layer-search input {
+  flex: 1;
+  min-width: 0;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 4px;
+  border: 1px solid var(--accent);
+  background: var(--bg);
+  color: var(--text);
+  font-weight: 400;
+  outline: none;
+}
+.layers mark {
+  background: rgba(13, 153, 255, 0.35);
+  color: inherit;
+  border-radius: 2px;
+}
+.layers-empty {
+  padding: 10px 12px;
+  color: var(--text-2);
+}

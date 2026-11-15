@@ -247,6 +247,13 @@ export function handleKey(e: KeyboardEvent): void {
   }
   if (mod && k === 'z' && !e.shiftKey) return act('undo')
   if (mod && ((k === 'z' && e.shiftKey) || k === 'y')) return act('redo')
+  if (mod && e.code === 'KeyF' && !e.shiftKey && !e.altKey) {
+    // the search of the layers (the left panel is opened for it)
+    e.preventDefault()
+    if (!ed.leftOpen) runAction('toggle-left')
+    setTimeout(() => window.dispatchEvent(new CustomEvent('gigma-find-layer')), 0)
+    return
+  }
   if (mod && k === 'd') return act('duplicate')
   if (mod && k === 'a') return act('select-all')
   if (mod && k === '\\') return act(e.altKey ? 'toggle-right' : 'toggle-left')

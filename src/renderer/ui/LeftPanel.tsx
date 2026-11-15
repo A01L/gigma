@@ -13,6 +13,16 @@ export function LeftPanel({ onHome }: { onHome: () => void }) {
   useEditor('pages')
   const t = useT()
   const [renaming, setRenaming] = useState(false)
+  /** what is typed into the search of the layers: the list shows the layers that match while it is not empty */
+  const [query, setQuery] = useState('')
+  const [searching, setSearching] = useState(false)
+  // Ctrl+F in the editor opens the search
+  useEffect(() => {
+    const h = () => setSearching(true)
+    window.addEventListener('gigma-find-layer', h)
+    return () => window.removeEventListener('gigma-find-layer', h)
+  }, [])
+  const closeSearch = () => (setSearching(false), setQuery(''))
   return (
     <div className="panel left">
       <div className="p-head">
@@ -32,9 +42,18 @@ export function LeftPanel({ onHome }: { onHome: () => void }) {
       </div>
       <Pages />
       <div className="section-title" style={{ marginTop: 6 }}>
-        {t('Layers')}
+        {searching ? (
+          <LayerSearch value={query} onChange={setQuery} onClose={closeSearch} />
+        ) : (
+          <>
+            {t('Layers')}
+            <button className="icon-btn" title={t('Find a layer (Ctrl+F)')} onClick={() => setSearching(true)}>
+              {Icons.search}
+            </button>
+          </>
+        )}
       </div>
-      <Layers />
+      <Layers query={searching ? query.trim().toLowerCase() : ''} />
     </div>
   )
 }
@@ -58,6 +77,45 @@ function InlineRename({ value, onDone }: { value: string; onDone: (v: string | n
       }}
       onClick={(e) => e.stopPropagation()}
     />
+  )
+}
+
+function LayerSearch({ value, onChange, onClose }: { value: string; onChange: (v: string) => void; onClose: () => void }) {
+  const t = useT()
+  const ref = useRef<HTMLInputElement>(null)
+  useEffect(() => ref.current?.focus(), [])
+  return (
+    <div className="layer-search">
+      {Icons.search}
+      <input
+        ref={ref}
+        value={value}
+        placeholder={t('Find a layer')}
+        spellCheck={false}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          e.stopPropagation()
+          if (e.key === 'Escape') onClose()
+        }}
+        onClick={(e) => e.stopPropagation()}
+      />
+      <button className="icon-btn" title={t('Close')} onClick={onClose}>
+        ×
+      </button>
+    </div>
+  )
+}
+
+/** a name with the found part marked */
+function Marked({ text, query }: { text: string; query: string }) {
+  const i = query ? text.toLowerCase().indexOf(query) : -1
+  if (i < 0) return <>{text}</>
+  return (
+    <>
+      {text.slice(0, i)}
+      <mark>{text.slice(i, i + query.length)}</mark>
+      {text.slice(i + query.length)}
+    </>
   )
 }
 
@@ -120,7 +178,8 @@ interface Row {
   hasKids: boolean
 }
 
-function Layers() {
+function Layers({ query }: { query: string }) {
+  const t = useT()
   const v = useEditor('doc', 'selection', 'pages')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [renaming, setRenaming] = useState<string | null>(null)
@@ -151,6 +210,21 @@ function Layers() {
   // Flatten tree (top of z-order first, like Figma).
   const rows = useMemo(() => {
     const out: Row[] = []
+    if (query) {
+      // a search: every layer of the page whose name (or text) has the words, as a flat list in the order of the tree
+      const find = (parent: string | null) => {
+        const flow = isAutoLayout(parent ? ed.nodes.get(parent) : undefined)
+        const kids = flow ? [...ed.children(parent)].reverse() : ed.children(parent)
+        for (let i = kids.length - 1; i >= 0; i--) {
+          const n = ed.nodes.get(kids[i])
+          if (!n || n.type === 'ANNOTATION') continue
+          if (n.name.toLowerCase().includes(query) || (n.type === 'TEXT' && (n.characters ?? '').toLowerCase().includes(query))) out.push({ id: n.id, depth: 0, hasKids: false })
+          find(n.id)
+        }
+      }
+      find(null)
+      return out
+    }
     const walk = (parent: string | null, depth: number) => {
       // auto layout frames list their items in layout order (first item on top), as Figma does
       const flow = isAutoLayout(parent ? ed.nodes.get(parent) : undefined)
@@ -166,7 +240,7 @@ function Layers() {
     }
     walk(null, 0)
     return out
-  }, [v, expanded])
+  }, [v, expanded, query])
 
   const selSet = new Set(ed.selection)
   const first = Math.max(0, Math.floor(scroll / ROW_H) - 5)
@@ -233,6 +307,7 @@ function Layers() {
 
   return (
     <div className="layers" ref={boxRef} onScroll={(e) => setScroll((e.target as HTMLDivElement).scrollTop)} onClick={() => ed.setSelection([])}>
+      {query && !rows.length && <div className="layers-empty">{t('Nothing found')}</div>}
       <div style={{ height: rows.length * ROW_H, position: 'relative' }}>
         {rows.slice(first, last).map((r, i) => {
           const n = ed.nodes.get(r.id)
@@ -244,7 +319,7 @@ function Layers() {
               key={r.id}
               className={'list-row' + (selected ? ' selected' : inSel ? ' child-of-selected' : '') + (dropAt?.id === r.id ? ' drop-' + dropAt.zone : '')}
               style={{ position: 'absolute', top: (first + i) * ROW_H, left: 0, right: 0, paddingLeft: 4 + r.depth * 16 }}
-              draggable={renaming !== r.id}
+              draggable={renaming !== r.id && !query}
               onDragStart={(e) => {
                 dragId.current = r.id
                 e.dataTransfer.effectAllowed = 'move'
@@ -284,7 +359,15 @@ function Layers() {
               onClick={(e) => {
                 e.stopPropagation()
                 if (e.shiftKey || e.ctrlKey || e.metaKey) ed.setSelection(selected ? ed.selection.filter((s) => s !== r.id) : [...ed.selection, r.id])
-                else ed.setSelection([r.id])
+                else {
+                  ed.setSelection([r.id])
+                  // a layer found by the search is brought into view when it is out of sight
+                  if (query) {
+                    const w = ed.world(r.id), view = ed.visibleWorldRect()
+                    const seen = w.x < view.x + view.w && w.x + w.w > view.x && w.y < view.y + view.h && w.y + w.h > view.y
+                    if (!seen) ed.zoomToRect({ x: w.x - 40, y: w.y - 40, w: w.w + 80, h: w.h + 80 }, Math.max(ed.camera.zoom, 0.1))
+                  }
+                }
               }}
               onDoubleClick={(e) => (e.stopPropagation(), setRenaming(r.id))}
             >
@@ -297,7 +380,9 @@ function Layers() {
               {renaming === r.id ? (
                 <InlineRename value={n.name} onDone={(v) => (setRenaming(null), v && ed.act(() => ed.updateNode(r.id, { name: v })))} />
               ) : (
-                <span className={'name' + (n.visible ? '' : ' dim')}>{n.name}</span>
+                <span className={'name' + (n.visible ? '' : ' dim')}>
+                  <Marked text={n.name} query={query} />
+                </span>
               )}
               <span className={'row-actions' + (!n.visible || n.locked ? ' pinned' : '')}>
                 <button title={n.locked ? 'Unlock' : 'Lock'} onClick={(e) => (e.stopPropagation(), ed.act(() => ed.updateNode(r.id, { locked: !n.locked })))}>

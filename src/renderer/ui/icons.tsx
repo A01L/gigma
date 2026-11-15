@@ -7,6 +7,12 @@ const S = (d: ReactElement | ReactElement[], size = 16) => (
 )
 
 export const Icons = {
+  search: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+      <circle cx="7" cy="7" r="4.2" />
+      <path d="M10.2 10.2L13.5 13.5" />
+    </svg>
+  ),
   // plump, rounded pointer: a filled triangle whose thick round-joined stroke softens every corner
   // Figma-like outlined pointer with soft rounded corners
   move: S(<path d="M3.6 2.9l9.3 3.5-4 1.6-1.6 4z" strokeWidth="1.3" strokeLinejoin="round" />, 18),

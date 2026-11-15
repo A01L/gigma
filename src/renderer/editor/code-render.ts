@@ -6,6 +6,11 @@ import { backend } from '../backend'
 
 type Entry = { bmp: ImageBitmap | null; promise: Promise<ImageBitmap | null>; failed?: boolean }
 const cache = new Map<string, Entry>()
+/** the last picture made of each block (by its markup), shown while a sharper or resized one is being made */
+const recent = new Map<string, ImageBitmap>()
+const contentKey = (n: GNode): string => (n.code?.html ?? '') + '</>' + (n.code?.css ?? '')
+/** the largest picture a block is rendered into ahead of time, in pixels */
+const AHEAD_MAX = 16e6
 let onReady: () => void = () => {}
 export function setCodeReadyCallback(fn: () => void): void {
   onReady = fn
@@ -59,16 +64,20 @@ async function render(n: GNode, w: number, h: number, scale: number): Promise<Im
 /** Resolution buckets: re-render only when zoom changes a lot. */
 const bucket = (s: number) => Math.min(4, Math.pow(2, Math.ceil(Math.log2(Math.max(0.25, s)))))
 
-/** Cached bitmap for drawing; null while rendering (callback fires when ready). */
-export function getCodeBitmap(n: GNode, w: number, h: number, deviceScale: number): ImageBitmap | null {
-  const s = bucket(deviceScale)
+function entryFor(n: GNode, w: number, h: number, s: number): Entry {
   const key = JSON.stringify([n.code?.html, n.code?.css, Math.round(w), Math.round(h), s])
   let e = cache.get(key)
   if (!e) {
     const entry: Entry = { bmp: null, promise: Promise.resolve(null) }
+    const content = contentKey(n)
     entry.promise = render(n, Math.round(w), Math.round(h), s)
       .then((b) => {
         entry.bmp = b
+        if (b) {
+          recent.delete(content)
+          recent.set(content, b)
+          if (recent.size > 200) recent.delete(recent.keys().next().value!)
+        }
         onReady()
         return b
       })
@@ -80,13 +89,23 @@ export function getCodeBitmap(n: GNode, w: number, h: number, deviceScale: numbe
     e = entry
     if (cache.size > 200) cache.delete(cache.keys().next().value!)
   }
-  return e.bmp
+  return e
+}
+
+/**
+ * Cached bitmap for drawing. While the one for this zoom is being rendered, the last one made of the same block is
+ * given instead (a little soft, but the block never vanishes); null only for a block that was never rendered.
+ * The next sharper one is rendered ahead when the zoom gets close to needing it.
+ */
+export function getCodeBitmap(n: GNode, w: number, h: number, deviceScale: number): ImageBitmap | null {
+  const s = bucket(deviceScale)
+  const e = entryFor(n, w, h, s)
+  if (e.bmp && s < 4 && deviceScale > s * 0.7 && w * h * s * s * 4 <= AHEAD_MAX) entryFor(n, w, h, s * 2)
+  return e.bmp ?? recent.get(contentKey(n)) ?? null
 }
 
 export async function codeBitmapAsync(n: GNode, w: number, h: number, scale: number): Promise<ImageBitmap | null> {
-  getCodeBitmap(n, w, h, scale)
-  const s = bucket(scale)
-  return cache.get(JSON.stringify([n.code?.html, n.code?.css, Math.round(w), Math.round(h), s]))!.promise
+  return entryFor(n, w, h, bucket(scale)).promise
 }
 
 export async function codeToPngDataUrl(n: GNode, w: number, h: number): Promise<string | null> {

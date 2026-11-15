@@ -1586,6 +1586,8 @@ export class CanvasController {
   private dropTargetAt(x: number, y: number, ids: string[]): string | null {
     const target = ed.frameAt(x, y, new Set(ids))
     if (!target) return null
+    // layers moved about inside their own frame stay in it, whatever their size: only the cursor leaving it takes them out
+    if (ids.every((id) => ed.nodes.get(id)?.parentId === target)) return target
     // a layer bigger than the frame under the cursor is being moved past it, not into it
     const tw = ed.world(target)
     const b = ed.selectionBounds(ids)

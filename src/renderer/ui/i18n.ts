@@ -442,6 +442,8 @@ const RU: Record<string, string> = {
   'Radial': 'Радиальный',
   'Angle': 'Угол',
   'Add stop': 'Добавить точку',
+  'Find a layer (Ctrl+F)': 'Найти слой (Ctrl+F)',
+  'Find a layer': 'Найти слой',
   'Hide parts of the picture': 'Скрыть части картинки',
   'Bring parts of the picture back': 'Вернуть части картинки',
   Erase: 'Стереть',
