@@ -255,6 +255,7 @@ const RU: Record<string, string> = {
   'License': 'Лицензия',
   'license text': 'текст лицензии',
   'Repository': 'Репозиторий',
+  'Support the project': 'Поддержать проект',
   'Report a problem': 'Сообщить о проблеме',
   'Projects': 'Проекты',
   'Open': 'Открыть',

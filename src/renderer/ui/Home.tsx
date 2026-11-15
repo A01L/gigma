@@ -476,6 +476,12 @@ function SettingsView() {
             github.com/A01L/gigma/issues
           </a>
         </div>
+        <div className="set-row">
+          <span>{t('Support the project')}</span>
+          <a className="about-value" href="https://ko-fi.com/a01l0" target="_blank" rel="noreferrer">
+            ko-fi.com/a01l0
+          </a>
+        </div>
       </section>
     </div>
   )

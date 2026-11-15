@@ -424,6 +424,10 @@ node scripts/test-panels.mjs        # resizable side panels
 - [ ] Importing styles and components from Figma
 - [ ] A plugin catalogue
 
+## Support
+
+Gigma is free and stays free. If it saves you time and you want to help it grow, you can support the project on Ko-fi: [ko-fi.com/a01l0](https://ko-fi.com/a01l0).
+
 ## License
 
 [MIT](LICENSE)
