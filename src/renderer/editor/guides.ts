@@ -2,11 +2,12 @@
 // and are shared by every project: this module keeps them in memory, saves edits, and keeps the open
 // document in step with them (dots of deleted guidelines go away, colours and fonts of the guidelines
 // used here become styles of the document and follow every change).
-import type { GNode, GuideData, RGBA } from '@shared/types'
+import type { GNode, GuideData, GuideFrames, RGBA } from '@shared/types'
 import { hexToRgba } from '@shared/types'
 import { backend } from '../backend'
 import { editor as ed } from './editor'
 import { DEFAULT_TEXT_STYLE } from './text'
+import { t } from '../ui/i18n'
 import { GUIDE_CARD_W, GUIDE_DOT, guideCardHeight, guideStore, setGuideRepaint } from './guide-render'
 
 export const guides = guideStore
@@ -177,6 +178,95 @@ export function reconcile(): void {
   }
 }
 
+// ---------------------------------------------------------------- the frames wired to a guideline travel with it
+const toDataUrl = (blob: Blob) =>
+  new Promise<string>((res, rej) => {
+    const r = new FileReader()
+    r.onload = () => res(String(r.result))
+    r.onerror = () => rej(r.error)
+    r.readAsDataURL(blob)
+  })
+
+/**
+ * The frames (and sections) wired to a guideline in the open project, ready to go into its .gguide file: every layer
+ * of them, the roots placed relative to the dot of the guideline, and the pictures they use.
+ */
+export async function collectGuideFrames(guideId: string): Promise<GuideFrames | null> {
+  const nodes: GNode[] = []
+  const hashes = new Set<string>()
+  const taken = new Set<string>()
+  for (const dot of ed.nodes.values()) {
+    if (dot.type !== 'GUIDE' || dot.guide?.id !== guideId) continue
+    const from = ed.world(dot.id)
+    for (const id of dot.guide.targets ?? []) {
+      const root = ed.nodes.get(id)
+      if (!root || taken.has(id)) continue
+      const w = ed.world(id)
+      for (const one of [id, ...ed.descendants(id)]) {
+        if (taken.has(one)) continue
+        taken.add(one)
+        const n = structuredClone(ed.nodes.get(one)!)
+        if (one === id) {
+          n.parentId = null
+          n.x = Math.round((w.x - from.x) * 100) / 100
+          n.y = Math.round((w.y - from.y) * 100) / 100
+        }
+        for (const f of n.fills) if (f.type === 'IMAGE') hashes.add(f.imageHash)
+        nodes.push(n)
+      }
+    }
+  }
+  if (!nodes.length) return null
+  const images: Record<string, string> = {}
+  for (const hash of hashes) {
+    try {
+      const r = await fetch(backend.blob.url(hash))
+      if (r.ok) images[hash] = await toDataUrl(await r.blob())
+    } catch {
+      /* a picture that is not in the project (never loaded from Figma) is simply left out */
+    }
+  }
+  return { nodes, images }
+}
+
+/** Save a guideline as a .gguide file, together with the frames wired to it in this project. */
+export async function exportGuideFile(id: string): Promise<boolean> {
+  // undefined when this project has no frames on it: the ones the library already keeps for it go along
+  return backend.guides.exportFile(id, (await collectGuideFrames(id)) ?? undefined)
+}
+
+/**
+ * A guideline that came with frames (from a .gguide file) brings them to the canvas the first time it is placed
+ * in a project: they land where they were relative to the dot, and are wired to it again.
+ */
+async function bringFrames(dotId: string, guideId: string): Promise<void> {
+  // only once per project: a second dot of the same guideline does not multiply the frames
+  for (const n of ed.nodes.values()) if (n.type === 'GUIDE' && n.id !== dotId && n.guide?.id === guideId) return
+  const fr = await backend.guides.frames(guideId).catch(() => null)
+  const dot = ed.nodes.get(dotId)
+  if (!fr?.nodes.length || !dot) return
+  for (const [hash, url] of Object.entries(fr.images)) {
+    try {
+      const blob = await (await fetch(url)).blob()
+      await backend.blob.put(new Uint8Array(await blob.arrayBuffer()), blob.type || 'image/png')
+      void hash
+    } catch {
+      /* the layer keeps its place, the picture shows as missing */
+    }
+  }
+  if (!ed.nodes.has(dotId)) return
+  const at = ed.world(dotId)
+  const ids = new Set(fr.nodes.map((n) => n.id))
+  const nodes = fr.nodes.map((n) => (n.parentId && ids.has(n.parentId) ? n : { ...n, parentId: null, x: at.x + n.x, y: at.y + n.y }))
+  ed.act(() => {
+    const roots = ed.pasteNodes(nodes, null)
+    const d = ed.nodes.get(dotId)
+    if (d?.guide) ed.updateNode(dotId, { guide: { ...d.guide, targets: [...new Set([...(d.guide.targets ?? []), ...roots])] } })
+  })
+  ed.setSelection([dotId])
+  ed.showToast(t('Frames of the guideline were placed with it'))
+}
+
 /** Put a guideline on the canvas: a closed dot, or an open card for one that was just created. */
 export function placeGuide(id: string, at: { x: number; y: number }, open = false): GNode {
   const g = guides.get(id)
@@ -186,6 +276,7 @@ export function placeGuide(id: string, at: { x: number; y: number }, open = fals
     ed.addNode({ type: 'GUIDE', name: g?.name ?? 'Guideline', parentId: null, x: Math.round(at.x - (open ? 0 : w / 2)), y: Math.round(at.y - (open ? 0 : h / 2)), width: w, height: h, fills: [], guide: { id, open: open || undefined } })
   )
   reconcile()
+  void bringFrames(n.id, id)
   return n
 }
 

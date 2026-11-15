@@ -17,6 +17,7 @@ import { ActionsPalette } from './ActionsPalette'
 import { GuidesPalette } from './GuidesPalette'
 import { PanelGrip } from './PanelGrip'
 import { PluginHost } from './PluginHost'
+import { MaskEditor } from './MaskEditor'
 import { backend } from '../backend'
 import { imageFillOf, replaceImageFill } from '../editor/figma-images'
 import { offerFigmaImages } from './actions'
@@ -28,14 +29,21 @@ export function EditorView({ onHome }: { onHome: () => void }) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [annotationId, setAnnotationId] = useState<string | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
+  /** the layer whose picture mask is being painted with the brushes */
+  const [maskId, setMaskId] = useState<string | null>(null)
   const [actionsOpen, setActionsOpen] = useState(false)
   const [guidesOpen, setGuidesOpen] = useState(false)
   const [ctx, setCtx] = useState<{ x: number; y: number } | null>(null)
   useEffect(() => {
     // the layers panel opens the same menu
     const h = (e: Event) => setCtx((e as CustomEvent<{ x: number; y: number }>).detail)
+    const m = (e: Event) => setMaskId((e as CustomEvent<string>).detail)
     window.addEventListener('gigma-context', h)
-    return () => window.removeEventListener('gigma-context', h)
+    window.addEventListener('gigma-edit-mask', m)
+    return () => {
+      window.removeEventListener('gigma-context', h)
+      window.removeEventListener('gigma-edit-mask', m)
+    }
   }, [])
 
   useEffect(() => {
@@ -171,6 +179,7 @@ export function EditorView({ onHome }: { onHome: () => void }) {
             }}
           />
         )}
+        {maskId && <MaskEditor key={maskId} id={maskId} onClose={() => setMaskId(null)} />}
         {!ed.leftOpen && (
           <button className="icon-btn float-btn" style={{ left: 10 }} title="Show left panel (Ctrl+\)" onClick={() => runAction('toggle-left')}>
             {Icons.sidebarL}

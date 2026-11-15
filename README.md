@@ -83,6 +83,9 @@ Its main feature is a **built-in MCP server**. An AI assistant (Claude Desktop, 
 - Copy **to Figma and from Figma**, images included
 - **PDF import**: drop a PDF on the canvas and every page becomes a frame, with its text, shapes and pictures as separate layers
 - Export to **PNG**, **SVG** and **PDF** (vector, text stays text)
+- **Background removal, offline**: "Remove background" in the context menu and in the inspector cuts the subject out of a picture with the BiRefNet model (full version, MIT licence) that ships inside the installer. It runs on the graphics card through WebGPU and on the processor when there is none. The picture is never changed: the result is a mask that Ctrl+Z takes back, and "Edit mask" opens Erase / Restore brushes with size, softness and snapping to edges. The AI can call it over MCP (`remove_background`)
+- **Updates**: on Windows the app finds a new release on GitHub, downloads it in the background and restarts into it; on macOS it links to the release. The check can be switched off in Settings
+- Guidelines exported as `.gguide` carry the frames wired to them and bring them back on import
 - **Archive**: Settings → Storage packs projects you do not need for now into a compressed archive and brings them back
 - Batch export: several selected layers become a file each (named after the layer) in a folder you choose; one layer opens a Save dialog
 - "Export frames to PDF": every frame of a page in one file

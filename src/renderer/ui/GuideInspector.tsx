@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { GNode, GuideData, GuideImage } from '@shared/types'
 import { editor as ed } from '../editor/editor'
-import { guides, newGuideId, removeGuide, saveGuide, setGuideOpen } from '../editor/guides'
+import { exportGuideFile, guides, newGuideId, removeGuide, saveGuide, setGuideOpen } from '../editor/guides'
 import { guideAccent } from '../editor/guide-render'
 import { backend } from '../backend'
 import { Icons } from './icons'
@@ -178,7 +178,7 @@ export function GuideInspector({ node }: { node: GNode }) {
           )}
         </div>
         <div className="g-row">
-          <button className="btn g-grow" onClick={() => void backend.guides.exportFile(g.id)}>
+          <button className="btn g-grow" onClick={() => void exportGuideFile(g.id)}>
             {t('Export…')}
           </button>
         </div>

@@ -9,7 +9,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   language: 'system',
   homeView: 'grid',
   homeSort: 'edited',
-  favorites: []
+  favorites: [],
+  autoUpdate: true
 }
 
 const file = () => join(app.getPath('userData'), 'settings.json')

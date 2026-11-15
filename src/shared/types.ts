@@ -88,6 +88,14 @@ export interface GuideData {
   updatedAt: number
   formatVersion: 1
 }
+/**
+ * The frames wired to a guideline, as they travel inside a .gguide file: the layers (roots placed relative to the dot
+ * of the guideline) and the pictures they use, each as a data: URL under its hash.
+ */
+export interface GuideFrames {
+  nodes: GNode[]
+  images: Record<string, string>
+}
 /** GUIDE node payload: which guideline, shown open or as a dot, and the frames / sections it is wired to */
 export interface GuideRef {
   id: string
@@ -146,6 +154,11 @@ export type Paint =
        * u = a*x + c*y + e, v = b*x + d*y + f. Only with STRETCH.
        */
       transform?: [number, number, number, number, number, number]
+      /**
+       * Background removal: hash of a mask picture in the project (a PNG whose alpha says what of the picture is kept).
+       * The picture itself is never changed; without the mask it is whole again.
+       */
+      maskHash?: string
       visible?: boolean
       /** set when pasted from Figma: lets Gigma fetch missing image bytes via the Figma API */
       figmaFileKey?: string

@@ -3,10 +3,10 @@
 // Projects only refer to it by id (and keep a copy for when the file travels to another computer),
 // so an edit shows up everywhere at once. Nothing is uploaded anywhere.
 import { dialog, shell, type BrowserWindow } from 'electron'
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { libraryDir } from './library'
-import type { GuideData } from '../shared/types'
+import type { GuideData, GuideFrames } from '../shared/types'
 
 // Windows picks a file icon by the last extension only, so guidelines have one of their own.
 // Files saved before that were called *.guide.gigma: they are still read and imported.
@@ -30,6 +30,30 @@ export function guidesDir(): string {
 }
 const fileOf = (id: string) => join(guidesDir(), id + EXT)
 const tombstones = () => join(guidesDir(), 'deleted.json')
+// The frames wired to a guideline travel with its .gguide file. In the library they lie beside the guideline, in a file
+// of their own, so the list of guidelines stays small and quick to read.
+const framesOf = (id: string) => join(guidesDir(), id + '.frames.json')
+
+function cleanFrames(v: unknown): GuideFrames | null {
+  const f = v as Partial<GuideFrames> | null
+  if (!f || typeof f !== 'object' || !Array.isArray(f.nodes) || !f.nodes.length) return null
+  const images: Record<string, string> = {}
+  for (const [hash, url] of Object.entries(f.images ?? {})) if (/^[0-9a-f]{40}$/.test(hash) && typeof url === 'string' && url.startsWith('data:')) images[hash] = url
+  const nodes = f.nodes.filter((n) => n && typeof n === 'object' && typeof n.id === 'string' && typeof n.type === 'string')
+  return nodes.length ? { nodes, images } : null
+}
+export function guideFrames(id: string): GuideFrames | null {
+  if (!/^[\w-]{1,64}$/.test(id)) return null
+  try {
+    return cleanFrames(JSON.parse(readFileSync(framesOf(id), 'utf8')))
+  } catch {
+    return null
+  }
+}
+function setGuideFrames(id: string, frames: GuideFrames | null): void {
+  if (frames) writeFileSync(framesOf(id), JSON.stringify(frames))
+  else rmSync(framesOf(id), { force: true })
+}
 
 /** ids of guidelines the user deleted: projects drop them instead of bringing them back from their copy */
 export function deletedGuides(): string[] {
@@ -92,27 +116,40 @@ export function saveGuide(data: GuideData): GuideData {
 export async function removeGuide(id: string): Promise<void> {
   if (!/^[\w-]{1,64}$/.test(id)) throw new Error('bad guideline id')
   if (existsSync(fileOf(id))) await shell.trashItem(fileOf(id))
+  rmSync(framesOf(id), { force: true })
   setDeleted(id, true)
 }
 
 export function guideSizes(): { id: string; name: string; size: number }[] {
-  return listGuides().map((g) => ({ id: g.id, name: g.name, size: statSync(fileOf(g.id)).size }))
+  return listGuides().map((g) => ({ id: g.id, name: g.name, size: statSync(fileOf(g.id)).size + (existsSync(framesOf(g.id)) ? statSync(framesOf(g.id)).size : 0) }))
 }
 
-export async function exportGuide(win: BrowserWindow | null, id: string): Promise<boolean> {
+/**
+ * Save a guideline as a .gguide file. `frames`: the frames wired to it in the project it is exported from (undefined =
+ * exported from outside a project: the frames it already has in the library go along; null = it has none any more).
+ */
+export async function exportGuide(win: BrowserWindow | null, id: string, frames?: GuideFrames | null): Promise<boolean> {
   if (!existsSync(fileOf(id))) throw new Error('unknown guideline')
   const g = parse(readFileSync(fileOf(id), 'utf8'))
+  if (frames !== undefined) setGuideFrames(id, cleanFrames(frames))
+  const attached = guideFrames(id)
   const opts = { defaultPath: g.name.replace(/[\\/:*?"<>|]/g, '_') + EXT, filters: [{ name: 'Gigma guideline', extensions: ['gguide', 'gigma'] }] }
-  const r = win ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts)
+  // for the UI test scripts: no dialog can be answered there, the file goes straight to this folder
+  const forced = process.env.GIGMA_EXPORT_DIR
+  const r = forced && existsSync(forced) ? { canceled: false, filePath: join(forced, opts.defaultPath) } : win ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts)
   if (r.canceled || !r.filePath) return false
-  writeFileSync(r.filePath, JSON.stringify(g))
+  writeFileSync(r.filePath, JSON.stringify(attached ? { ...g, frames: attached } : g))
   return true
 }
 
 export const isGuideFile = (path: string) => path.toLowerCase().endsWith(EXT) || path.toLowerCase().endsWith(OLD_EXT)
 
 export function importGuideFile(path: string): GuideData {
-  return saveGuide(parse(readFileSync(path, 'utf8')))
+  const text = readFileSync(path, 'utf8')
+  const g = saveGuide(parse(text))
+  // the frames that were wired to it come along: they are placed with the guideline the next time it is put on a canvas
+  setGuideFrames(g.id, cleanFrames((JSON.parse(text) as { frames?: unknown }).frames))
+  return g
 }
 
 export async function importGuide(win: BrowserWindow | null): Promise<GuideData | null> {

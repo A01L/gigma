@@ -28,15 +28,42 @@ let onImageLoaded: () => void = () => {}
 export function setImageLoadedCallback(fn: () => void): void {
   onImageLoaded = fn
 }
+/** the key of a picture in the cache: its hash, plus the hash of its mask when its background was removed */
+export const imageKey = (p: { imageHash: string; maskHash?: string }): string => (p.maskHash ? p.imageHash + '+' + p.maskHash : p.imageHash)
+/**
+ * Pictures that are being changed right now (the mask editor paints on one): drawn instead of the stored one,
+ * so every touch of the brush shows at once.
+ */
+export const liveImages = new Map<string, HTMLCanvasElement | OffscreenCanvas>()
+const fetchBitmap = (hash: string): Promise<ImageBitmap> =>
+  fetch(backend.blob.url(hash))
+    .then((r) => {
+      if (!r.ok) throw new Error('missing')
+      return r.blob()
+    })
+    .then((b) => createImageBitmap(b))
+/** a picture cut by a mask: the mask (whatever its size) is stretched over the picture and its alpha kept */
+export function cutByMask(picture: CanvasImageSource & { width: number; height: number }, mask: CanvasImageSource, into?: HTMLCanvasElement | OffscreenCanvas): HTMLCanvasElement | OffscreenCanvas {
+  const c = into ?? new OffscreenCanvas(picture.width, picture.height)
+  if (c.width !== picture.width || c.height !== picture.height) {
+    c.width = picture.width
+    c.height = picture.height
+  }
+  const g = c.getContext('2d') as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
+  g.globalCompositeOperation = 'copy'
+  g.drawImage(picture, 0, 0)
+  g.globalCompositeOperation = 'destination-in'
+  g.imageSmoothingQuality = 'high'
+  g.drawImage(mask, 0, 0, picture.width, picture.height)
+  g.globalCompositeOperation = 'source-over'
+  return c
+}
+/** key: the hash of a picture, or "picture+mask" (see imageKey) */
 export function loadImage(hash: string): Promise<ImageBitmap | null> {
   let e = images.get(hash)
   if (!e) {
-    const promise = fetch(backend.blob.url(hash))
-      .then((r) => {
-        if (!r.ok) throw new Error('missing')
-        return r.blob()
-      })
-      .then((b) => createImageBitmap(b))
+    const [picture, mask] = hash.split('+')
+    const promise = (mask ? Promise.all([loadImage(picture), fetchBitmap(mask)]).then(([p, m]) => (p ? createImageBitmap(cutByMask(p, m) as OffscreenCanvas) : Promise.reject(new Error('missing')))) : fetchBitmap(picture))
       .then((bmp) => {
         e!.bmp = bmp
         onImageLoaded()
@@ -182,14 +209,13 @@ function shapePath(ctx: CanvasRenderingContext2D, n: GNode, r: Rect): void {
 }
 
 function drawImagePaint(ctx: CanvasRenderingContext2D, p: Extract<Paint, { type: 'IMAGE' }>, r: Rect): void {
-  const e = images.get(p.imageHash)
-  if (!e) {
-    loadImage(p.imageHash)
-    return
-  }
-  const bmp = e.bmp
+  const key = imageKey(p)
+  const e = images.get(key)
+  if (!e) loadImage(key)
+  // the picture as it is being painted on right now, or the stored one
+  const bmp = liveImages.get(key) ?? e?.bmp
   if (!bmp) {
-    if (e.missing) drawMissingImage(ctx, r)
+    if (e?.missing) drawMissingImage(ctx, r)
     return
   }
   // zoomed in far enough, a picture shows its own pixels as squares (as in Figma) instead of a blur
@@ -202,7 +228,18 @@ function drawImagePaint(ctx: CanvasRenderingContext2D, p: Extract<Paint, { type:
     ctx.imageSmoothingEnabled = wasSmooth
   }
 }
-function paintImage(ctx: CanvasRenderingContext2D, p: Extract<Paint, { type: 'IMAGE' }>, r: Rect, bmp: ImageBitmap): void {
+/** where a picture of that size lands in the box of its layer (not for cropped pictures, which have a matrix) */
+export function imagePlacement(p: { scaleMode: 'FILL' | 'FIT' | 'STRETCH' }, r: Rect, w: number, h: number): Rect {
+  let dw = r.w
+  let dh = r.h
+  if (p.scaleMode !== 'STRETCH') {
+    const s = p.scaleMode === 'FIT' ? Math.min(r.w / w, r.h / h) : Math.max(r.w / w, r.h / h)
+    dw = w * s
+    dh = h * s
+  }
+  return { x: r.x + (r.w - dw) / 2, y: r.y + (r.h - dh) / 2, w: dw, h: dh }
+}
+function paintImage(ctx: CanvasRenderingContext2D, p: Extract<Paint, { type: 'IMAGE' }>, r: Rect, bmp: CanvasImageSource & { width: number; height: number }): void {
   if (p.scaleMode === 'STRETCH' && p.transform) {
     // Figma's crop: the matrix takes a point of the box to a point of the picture, so the picture is drawn through its inverse
     const [a, b, c, d, e, f] = p.transform
@@ -847,7 +884,7 @@ export function clipsAsShape(n: GNode): boolean {
       : 'stops' in f
         ? (f.opacity ?? 1) >= 0.999 && f.stops.every((s) => s.color.a >= 0.999)
         : // a picture that covers the whole box and has no transparency
-          f.scaleMode !== 'FIT' && !f.transform && imageOpaque(f.imageHash)
+          f.scaleMode !== 'FIT' && !f.transform && !f.maskHash && imageOpaque(f.imageHash)
   )
 }
 
@@ -975,7 +1012,8 @@ export async function renderToCanvas(ed: Editor, ids: string[], scale = 1, backg
   for (const id of roots)
     for (const x of [id, ...ed.descendants(id)]) {
       const nd = ed.nodes.get(x)!
-      for (const f of nd.fills) if (f.type === 'IMAGE') hashes.add(f.imageHash)
+      // a picture whose background was removed is another bitmap (the picture cut by its mask): wait for that one
+      for (const f of nd.fills) if (f.type === 'IMAGE') hashes.add(imageKey(f))
       if (nd.type === 'CODE') {
         const w = ed.world(x)
         codes.push(codeBitmapAsync(nd, w.w, w.h, scale))

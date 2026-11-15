@@ -8,6 +8,8 @@ import { alignNodes } from '../editor/commands'
 import { isAutoLayout } from '../editor/autolayout'
 import { t } from './i18n'
 import { outlineText } from '../editor/text-outline'
+import { imagePaintOf, removeBackground, restoreBackground } from '../editor/matting'
+import { backend } from '../backend'
 
 /**
  * Text layers of the selection become vector outlines, in place (same layer, same place in the list).
@@ -130,6 +132,31 @@ export const layerActions = {
         effects: structuredClone(src?.effects)
       })
     })
+  },
+  /** Remove the background of the pictures in the selection (offline, with the model that is part of the app) */
+  async removeBackground() {
+    const targets = sel().filter((n) => imagePaintOf(n))
+    if (!targets.length) return ed.showToast(t('Select a layer with a picture'))
+    if (!(await backend.matting.available())) return ed.showToast(t('This build has no background removal model'))
+    let last = { device: '', ms: 0 }
+    try {
+      for (const [i, n] of targets.entries()) {
+        ed.showToast(targets.length > 1 ? t('Removing the background: {i} of {n}…', { i: String(i + 1), n: String(targets.length) }) : t('Removing the background…'))
+        last = await removeBackground(n.id)
+      }
+      ed.showToast(t('Background removed · {device} · {s} s', { device: last.device, s: (last.ms / 1000).toFixed(1) }))
+    } catch (e) {
+      ed.showToast(t('Could not remove the background') + ': ' + String((e as Error).message ?? e).replace(/^Error invoking remote method '[^']*': (Error: )?/, ''))
+    }
+  },
+  /** Bring the background back: the mask goes, the picture was never changed */
+  restoreBackground() {
+    ed.act(() => sel().forEach((n) => restoreBackground(n.id)))
+  },
+  /** Open the brushes that erase and restore parts of a picture whose background was removed */
+  editMask() {
+    const n = sel().find((x) => imagePaintOf(x))
+    if (n) window.dispatchEvent(new CustomEvent('gigma-edit-mask', { detail: n.id }))
   },
   /** Ctrl+E: replace the selection with one vector path (its outline). Texts become outlines first, as in Figma */
   async flatten() {

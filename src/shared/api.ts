@@ -1,4 +1,4 @@
-import type { DocChanges, DocSnapshot, GNode, GuideData, Page } from './types'
+import type { DocChanges, DocSnapshot, GNode, GuideData, Page, GuideFrames } from './types'
 import type { CommandRequest, CommandResponse } from './commands'
 
 export interface ProjectInfo {
@@ -40,6 +40,21 @@ export interface AppSettings {
   favorites: string[] // project paths
   /** Figma personal access token (stored locally), used only to fetch images of pasted Figma layers */
   figmaToken?: string
+  /** look for a new release on GitHub when the app starts; default true. false = never go to the network for it */
+  autoUpdate?: boolean
+}
+
+/**
+ * Where the app is with updates. link = a newer release exists but this build cannot install it by itself (macOS):
+ * `url` is its page. ready = downloaded, a restart installs it.
+ */
+export interface UpdateState {
+  status: 'idle' | 'checking' | 'none' | 'downloading' | 'ready' | 'link' | 'error'
+  version?: string
+  /** downloading: 0..100 */
+  percent?: number
+  url?: string
+  message?: string
 }
 
 export interface FigmaImageFetchResult {
@@ -157,11 +172,33 @@ export interface GigmaApi {
     save(data: GuideData): Promise<GuideData>
     /** delete from the library and from every project */
     remove(id: string): Promise<void>
-    /** save as a .gguide file; false = cancelled */
-    exportFile(id: string): Promise<boolean>
+    /**
+     * save as a .gguide file; false = cancelled. `frames` = the frames wired to the guideline in the open project:
+     * they go into the file (and are kept beside the guideline in the library)
+     */
+    exportFile(id: string, frames?: GuideFrames | null): Promise<boolean>
+    /** the frames that came with the guideline (from a .gguide file or the last export), or null */
+    frames(id: string): Promise<GuideFrames | null>
     /** pick a .gguide file and add it to the library; null = cancelled */
     importFile(): Promise<GuideData | null>
+    /** add a .gguide file to the library by its path */
+    importPath(path: string): Promise<GuideData>
     onChanged(handler: () => void): void
+  }
+  /** background removal: the model runs in the app, on this computer */
+  matting: {
+    /** false when this build has no model file */
+    available(): Promise<boolean>
+    /** rgba = 1024 × 1024 pixels; mask = one byte per pixel (255 = kept); device = what it ran on */
+    run(rgba: Uint8Array): Promise<{ mask: Uint8Array; device: string; ms: number }>
+  }
+  updates: {
+    state(): Promise<UpdateState>
+    /** look for a new release now */
+    check(): Promise<UpdateState>
+    /** restart into the downloaded update (or open the page of the release when it cannot install itself) */
+    install(): Promise<void>
+    onState(handler: (s: UpdateState) => void): void
   }
   platform: string
   /** id of the project tab this renderer belongs to (null in the shell / web mode) */

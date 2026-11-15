@@ -1,7 +1,7 @@
 // Window shell: Figma Desktop-style tab bar + the Home (file browser) tab.
 // Project tabs are separate views placed by the main process right under this bar.
 import { useEffect, useState } from 'react'
-import type { SpecBoardItem, TabsState } from '@shared/api'
+import type { SpecBoardItem, TabsState, UpdateState } from '@shared/api'
 import { backend } from '../backend'
 import { Home, type Section } from './Home'
 import { Icons } from './icons'
@@ -15,6 +15,7 @@ export function Shell() {
   const [homeKey, setHomeKey] = useState(0)
   // Spec tasks of the open projects, for the board on Home
   const [specs, setSpecs] = useState<SpecBoardItem[]>([])
+  const [update, setUpdate] = useState<UpdateState>({ status: 'idle' })
 
   useEffect(() => {
     backend.tabs.onUpdate(setState)
@@ -22,6 +23,8 @@ export function Shell() {
     backend.library.onChanged(() => setHomeKey((k) => k + 1))
     backend.specs.onUpdate(setSpecs)
     backend.specs.list().then(setSpecs)
+    backend.updates.onState(setUpdate)
+    backend.updates.state().then(setUpdate)
     backend.onMenu((a) => {
       if (a === 'settings') {
         setHomeSection('settings')
@@ -84,6 +87,22 @@ export function Shell() {
             {Icons.plus}
           </button>
         </div>
+        {/* a new release: downloading in the background, then one click restarts into it */}
+        {update.status === 'downloading' && (
+          <span className="update-pill no-drag" title={t('The update is downloading in the background')}>
+            {t('Update {v}: {p}%', { v: update.version ?? '', p: String(update.percent ?? 0) })}
+          </span>
+        )}
+        {update.status === 'ready' && (
+          <button className="update-pill ready no-drag" title={t('Projects are saved, the app restarts into the new version')} onClick={() => void backend.updates.install()}>
+            {t('Restart to update to {v}', { v: update.version ?? '' })}
+          </button>
+        )}
+        {update.status === 'link' && (
+          <button className="update-pill ready no-drag" title={t('Opens the page of the release')} onClick={() => void backend.updates.install()}>
+            {t('Update {v} is available', { v: update.version ?? '' })}
+          </button>
+        )}
       </div>
       <div className="shell-body">
         {state.activeId === null && (

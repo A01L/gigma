@@ -28,10 +28,24 @@ const api: GigmaApi = {
     list: () => ipcRenderer.invoke('guides:list'),
     save: (data) => ipcRenderer.invoke('guides:save', data),
     remove: (id) => ipcRenderer.invoke('guides:remove', id),
-    exportFile: (id) => ipcRenderer.invoke('guides:export', id),
+    exportFile: (id, frames) => ipcRenderer.invoke('guides:export', id, frames ?? null),
+    frames: (id) => ipcRenderer.invoke('guides:frames', id),
     importFile: () => ipcRenderer.invoke('guides:import'),
+    importPath: (path) => ipcRenderer.invoke('guides:importPath', path),
     onChanged: (handler) => {
       ipcRenderer.on('guides:changed', () => handler())
+    }
+  },
+  matting: {
+    available: () => ipcRenderer.invoke('matting:available'),
+    run: (rgba) => ipcRenderer.invoke('matting:run', rgba)
+  },
+  updates: {
+    state: () => ipcRenderer.invoke('update:state'),
+    check: () => ipcRenderer.invoke('update:check'),
+    install: () => ipcRenderer.invoke('update:install'),
+    onState: (handler) => {
+      ipcRenderer.on('update:state', (_e, s) => handler(s))
     }
   },
   platform: process.platform,

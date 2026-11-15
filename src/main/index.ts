@@ -23,8 +23,10 @@ import { getSettings, setSettings } from './settings'
 import { startMcpServer, type McpHandle } from './mcp'
 import { handlePluginRequest, installPackage, isPluginFile, pluginSizes, registerPlugins } from './plugins'
 import { renderPdf, type PdfPage } from './pdf'
-import { deletedGuides, exportGuide, guideSizes, importGuide, importGuideFile, isGuideFile, listGuides, removeGuide, saveGuide } from './guides'
-import type { GuideData } from '../shared/types'
+import { checkForUpdates, initUpdater, installUpdate, updateState } from './updater'
+import { mattingModelPath, removeBackground } from './matting'
+import { deletedGuides, exportGuide, guideFrames, guideSizes, importGuide, importGuideFile, isGuideFile, listGuides, removeGuide, saveGuide } from './guides'
+import type { GuideData, GuideFrames } from '../shared/types'
 import type { CommandName, CommandResponse } from '../shared/commands'
 import type { DocChanges } from '../shared/types'
 import type { AppSettings, McpStatus, SpecBoardItem, SpecTask, StorageStats, TabInfo, TabsState } from '../shared/api'
@@ -418,7 +420,14 @@ ipcMain.handle('guides:remove', async (_e, id: string) => {
   await removeGuide(id)
   broadcast('guides:changed')
 })
-ipcMain.handle('guides:export', (_e, id: string) => exportGuide(win, id))
+ipcMain.handle('guides:export', (_e, id: string, frames?: GuideFrames | null) => exportGuide(win, id, frames === null ? undefined : frames))
+ipcMain.handle('guides:frames', (_e, id: string) => guideFrames(id))
+ipcMain.handle('guides:importPath', (_e, path: string) => {
+  if (!isGuideFile(String(path)) || !existsSync(path)) throw new Error('not a guideline file')
+  const g = importGuideFile(path)
+  broadcast('guides:changed')
+  return g
+})
 ipcMain.handle('guides:import', async () => {
   const g = await importGuide(win)
   if (g) broadcast('guides:changed')
@@ -462,6 +471,11 @@ ipcMain.handle('tabs:new', async () => void (await openTab(createProject('Untitl
 ipcMain.handle('tabs:activate', (_e, id: string | null) => activate(id))
 ipcMain.handle('tabs:close', (_e, id: string) => closeTab(id))
 ipcMain.handle('tabs:home', () => activate(null))
+ipcMain.handle('matting:available', () => !!mattingModelPath())
+ipcMain.handle('matting:run', (_e, rgba: Uint8Array) => removeBackground(rgba))
+ipcMain.handle('update:state', () => updateState())
+ipcMain.handle('update:check', () => checkForUpdates('user'))
+ipcMain.handle('update:install', () => installUpdate())
 ipcMain.handle('app:openSettings', () => {
   activate(null)
   win?.webContents.send('menu', 'settings')
@@ -923,6 +937,13 @@ app.whenReady().then(async () => {
   })
   buildMenu()
   createWindow()
+  initUpdater({
+    notify: (s) => win && !win.isDestroyed() && win.webContents.send('update:state', s),
+    // every tab saves and closes before the installer takes over
+    beforeInstall: async () => {
+      await Promise.all(tabs.map((t) => closeTab(t.id)))
+    }
+  })
   void purgeOldTrash()
   try {
     // dev builds only: window screenshot endpoint for automated UI checks

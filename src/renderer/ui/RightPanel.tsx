@@ -1355,7 +1355,7 @@ function NodeInspector({ nodes }: { nodes: GNode[] }) {
                     <EyeBtn on={f.visible !== false} onClick={() => ed.act(() => setFills(fills.map((x, k) => (k === i ? { ...x, visible: x.visible === false ? undefined : false } : x))))} />
                     <MinusBtn onClick={() => ed.act(() => setFills(fills.filter((_, k) => k !== i)))} />
                   </div>
-                  {nodes.length === 1 && <ImageFillActions nodeId={nodes[0].id} hash={f.imageHash} fromFigma={!!f.figmaFileKey} />}
+                  {nodes.length === 1 && <ImageFillActions nodeId={nodes[0].id} hash={f.imageHash} fromFigma={!!f.figmaFileKey} masked={!!f.maskHash} cropped={!!f.transform} />}
                 </div>
               )
             )
@@ -1796,7 +1796,17 @@ function EffectGlyph({ type }: { type: EffectType }) {
 }
 
 /** Replace / restore buttons for an image fill (shows a hint when the image bytes are missing). */
-function ImageFillActions({ nodeId, hash, fromFigma }: { nodeId: string; hash: string; fromFigma: boolean }) {
+function ImageFillActions({ nodeId, hash, fromFigma, masked, cropped }: { nodeId: string; hash: string; fromFigma: boolean; masked: boolean; cropped: boolean }) {
+  const [busy, setBusy] = useState(false)
+  const cut = async () => {
+    setBusy(true)
+    ed.setSelection([nodeId])
+    try {
+      await layerActions.removeBackground()
+    } finally {
+      setBusy(false)
+    }
+  }
   const [missing, setMissing] = useState(false)
   useEffect(() => {
     let alive = true
@@ -1828,6 +1838,21 @@ function ImageFillActions({ nodeId, hash, fromFigma }: { nodeId: string; hash: s
         <button className="btn" onClick={replace}>
           {t('Replace image…')}
         </button>
+        {!missing && !masked && (
+          <button className="btn" disabled={busy} title={t('Works offline: the model is part of the app. The picture itself is not changed.')} onClick={() => void cut()}>
+            {busy ? t('Removing the background…') : t('Remove background')}
+          </button>
+        )}
+        {!missing && !cropped && (
+          <button className="btn" title={t('Brushes that erase and restore parts of the picture')} onClick={() => (ed.setSelection([nodeId]), layerActions.editMask())}>
+            {t('Edit mask…')}
+          </button>
+        )}
+        {masked && (
+          <button className="btn" onClick={() => (ed.setSelection([nodeId]), layerActions.restoreBackground())}>
+            {t('Restore background')}
+          </button>
+        )}
       </div>
     </>
   )

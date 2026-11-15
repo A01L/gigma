@@ -1,7 +1,7 @@
 {
   "name": "gigma",
   "productName": "Gigma",
-  "version": "0.3.22",
+  "version": "0.3.23",
   "description": "Offline, open-source desktop design tool with a built-in MCP server.",
   "license": "MIT",
   "author": "Nuradil Takhirov (A01L)",
@@ -20,15 +20,18 @@
     "icons": "electron scripts/make-icons.cjs",
     "installer-art": "electron scripts/make-installer-art.cjs",
     "smoke": "node scripts/mcp-smoke.mjs",
-    "dist:win": "electron-vite build && electron-builder --win",
-    "dist:mac": "electron-vite build && electron-builder --mac",
+    "dist:win": "node scripts/fetch-models.mjs && electron-vite build && electron-builder --win --publish never && node scripts/make-latest.mjs",
+    "dist:mac": "node scripts/fetch-models.mjs && electron-vite build && electron-builder --mac --publish never",
     "site:css": "tailwindcss -i site/src/input.css -o site/assets/site.css --minify",
-    "site:dev": "tailwindcss -i site/src/input.css -o site/assets/site.css --watch"
+    "site:dev": "tailwindcss -i site/src/input.css -o site/assets/site.css --watch",
+    "models": "node scripts/fetch-models.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
+    "electron-updater": "^6.8.11",
     "fzstd": "^0.1.1",
     "kiwi-schema": "^0.5.0",
+    "onnxruntime-node": "^1.31.1",
     "opentype.js": "^2.0.0",
     "paper": "^0.12.18",
     "pdfjs-dist": "^6.5.438",
@@ -88,7 +91,15 @@
           ]
         }
       ],
-      "icon": "build/icon.ico"
+      "icon": "build/icon.ico",
+      "files": [
+        "out/**/*",
+        "bin/**/*",
+        "build/icon.png",
+        "!node_modules/onnxruntime-node/bin/napi-v*/linux/**",
+        "!node_modules/onnxruntime-node/bin/napi-v*/darwin/**",
+        "!node_modules/onnxruntime-node/bin/napi-v*/win32/arm64/**"
+      ]
     },
     "nsis": {
       "oneClick": false,
@@ -122,7 +133,14 @@
         "dmg"
       ],
       "category": "public.app-category.graphics-design",
-      "icon": "build/icon.icns"
+      "icon": "build/icon.icns",
+      "files": [
+        "out/**/*",
+        "bin/**/*",
+        "build/icon.png",
+        "!node_modules/onnxruntime-node/bin/napi-v*/linux/**",
+        "!node_modules/onnxruntime-node/bin/napi-v*/win32/**"
+      ]
     },
     "directories": {
       "buildResources": "build"
@@ -131,7 +149,34 @@
       "icon": "build/icons",
       "target": [
         "AppImage"
+      ],
+      "files": [
+        "out/**/*",
+        "bin/**/*",
+        "build/icon.png",
+        "!node_modules/onnxruntime-node/bin/napi-v*/darwin/**",
+        "!node_modules/onnxruntime-node/bin/napi-v*/win32/**"
       ]
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "A01L",
+        "repo": "gigma",
+        "releaseType": "release"
+      }
+    ],
+    "extraResources": [
+      {
+        "from": "models",
+        "to": "models",
+        "filter": [
+          "birefnet.onnx"
+        ]
+      }
+    ],
+    "asarUnpack": [
+      "node_modules/onnxruntime-node/**"
+    ]
   }
 }

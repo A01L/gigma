@@ -1,6 +1,7 @@
 // Right-click menu for the canvas and the layers panel: same items, order and shortcuts as Figma
 // (without the things Gigma does not have: code, motion, plugins, widgets).
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { imagePaintOf } from '../editor/matting'
 import { createPortal } from 'react-dom'
 import { editor as ed } from '../editor/editor'
 import { isBooleanGroup } from '../editor/boolean'
@@ -129,6 +130,7 @@ export function ContextMenu({ x, y, onClose }: { x: number; y: number; onClose: 
     ]
   }
 
+  const pictures = nodes.flatMap((n) => imagePaintOf(n)?.paint ?? [])
   const items: Item[] = has
     ? [
         { label: 'Copy', key: 'Ctrl+C', run: A.copy },
@@ -147,6 +149,10 @@ export function ContextMenu({ x, y, onClose }: { x: number; y: number; onClose: 
         { label: 'Flatten', key: 'Alt+Shift+F', run: A.flatten },
         { label: 'Outline stroke', key: 'Ctrl+Alt+O', run: A.outlineStroke, disabled: !nodes.some((n) => n.type === 'TEXT' || n.strokes.some((s) => s.visible !== false && s.weight > 0)) },
         { label: nodes.every((n) => n.isMask) ? 'Remove mask' : 'Use as mask', key: 'Ctrl+Alt+M', run: A.toggleMask },
+        // pictures: background removal (the model is part of the app, nothing is sent anywhere)
+        ...(pictures.some((p) => !p.maskHash) ? [{ label: 'Remove background', run: () => void A.removeBackground() } as Item] : []),
+        ...(pictures.some((p) => p.maskHash) ? [{ label: 'Restore background', run: A.restoreBackground } as Item] : []),
+        ...(nodes.length === 1 && pictures.length === 1 && !pictures[0].transform ? [{ label: 'Edit mask…', run: A.editMask } as Item] : []),
         {
           label: 'Boolean groups',
           children: [

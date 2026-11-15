@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { McpStatus, ProjectInfo, SpecBoardItem } from '@shared/api'
+import type { McpStatus, ProjectInfo, SpecBoardItem, UpdateState } from '@shared/api'
 import { backend } from '../backend'
 import { Icons } from './icons'
 import logoUrl from '../assets/logo.svg'
@@ -450,6 +450,7 @@ function SettingsView() {
           {/* "Patch" is part of the product name: not translated */}
           <code className="path">Gigma 26 Patch {backend.appVersion}</code>
         </div>
+        <UpdateRows />
         <div className="set-row">
           <span>{t('Author')}</span>
           <span className="about-value">Nuradil Takhirov (A01L)</span>
@@ -729,4 +730,53 @@ function FileBadge() {
 
 export function Logo({ size = 28 }: { size?: number }) {
   return <img src={logoUrl} width={size} height={size} alt="" draggable={false} />
+}
+
+/** Settings → About: look for a new release now, and whether to look by itself when the app starts */
+function UpdateRows() {
+  const t = useT()
+  const s = useSettings()
+  const [u, setU] = useState<UpdateState>({ status: 'idle' })
+  useEffect(() => {
+    backend.updates.onState(setU)
+    backend.updates.state().then(setU)
+  }, [])
+  const text =
+    u.status === 'checking'
+      ? t('Checking…')
+      : u.status === 'none'
+        ? t('You have the latest version')
+        : u.status === 'downloading'
+          ? t('Update {v}: {p}%', { v: u.version ?? '', p: String(u.percent ?? 0) })
+          : u.status === 'ready'
+            ? t('Version {v} is downloaded', { v: u.version ?? '' })
+            : u.status === 'link'
+              ? t('Update {v} is available', { v: u.version ?? '' })
+              : u.status === 'error'
+                ? t('Could not check: {e}', { e: u.message ?? '' })
+                : ''
+  return (
+    <>
+      <div className="set-row">
+        <span>{t('Updates')}</span>
+        <span className="about-value muted">{text}</span>
+        {u.status === 'ready' || u.status === 'link' ? (
+          <button className="pill" onClick={() => void backend.updates.install()}>
+            {u.status === 'ready' ? t('Restart and update') : t('Open the release')}
+          </button>
+        ) : (
+          <button className="pill" disabled={u.status === 'checking' || u.status === 'downloading'} onClick={() => void backend.updates.check().then(setU)}>
+            {t('Check for updates')}
+          </button>
+        )}
+      </div>
+      <div className="set-row">
+        <span>{t('Check by itself')}</span>
+        <label className="checkbox" title={t('When the app starts, it asks GitHub whether a newer release exists. Nothing else is sent anywhere.')}>
+          <input type="checkbox" checked={s.autoUpdate !== false} onChange={(e) => setSettings({ autoUpdate: e.target.checked })} />
+          {t('Look for a new version when Gigma starts')}
+        </label>
+      </div>
+    </>
+  )
 }

@@ -907,6 +907,23 @@ const handlers: Record<CommandName, (a: Args) => unknown | Promise<unknown>> = {
     ed.detachInstance(a.ids)
     return { detached: a.ids.length }
   },
+  remove_background: async (a) => {
+    const ids: string[] = Array.isArray(a.ids) ? a.ids : [a.id]
+    ids.forEach(requireNode)
+    const m = await import('./matting')
+    const out: Record<string, unknown>[] = []
+    for (const id of ids) {
+      if (a.restore) {
+        m.restoreBackground(id)
+        out.push({ id, backgroundRemoved: false })
+        continue
+      }
+      if (!m.imagePaintOf(ed.nodes.get(id))) throw new Error(`Layer ${id} has no picture fill`)
+      const r = await m.removeBackground(id)
+      out.push({ id, backgroundRemoved: true, device: r.device, seconds: Math.round(r.ms / 100) / 10 })
+    }
+    return out
+  },
   outline_stroke: async (a) => {
     a.ids.forEach(requireNode)
     const { layerActions } = await import('../ui/layerActions')

@@ -4,3 +4,5 @@ dist/
 *.log
 .DS_Store
 promo/
+# the background removal model (about 1 GB): fetched by scripts/fetch-models.mjs, packed into the installer
+models/

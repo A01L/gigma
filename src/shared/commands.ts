@@ -56,6 +56,7 @@ export type CommandName =
   | 'create_instance'
   | 'detach_instance'
   | 'outline_stroke'
+  | 'remove_background'
   | 'boolean_operation'
   | 'flatten_nodes'
   | 'duplicate_nodes'

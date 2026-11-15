@@ -2,7 +2,7 @@
 // Pick one and click on the canvas to place its dot; "Create" places a new, open guideline.
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { editor as ed } from '../editor/editor'
-import { guides, guidesVersion, loadGuides, removeGuide, subscribeGuides } from '../editor/guides'
+import { exportGuideFile, guides, guidesVersion, loadGuides, removeGuide, subscribeGuides } from '../editor/guides'
 import { guideAccent, guideBallCss } from '../editor/guide-render'
 import { backend } from '../backend'
 import { Icons } from './icons'
@@ -91,7 +91,7 @@ export function GuidesPalette({ onClose }: { onClose: () => void }) {
                 <span
                   onClick={(e) => {
                     e.stopPropagation()
-                    void backend.guides.exportFile(g.id)
+                    void exportGuideFile(g.id)
                   }}
                 >
                   {t('Export')}

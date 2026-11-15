@@ -41,10 +41,14 @@ function memoryBackend(): GigmaApi {
         guideSubs.forEach((f) => f())
       },
       exportFile: async () => false,
+      frames: async () => null,
       importFile: async () => null,
+      importPath: async () => Promise.reject(new Error('guideline files need the desktop app')),
       onChanged: (f) => void guideSubs.push(f)
     },
     platform: 'web',
+    matting: { available: async () => false, run: async () => Promise.reject(new Error('Background removal needs the desktop app')) },
+    updates: { state: async () => ({ status: 'idle' }), check: async () => ({ status: 'none' }), install: async () => {}, onState: () => {} },
     tabId: null,
     pdf: { render: async () => Promise.reject(new Error('PDF export needs the desktop app')) },
     // the browser has no folder to ask for: every file is offered as a download

@@ -419,6 +419,11 @@ function buildServer(run: RunCommand, client = 'AI'): McpServer {
   tool('delete_style', 'Delete a style. Layers that used it keep their look.', { id: z.string() })
   tool('detach_instance', 'Turn instances into plain frames (no longer linked to the main component).', { ids: z.array(z.string()).min(1) })
   tool('outline_stroke', 'Convert the strokes of layers into filled vector shapes, and text layers into vector outlines of their glyphs (Figma "Outline stroke").', { ids: z.array(z.string()).min(1) })
+  tool(
+    'remove_background',
+    'Remove the background of the picture of one or several layers (layers with an image fill). Runs offline in the app (BiRefNet); the picture itself is kept, only a mask is added, so restore: true brings the background back. The first call loads the model and takes longer.',
+    { ids: z.array(z.string()).min(1), restore: z.boolean().optional().describe('true = bring the background back') }
+  )
   tool('flatten_nodes', 'Replace layers (shapes, groups, boolean groups) with a single vector path: their merged outline.', { ids: z.array(z.string()).min(1) })
   tool('duplicate_nodes', 'Duplicate nodes (with children). Returns the new ids.', {
     ids: z.array(z.string()).min(1),

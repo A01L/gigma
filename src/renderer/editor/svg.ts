@@ -13,7 +13,7 @@ import { base64ToBytes, bytesToBase64, uid, unionRects, keyBetween } from './uti
 import { parsePath, segsBounds, segsToD, transformSegs, type Mat, type Seg } from './svgpath'
 import { capsOf, dashOf, endShape, isOpenPath, joinOf, miterLimitOf, pathEnds, plainCap } from './stroke'
 import { strokeArt } from './stroke-art'
-import { clipsAsShape, cornerRadiiOf } from './render'
+import { clipsAsShape, cornerRadiiOf, imageKey, loadImage } from './render'
 import { codeToPngDataUrl } from './code-render'
 
 const META_TAG = 'gigma-data'
@@ -349,6 +349,16 @@ async function imageHref(hash: string): Promise<{ mime: string; b64: string } | 
   }
 }
 
+/** a picture whose background was removed, as a PNG with the mask in its alpha */
+async function maskedHref(p: { imageHash: string; maskHash?: string }): Promise<{ mime: string; b64: string } | null> {
+  const bmp = await loadImage(imageKey(p))
+  if (!bmp) return null
+  const c = new OffscreenCanvas(bmp.width, bmp.height)
+  c.getContext('2d')!.drawImage(bmp, 0, 0)
+  const blob = await c.convertToBlob({ type: 'image/png' })
+  return { mime: 'image/png', b64: bytesToBase64(new Uint8Array(await blob.arrayBuffer())) }
+}
+
 /** SVG filter for drop shadows / inner shadows / layer blur (background blur has no SVG equivalent). */
 function effectFilter(n: GNode, defs: string[]): string | null {
   const fx = (n.effects ?? []).filter((e) => e.visible !== false && e.type !== 'BACKGROUND_BLUR')
@@ -442,7 +452,7 @@ async function nodeSvgInner(ed: Editor, id: string, ox: number, oy: number, defs
   let imgs = ''
   for (const p of n.fills) {
     if (p.type !== 'IMAGE' || p.visible === false) continue
-    const h = await imageHref(p.imageHash)
+    const h = p.maskHash ? await maskedHref(p) : await imageHref(p.imageHash)
     if (!h) continue
     const clip = 'c' + defs.length
     defs.push(`<clipPath id="${clip}">${rect('')}</clipPath>`)
