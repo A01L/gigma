@@ -122,6 +122,21 @@ export interface TextOutline {
   h: number
   /** true when a glyph had to come from another font than the one of the text */
   substituted: boolean
+  /** the same outline letter by letter (lines of underlining too), each with its place inside the box of the text */
+  letters: OutlineLetter[]
+  /** the words of the text, in the order the letters count them */
+  words: string[]
+}
+export interface OutlineLetter {
+  /** the character (or 'Line' for an underline or a strike) */
+  name: string
+  /** which word of the text it belongs to, counted from 0; -1 for lines */
+  word: number
+  d: string
+  x: number
+  y: number
+  w: number
+  h: number
 }
 
 let probe: CanvasRenderingContext2D | null = null
@@ -155,6 +170,13 @@ export async function outlineText(n: GNode): Promise<TextOutline | null> {
   const baseShift = tb.baseline === 'middle' ? up - probe.measureText('H').actualBoundingBoxAscent : 0
 
   const segs: Seg[] = []
+  const letters: OutlineLetter[] = []
+  const words: string[] = []
+  let inWord = false
+  const letter = (name: string, word: number, own: Seg[]) => {
+    const b = segsBounds(own)
+    if (b.w > 0 && b.h > 0) letters.push({ name, word, d: segsToD(transformSegs(own, [1, 0, 0, 1, -b.x, -b.y])), x: b.x, y: b.y, w: b.w, h: b.h })
+  }
   probe.letterSpacing = `${l.letterSpacing}px`
   /**
    * Draw a run of text from x0 on the baseline y; returns where it ends. Every glyph stands where the canvas puts it:
@@ -185,16 +207,28 @@ export async function outlineText(n: GNode): Promise<TextOutline | null> {
       const k = size / font.unitsPerEm
       if (!exact && prev && prev.font === font) x += font.getKerningValue(prev.glyph, glyph) * k
       if (ch.trim()) {
+        if (!inWord) words.push('')
+        inWord = true
+        words[words.length - 1] += ch
         const d = glyph.getPath(x, y, size).toPathData(3)
-        if (d) segs.push(...parsePath(d))
-      }
+        if (d) {
+          const own = parsePath(d)
+          segs.push(...own)
+          letter(ch, words.length - 1, own)
+        }
+      } else inWord = false
       x += (glyph.advanceWidth ?? 0) * k + l.letterSpacing
       prev = { font, glyph }
     }
+    // a run ends a word: the next one (another line, another justified word) starts a new one
+    inWord = false
     return exact ? x0 + probe!.measureText(text).width : x
   }
   const rect = (x: number, y: number, w: number, h: number) => {
-    if (w > 0 && h > 0) segs.push({ c: 'M', p: [x, y] }, { c: 'L', p: [x, y + h] }, { c: 'L', p: [x + w, y + h] }, { c: 'L', p: [x + w, y] }, { c: 'Z', p: [] })
+    if (!(w > 0 && h > 0)) return
+    const own: Seg[] = [{ c: 'M', p: [x, y] }, { c: 'L', p: [x, y + h] }, { c: 'L', p: [x + w, y + h] }, { c: 'L', p: [x + w, y] }, { c: 'Z', p: [] }]
+    segs.push(...own)
+    letter('Line', -1, own)
   }
   const midShift = tb.baseline === 'alphabetic' ? -(l.cap ?? 0) / 2 : 0
   for (const ln of l.lines) {
@@ -222,5 +256,5 @@ export async function outlineText(n: GNode): Promise<TextOutline | null> {
   if (!segs.length) return null
   const b = segsBounds(segs)
   if (!(b.w > 0) || !(b.h > 0)) return null
-  return { d: segsToD(transformSegs(segs, [1, 0, 0, 1, -b.x, -b.y])), x: b.x, y: b.y, w: b.w, h: b.h, substituted }
+  return { d: segsToD(transformSegs(segs, [1, 0, 0, 1, -b.x, -b.y])), x: b.x, y: b.y, w: b.w, h: b.h, substituted, letters, words }
 }

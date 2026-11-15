@@ -6,6 +6,7 @@ import { exportCurrentPage, importPages, runAction } from './actions'
 import { useT } from './i18n'
 import { keyBetween } from '../editor/util'
 import { isAutoLayout } from '../editor/autolayout'
+import type { GNode } from '@shared/types'
 
 const ROW_H = 28
 
@@ -103,6 +104,19 @@ function LayerSearch({ value, onChange, onClose }: { value: string; onChange: (v
         ×
       </button>
     </div>
+  )
+}
+
+/** the shape of a vector as its icon in the list (as Figma shows it): filled when the layer has a fill, a line otherwise */
+function VectorThumb({ n }: { n: GNode }) {
+  const w = n.pathBox?.w || n.width || 1
+  const h = n.pathBox?.h || n.height || 1
+  const filled = n.fills.some((f) => f.visible !== false)
+  const pad = Math.max(w, h) * 0.06
+  return (
+    <svg width="14" height="14" viewBox={[-pad, -pad, w + pad * 2, h + pad * 2].join(' ')} preserveAspectRatio="xMidYMid meet" className="vector-thumb">
+      <path d={n.path} fillRule={n.fillRule === 'evenodd' ? 'evenodd' : 'nonzero'} fill={filled ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={filled ? 0 : 1.2} vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   )
 }
 
@@ -375,7 +389,7 @@ function Layers({ query }: { query: string }) {
                 {r.hasKids ? (expanded.has(r.id) ? Icons.chevD : Icons.chevR) : null}
               </span>
               <span className="type-icon">
-                <TypeIcon type={n.isMask ? 'MASK' : n.isComponent || n.isComponentSet ? 'COMPONENT' : n.componentId ? 'INSTANCE' : n.type === 'GROUP' && n.booleanOperation ? n.booleanOperation : n.fills.some((f) => f.type === 'IMAGE') ? 'IMAGE' : n.type} />
+                {n.type === 'VECTOR' && !n.isMask && n.path && n.path.length < 60000 ? <VectorThumb n={n} /> : <TypeIcon type={n.isMask ? 'MASK' : n.isComponent || n.isComponentSet ? 'COMPONENT' : n.componentId ? 'INSTANCE' : n.type === 'GROUP' && n.booleanOperation ? n.booleanOperation : n.fills.some((f) => f.type === 'IMAGE') ? 'IMAGE' : n.type} />}
               </span>
               {renaming === r.id ? (
                 <InlineRename value={n.name} onDone={(v) => (setRenaming(null), v && ed.act(() => ed.updateNode(r.id, { name: v })))} />

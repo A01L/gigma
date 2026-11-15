@@ -15,7 +15,7 @@ import { backend } from '../backend'
  * Text layers of the selection become vector outlines, in place (same layer, same place in the list).
  * Returns how many were converted; texts whose font cannot be read on this computer stay texts.
  */
-async function textsToOutlines(): Promise<{ made: number; failed: number; substituted: boolean }> {
+async function textsToOutlines(letters = false): Promise<{ made: number; failed: number; substituted: boolean }> {
   const texts = sel().filter((n) => n.type === 'TEXT' && (n.characters ?? '').trim())
   const done: { n: GNode; o: NonNullable<Awaited<ReturnType<typeof outlineText>>> }[] = []
   let failed = 0
@@ -28,6 +28,40 @@ async function textsToOutlines(): Promise<{ made: number; failed: number; substi
     ed.act(() => {
       for (const { n, o } of done) {
         if (!ed.nodes.has(n.id)) continue
+        // letter by letter: the layer becomes a group of vectors, one per letter; with several words, a group per word.
+        // A turned text, or one with a stroke (which is outlined next as one shape), stays one vector.
+        if (letters && !n.rotation && !n.strokes.some((s) => s.visible !== false && s.weight > 0) && o.letters.length > 1) {
+          const fills = n.fills
+          ed.updateNode(n.id, {
+            type: 'GROUP',
+            x: round2(n.x + o.x),
+            y: round2(n.y + o.y),
+            width: round2(o.w),
+            height: round2(o.h),
+            fills: [],
+            strokes: [],
+            characters: undefined,
+            textStyle: undefined,
+            textStyleId: undefined,
+            textAutoResize: undefined
+          })
+          const put = (parentId: string, ox: number, oy: number, l: (typeof o.letters)[number]) =>
+            ed.addNode({ type: 'VECTOR', name: l.name, parentId, x: round2(l.x - ox), y: round2(l.y - oy), width: round2(l.w), height: round2(l.h), path: l.d, pathBox: { w: l.w, h: l.h }, fillRule: 'nonzero', fills: structuredClone(fills) })
+          const several = o.words.length > 1
+          const byWord = new Map<number, typeof o.letters>()
+          for (const l of o.letters) byWord.set(l.word, [...(byWord.get(l.word) ?? []), l])
+          for (const [word, ls] of byWord) {
+            if (!several || word < 0) {
+              for (const l of ls) put(n.id, o.x, o.y, l)
+              continue
+            }
+            const x1 = Math.min(...ls.map((l) => l.x)), y1 = Math.min(...ls.map((l) => l.y))
+            const x2 = Math.max(...ls.map((l) => l.x + l.w)), y2 = Math.max(...ls.map((l) => l.y + l.h))
+            const g = ed.addNode({ type: 'GROUP', name: o.words[word] ?? 'Word', parentId: n.id, x: round2(x1 - o.x), y: round2(y1 - o.y), width: round2(x2 - x1), height: round2(y2 - y1), fills: [] })
+            for (const l of ls) put(g.id, x1, y1, l)
+          }
+          continue
+        }
         // the outline is tighter than the box of the text: keep it where it is on screen, also for a turned layer
         // (a layer turns around its centre, so the centre moves by the turned offset)
         const dx = o.x + o.w / 2 - n.width / 2
@@ -203,11 +237,11 @@ export const layerActions = {
     })
     ed.emit('selection')
   },
-  /** Ctrl+Alt+O: turn strokes into filled shapes, and texts into outlines of their glyphs */
+  /** Ctrl+Alt+O: turn strokes into filled shapes, and texts into outlines of their glyphs (a vector per letter) */
   async outlineStroke() {
     let texts = { made: 0, failed: 0, substituted: false }
     if (sel().some((n) => n.type === 'TEXT')) {
-      texts = await textsToOutlines()
+      texts = await textsToOutlines(true)
       reportTexts(texts)
       ed.emit('selection', 'doc')
     }

@@ -295,6 +295,7 @@ export async function decodeFigmaClipboard(html: string): Promise<GNode[] | null
         type = f.resizeToFit ? 'GROUP' : 'FRAME'
         break
       case 'GROUP':
+      case 'BOOLEAN_OPERATION':
         type = 'GROUP'
         break
       case 'RECTANGLE':
@@ -382,6 +383,11 @@ export async function decodeFigmaClipboard(html: string): Promise<GNode[] | null
       }
       n.textAutoResize = f.textAutoResize === 'WIDTH_AND_HEIGHT' ? 'WIDTH_AND_HEIGHT' : f.textAutoResize === 'HEIGHT' ? 'HEIGHT' : 'NONE'
     }
+    // Union / Subtract / Intersect / Exclude: a boolean group, drawn as one shape made of its children (which stay editable)
+    if (f.type === 'BOOLEAN_OPERATION') {
+      const op = String(f.booleanOperation ?? 'UNION')
+      n.booleanOperation = op === 'SUBTRACT' ? 'SUBTRACT' : op === 'INTERSECT' ? 'INTERSECT' : op === 'XOR' || op === 'EXCLUDE' ? 'EXCLUDE' : 'UNION'
+    }
     if (f.mask || f.isMask) n.isMask = true
     // blend mode (PASS_THROUGH / NORMAL = default)
     if (typeof f.blendMode === 'string' && (BLEND_MODES as readonly string[]).includes(f.blendMode) && f.blendMode !== 'NORMAL') n.blendMode = f.blendMode as BlendMode
@@ -451,6 +457,14 @@ export async function decodeFigmaClipboard(html: string): Promise<GNode[] | null
       }
     }
     out.push(n)
+  }
+  // in Figma a shape counts in a boolean operation whatever it is painted with; here a shape with no fill has no area,
+  // so the unpainted operands get the paint of their operation (operands are never drawn themselves)
+  const byId = new Map(out.map((n) => [n.id, n]))
+  for (const n of out) {
+    const parent = n.parentId ? byId.get(n.parentId) : undefined
+    if (!parent?.booleanOperation || n.type === 'GROUP' || n.type === 'TEXT') continue
+    if (!n.fills.some((p) => p.visible !== false)) n.fills = parent.fills.length ? structuredClone(parent.fills) : [{ type: 'SOLID', color: { r: 0.85, g: 0.85, b: 0.85, a: 1 } }]
   }
   return out.length ? out : null
 }
