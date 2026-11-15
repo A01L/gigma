@@ -203,6 +203,39 @@ function ColorField({
   const swatchRef = useRef<HTMLButtonElement>(null)
   const hexDirty = useRef(false)
   const [picking, setPicking] = useState(false)
+  // the popover holds one edit open for as long as it is open. It is closed when the field goes away with the popover
+  // still open (another layer was selected), and when an undo asks for it: an edit left open would swallow every
+  // later change, and Ctrl+Z would have nothing to take back
+  const pickingRef = useRef(false)
+  pickingRef.current = picking
+  useEffect(() => {
+    const end = () => {
+      if (!pickingRef.current) return
+      pickingRef.current = false
+      setPicking(false)
+      ed.commit()
+    }
+    window.addEventListener('gigma-end-sessions', end)
+    return () => {
+      window.removeEventListener('gigma-end-sessions', end)
+      if (pickingRef.current) {
+        pickingRef.current = false
+        ed.commit()
+      }
+    }
+  }, [])
+  // another selection: the popover belonged to the layers that were selected, so it closes with its edit
+  const selKey = ed.selection.join(',')
+  const firstSel = useRef(selKey)
+  useEffect(() => {
+    if (firstSel.current === selKey) return
+    firstSel.current = selKey
+    if (!pickingRef.current) return
+    pickingRef.current = false
+    setPicking(false)
+    ed.commit()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selKey])
   // while the popover of a gradient is open, the canvas shows the handles of that gradient
   const showHandles = picking && !!paint && !!target
   useEffect(() => {
@@ -256,6 +289,8 @@ function ColorField({
               ed.emit('doc')
             }}
             onClose={() => {
+              if (!pickingRef.current) return
+              pickingRef.current = false
               setPicking(false)
               ed.commit()
             }}

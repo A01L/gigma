@@ -143,6 +143,9 @@ export class CanvasController {
     on(canvas, 'pointerdown', (e) => this.down(e))
     on(canvas, 'pointermove', (e) => this.move(e))
     on(canvas, 'pointerup', (e) => this.up(e))
+    // a drag the system took away (the window lost the pointer) ends like a release, so its edit is closed
+    on(canvas, 'pointercancel', (e) => this.up(e))
+    ed.dragging = () => !!this.drag
     on(canvas, 'dblclick', (e) => this.dbl(e))
     on(canvas, 'wheel', (e) => this.wheel(e), { passive: false })
     on(window, 'keydown', (e) => {
@@ -2096,14 +2099,18 @@ export class CanvasController {
     if (d.kind === 'move' && d.moved) {
       // drop into / out of frames like Figma (already re-parented live while dragging)
       const p = this.local(e)
-      if (!(e.ctrlKey || e.metaKey)) this.reparentDragged(d.ids, this.dropTargetAt(p.x, p.y, d.ids))
-      this.dropTarget = null
-      // inside an auto layout frame the layer takes the slot it was dropped on
-      ed.dropByPosition = true
-      ed.dragIds = new Set(d.ids)
-      ed.commit()
-      ed.dropByPosition = false
-      ed.dragIds = null
+      // whatever goes wrong while dropping, the edit is closed: an edit left open would stop undo from recording
+      try {
+        if (!(e.ctrlKey || e.metaKey)) this.reparentDragged(d.ids, this.dropTargetAt(p.x, p.y, d.ids))
+        this.dropTarget = null
+        // inside an auto layout frame the layer takes the slot it was dropped on
+        ed.dropByPosition = true
+        ed.dragIds = new Set(d.ids)
+      } finally {
+        ed.commit()
+        ed.dropByPosition = false
+        ed.dragIds = null
+      }
     } else if (d.kind === 'move' && !d.moved && !e.shiftKey && ed.selection.length > 1) {
       // click without drag on a multi-selection selects just the clicked node
       const p = this.local(e)

@@ -412,6 +412,12 @@ export class Editor {
     }
   }
   commit(): void {
+    // a commit with nothing open (its edit was already closed for an undo) is not an error and must not unbalance the count
+    if (this.txDepth <= 0 || !this.tx) {
+      this.txDepth = 0
+      this.tx = null
+      return
+    }
     if (--this.txDepth > 0) return
     const tx = this.tx!
     this.tx = null
@@ -431,9 +437,12 @@ export class Editor {
     if (groups.size) {
       this.txDepth++
       this.tx = tx
-      for (const g of [...groups].sort((a, b) => this.ancestors(b).length - this.ancestors(a).length)) this.fitGroup(g)
-      this.tx = null
-      this.txDepth--
+      try {
+        for (const g of [...groups].sort((a, b) => this.ancestors(b).length - this.ancestors(a).length)) this.fitGroup(g)
+      } finally {
+        this.tx = null
+        this.txDepth--
+      }
     }
     // keep auto layout frames arranged and instances in step with their main components
     this.txDepth++
@@ -898,13 +907,29 @@ export class Editor {
       this.tx.pages.set(id, { before: p ? clone(p) : null, after: null })
     }
   }
+  /** true while the canvas is in the middle of a drag (set by the canvas) */
+  dragging: () => boolean = () => false
+  /**
+   * An edit that was opened and never closed (a colour popover still open, a pointer that was released outside the
+   * window, an error half way) would swallow every later change and leave nothing to undo. Before an undo or a redo
+   * the open sessions are asked to close, and whatever is still open is closed here.
+   */
+  private settle(): void {
+    if (this.txDepth <= 0) return
+    if (this.editingTextId || this.dragging()) return
+    window.dispatchEvent(new Event('gigma-end-sessions'))
+    let guard = 0
+    while (this.txDepth > 0 && guard++ < 50) this.commit()
+  }
   undo(): void {
+    this.settle()
     const e = this.undoStack.pop()
     if (!e) return
     this.applyHistory(e, 'before')
     this.redoStack.push(e)
   }
   redo(): void {
+    this.settle()
     const e = this.redoStack.pop()
     if (!e) return
     this.applyHistory(e, 'after')
