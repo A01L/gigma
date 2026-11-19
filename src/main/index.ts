@@ -23,6 +23,7 @@ import { getSettings, setSettings } from './settings'
 import { startMcpServer, type McpHandle } from './mcp'
 import { handlePluginRequest, installPackage, isPluginFile, pluginSizes, registerPlugins } from './plugins'
 import { renderPdf, type PdfPage } from './pdf'
+import { closeSplash, revealAfterSplash, showSplash } from './splash'
 import { checkForUpdates, initUpdater, installUpdate, updateState } from './updater'
 import { mattingModelPath, removeBackground } from './matting'
 import { deletedGuides, exportGuide, guideFrames, guideSizes, importGuide, importGuideFile, isGuideFile, listGuides, removeGuide, saveGuide } from './guides'
@@ -816,7 +817,7 @@ function createWindow(): void {
       additionalArguments: [`--gigma-version=${app.getVersion()}`]
     }
   })
-  win.once('ready-to-show', () => win?.show())
+  win.once('ready-to-show', () => revealAfterSplash(() => win?.show()))
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:/.test(url)) shell.openExternal(url)
     return { action: 'deny' }
@@ -839,6 +840,7 @@ function createWindow(): void {
     // lock and the MCP port, so the next launch does nothing. Closing the main window ends the app.
     if (codeWin && !codeWin.isDestroyed()) codeWin.destroy()
     codeWin = null
+    closeSplash()
     if (!isMac) app.quit()
   })
 }
@@ -931,6 +933,7 @@ ipcMain.on('renderer:ready', (e) => {
 })
 
 app.whenReady().then(async () => {
+  showSplash()
   // gigma-blob://t<tabId>/<sha1> -> image bytes from that tab's .gigma file
   protocol.handle('gigma-blob', (req) => {
     const u = new URL(req.url)
