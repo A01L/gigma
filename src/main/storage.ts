@@ -70,7 +70,26 @@ export class GigmaFile {
     const meta = this.getMeta()!
     const pages = (this.db.prepare('SELECT data FROM pages').all() as { data: string }[]).map((r) => JSON.parse(r.data) as Page)
     const nodes = (this.db.prepare('SELECT data FROM nodes').all() as { data: string }[]).map((r) => JSON.parse(r.data) as GNode)
-    return { meta, pages, nodes }
+    return { meta, pages, nodes, history: this.getHistory(meta) }
+  }
+
+  /**
+   * Undo / redo steps kept when the project was closed. They belong to the document exactly as it was then:
+   * any later write (the stamp no longer matches) makes them stale, and they are not given back.
+   */
+  setHistory(json: string): void {
+    const stamp = this.getMeta()?.updatedAt ?? 0
+    this.st.setMeta.run('history', JSON.stringify({ stamp, json }))
+  }
+  private getHistory(meta: DocMeta): unknown {
+    try {
+      const row = this.st.getMeta.get('history') as { value: string } | undefined
+      if (!row) return undefined
+      const h = JSON.parse(row.value) as { stamp: number; json: string }
+      return h.stamp === meta.updatedAt ? JSON.parse(h.json) : undefined
+    } catch {
+      return undefined
+    }
   }
 
   apply(ch: DocChanges): void {
@@ -101,6 +120,13 @@ export class GigmaFile {
   /** Atomic consistent copy (used by "Save As"). */
   saveCopy(target: string): void {
     this.db.prepare('VACUUM INTO ?').run(target)
+    // the undo history stays with this project, a copy starts without it
+    const copy = new DatabaseSync(target)
+    try {
+      copy.prepare("DELETE FROM meta WHERE key = 'history'").run()
+    } finally {
+      copy.close()
+    }
   }
 
   /**

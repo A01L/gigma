@@ -164,6 +164,7 @@ function memoryBackend(): GigmaApi {
         const d = open ? docs.get(open) : null
         if (d) d.thumb = t
       },
+      saveHistory: async () => {},
       exportProject: async () => false,
       exportPages: async () => false,
       importPages: async () => null

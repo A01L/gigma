@@ -813,6 +813,15 @@ export function startMcpServer(run: RunCommand, port: number, level: () => McpLe
   })
   return new Promise((resolve, reject) => {
     httpServer.once('error', reject)
-    httpServer.listen(port, '127.0.0.1', () => resolve({ port, close: () => httpServer.close() }))
+    httpServer.listen(port, '127.0.0.1', () =>
+      resolve({
+        port,
+        // AI clients keep connections open (keep-alive): drop them, so the port is free at once for the next launch
+        close: () => {
+          httpServer.close()
+          httpServer.closeAllConnections()
+        }
+      })
+    )
   })
 }

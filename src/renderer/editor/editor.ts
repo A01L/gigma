@@ -895,6 +895,9 @@ export class Editor {
   }
   private touch(id: string): void {
     if (!this.tx) throw new Error('mutation outside transaction')
+    // saving does not wait for the step to close: an edit left open (a popover, a drag) must not hold back
+    // what an AI or a plugin changes in the meantime
+    this.scheduleFlush()
     if (!this.tx.nodes.has(id)) {
       const n = this.nodes.get(id)
       this.tx.nodes.set(id, { before: n ? clone(n) : null, after: null })
@@ -902,6 +905,7 @@ export class Editor {
   }
   private touchPage(id: string): void {
     if (!this.tx) throw new Error('mutation outside transaction')
+    this.scheduleFlush()
     if (!this.tx.pages.has(id)) {
       const p = this.pages.get(id)
       this.tx.pages.set(id, { before: p ? clone(p) : null, after: null })
@@ -917,6 +921,16 @@ export class Editor {
   private settle(): void {
     if (this.txDepth <= 0) return
     if (this.editingTextId || this.dragging()) return
+    window.dispatchEvent(new Event('gigma-end-sessions'))
+    let guard = 0
+    while (this.txDepth > 0 && guard++ < 50) this.commit()
+  }
+  /**
+   * Close every edit that is still open, whatever it is (the tab is closing): its changes become a step of history
+   * and are saved with the rest.
+   */
+  closeOpenEdits(): void {
+    if (this.txDepth <= 0) return
     window.dispatchEvent(new Event('gigma-end-sessions'))
     let guard = 0
     while (this.txDepth > 0 && guard++ < 50) this.commit()
@@ -977,20 +991,37 @@ export class Editor {
     if (this.flushTimer !== null) return
     this.flushTimer = window.setTimeout(() => this.flush(), 250)
   }
-  async flush(): Promise<void> {
+  private flushing: Promise<void> = Promise.resolve()
+  /**
+   * Write every change that is not on disk yet. Flushes run one after another, so a caller that awaits flush()
+   * knows that everything changed before the call is in the file. Changes of an edit that is still open are
+   * written too (as they are now); a failed write keeps them waiting for the next try.
+   */
+  flush(): Promise<void> {
     if (this.flushTimer !== null) clearTimeout(this.flushTimer)
     this.flushTimer = null
-    if (!this.pendingNodes.size && !this.pendingPages.size && !this.pendingMeta) return
+    const run = this.flushing.then(() => this.flushNow())
+    this.flushing = run.catch(() => undefined)
+    return run
+  }
+  private async flushNow(): Promise<void> {
+    const nodeIds = new Set(this.pendingNodes)
+    const pageIds = new Set(this.pendingPages)
+    if (this.tx) {
+      for (const id of this.tx.nodes.keys()) nodeIds.add(id)
+      for (const id of this.tx.pages.keys()) pageIds.add(id)
+    }
+    if (!nodeIds.size && !pageIds.size && !this.pendingMeta) return
     const upsertNodes: GNode[] = []
     const deleteNodes: string[] = []
-    for (const id of this.pendingNodes) {
+    for (const id of nodeIds) {
       const n = this.nodes.get(id)
       if (n) upsertNodes.push(n)
       else deleteNodes.push(id)
     }
     const upsertPages: Page[] = []
     const deletePages: string[] = []
-    for (const id of this.pendingPages) {
+    for (const id of pageIds) {
       const p = this.pages.get(id)
       if (p) upsertPages.push(p)
       else deletePages.push(id)
@@ -1002,8 +1033,43 @@ export class Editor {
     try {
       await backend.doc.apply({ upsertNodes, deleteNodes, upsertPages, deletePages, meta })
     } catch (err) {
+      // nothing is dropped: the same layers are written again with the next save
+      for (const id of nodeIds) this.pendingNodes.add(id)
+      for (const id of pageIds) this.pendingPages.add(id)
+      if (meta) this.pendingMeta = { ...meta, ...(this.pendingMeta ?? {}) }
+      this.scheduleFlush()
       this.showToast('Save failed: ' + (err as Error).message)
     }
+  }
+
+  // ---------------- history on disk ----------------
+  /** the undo and redo steps as plain data, kept in the file while the project is closed (see restoreHistory) */
+  historyData(): unknown {
+    const entry = (e: HistoryEntry) => ({ ...e, nodes: [...e.nodes], pages: [...e.pages], metaWas: undefined })
+    return { v: 1, undo: this.undoStack.map(entry), redo: this.redoStack.map(entry) }
+  }
+  /** steps saved by historyData() when the project was closed; a history that does not look right is skipped */
+  restoreHistory(data: unknown): void {
+    const d = data as { v?: number; undo?: unknown[]; redo?: unknown[] } | null
+    if (!d || d.v !== 1 || !Array.isArray(d.undo) || !Array.isArray(d.redo)) return
+    const entry = (raw: unknown): HistoryEntry | null => {
+      const r = raw as Partial<Omit<HistoryEntry, 'nodes' | 'pages'>> & { nodes?: unknown; pages?: unknown }
+      if (!r || !Array.isArray(r.nodes) || !Array.isArray(r.pages) || !Array.isArray(r.selBefore) || !Array.isArray(r.selAfter)) return null
+      return {
+        nodes: new Map(r.nodes as [string, { before: GNode | null; after: GNode | null }][]),
+        pages: new Map(r.pages as [string, { before: Page | null; after: Page | null }][]),
+        meta: r.meta,
+        selBefore: r.selBefore,
+        selAfter: r.selAfter,
+        pageBefore: String(r.pageBefore ?? ''),
+        pageAfter: String(r.pageAfter ?? '')
+      }
+    }
+    const undo = d.undo.map(entry)
+    const redo = d.redo.map(entry)
+    if (undo.some((e) => !e) || redo.some((e) => !e)) return
+    this.undoStack = undo as HistoryEntry[]
+    this.redoStack = redo as HistoryEntry[]
   }
   rename(name: string): void {
     // inside a step of history, so Ctrl+Z brings the old name back

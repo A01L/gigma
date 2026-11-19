@@ -1029,11 +1029,16 @@ export async function executeCommand(req: CommandRequest): Promise<CommandRespon
     const h = handlers[req.name]
     if (!h) throw new Error('Unknown command ' + req.name)
     const result = await h(req.args ?? {})
+    // what a command changed is on disk before its caller hears back: an AI's work survives the app being closed
+    // or killed right after (a tab in the background would otherwise wait for its throttled save timer)
+    await ed.flush()
     if (req.client) aiCursor.touch(req.client, req.name, req.args ?? {}, result)
     // the task board on Home shows which assistant works on a spec (creating a card is not working on it)
     if (req.client && req.name === 'update_spec') noteSpecClient(req.args?.id, req.client)
     return { id: req.id, ok: true, result }
   } catch (e) {
+    // a command that failed half way may still have changed something
+    void ed.flush()
     return { id: req.id, ok: false, error: (e as Error).message }
   }
 }

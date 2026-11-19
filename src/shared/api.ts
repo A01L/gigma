@@ -259,6 +259,8 @@ export interface GigmaApi {
     close(): Promise<void>
     apply(changes: DocChanges): Promise<void>
     setThumb(dataUrl: string): Promise<void>
+    /** keep the undo / redo steps in the file (JSON), for the next time the project is opened */
+    saveHistory(json: string): Promise<void>
     exportProject(): Promise<boolean>
     exportPages(pageIds: string[]): Promise<boolean>
     importPages(): Promise<{ pages: Page[]; nodes: GNode[] } | null>

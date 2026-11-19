@@ -410,6 +410,8 @@ export interface DocSnapshot {
   meta: DocMeta
   pages: Page[]
   nodes: GNode[]
+  /** undo / redo steps saved when the project was closed (only when the document has not changed since) */
+  history?: unknown
 }
 
 /** Incremental change set sent from the editor to storage. */

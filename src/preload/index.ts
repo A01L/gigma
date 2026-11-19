@@ -107,6 +107,7 @@ const api: GigmaApi = {
     close: () => ipcRenderer.invoke('doc:close'),
     apply: (changes) => ipcRenderer.invoke('doc:apply', changes),
     setThumb: (dataUrl) => ipcRenderer.invoke('doc:thumb', dataUrl),
+    saveHistory: (json) => ipcRenderer.invoke('doc:history', json),
     exportProject: () => ipcRenderer.invoke('doc:exportProject'),
     exportPages: (ids) => ipcRenderer.invoke('doc:exportPages', ids),
     importPages: () => ipcRenderer.invoke('doc:importPages')

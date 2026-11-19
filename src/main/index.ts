@@ -164,6 +164,8 @@ async function openTab(path: string, show = true): Promise<Tab> {
       sandbox: true,
       nodeIntegration: false,
       spellcheck: false,
+      // a tab in the background is where an AI works: its timers (autosave among them) must not be slowed down
+      backgroundThrottling: false,
       additionalArguments: [`--gigma-tab=${id}`, `--gigma-version=${app.getVersion()}`]
     }
   })
@@ -195,7 +197,8 @@ async function closeTab(id: string, force = false): Promise<void> {
   const t = tabs[i]
   if (!force && !t.view.webContents.isDestroyed()) {
     await new Promise<void>((resolve) => {
-      const timer = setTimeout(resolve, 4000)
+      // the tab saves its edits first, then its history and thumbnail; a big project needs more than a moment
+      const timer = setTimeout(resolve, 10_000)
       ipcMain.once(`tab:closed:${id}`, () => {
         clearTimeout(timer)
         resolve()
@@ -519,6 +522,9 @@ ipcMain.handle('doc:apply', (e, ch: DocChanges) => {
   }
 })
 ipcMain.handle('doc:thumb', (e, dataUrl: string) => tabOf(e.sender)?.file?.setThumb(dataUrl))
+ipcMain.handle('doc:history', (e, json: string) => {
+  if (typeof json === 'string') tabOf(e.sender)?.file?.setHistory(json)
+})
 ipcMain.handle('doc:exportProject', async (e) => {
   const f = fileOf(e.sender)
   const r = await dialog.showSaveDialog(win!, {
@@ -551,6 +557,7 @@ let codeWin: BrowserWindow | null = null
 let codeQueue: Promise<unknown> = Promise.resolve()
 function codeWindow(): BrowserWindow {
   if (codeWin && !codeWin.isDestroyed()) return codeWin
+  if (!win) throw new Error('Gigma is closing')
   const ses = session.fromPartition('gigma-code-render')
   // nothing may leave the machine: only inline (data:) resources are allowed
   ses.webRequest.onBeforeRequest((d, cb) => cb({ cancel: !/^(data|about|blob):/.test(d.url) }))
@@ -817,17 +824,26 @@ function createWindow(): void {
   loadInto(win.webContents, 'shell')
   applySettings(getSettings())
   win.on('resize', layout)
-  let closing = false
   win.on('close', (e) => {
     if (closing || !tabs.length) return
     e.preventDefault()
     closing = true
+    // the window goes away at once; the tabs save in the background, then the app quits
+    win?.hide()
     Promise.all(tabs.map((t) => closeTab(t.id))).finally(() => win?.close())
   })
   win.on('closed', () => {
     win = null
+    // The hidden helper window (code block rendering) counts as an open window: left alone it keeps
+    // 'window-all-closed' from ever firing, and Gigma stays in the background, holding the single-instance
+    // lock and the MCP port, so the next launch does nothing. Closing the main window ends the app.
+    if (codeWin && !codeWin.isDestroyed()) codeWin.destroy()
+    codeWin = null
+    if (!isMac) app.quit()
   })
 }
+/** set once the main window is closing: its tabs are saving and the app is about to quit */
+let closing = false
 
 /** tell the shell and every project tab that something changed */
 function broadcast(channel: string): void {
@@ -896,6 +912,11 @@ app.on('open-file', (e, file) => {
 
 if (!app.requestSingleInstanceLock()) app.quit()
 app.on('second-instance', (_e, argv) => {
+  if (closing) {
+    // launched again while this instance is still saving and quitting: start anew right after it exits
+    app.relaunch({ args: argv.slice(1).filter(isGigmaFile) })
+    return
+  }
   for (const a of argv.slice(1)) if (isGigmaFile(a)) void openExternalFile(a)
   if (win) {
     if (win.isMinimized()) win.restore()
@@ -968,6 +989,21 @@ app.on('window-all-closed', () => {
   if (!isMac) app.quit()
 })
 app.on('before-quit', () => {
+  // the main window is still open here when the app quits from the menu: its close handler saves the tabs first
+  if (codeWin && !codeWin.isDestroyed()) codeWin.destroy()
+  codeWin = null
+})
+app.on('will-quit', () => {
   mcp?.close()
-  for (const t of tabs) t.file?.close()
+  mcp = null
+  for (const t of tabs) {
+    try {
+      t.file?.close()
+    } catch {
+      /* ignore */
+    }
+  }
+  // nothing may keep a quitting Gigma alive (a native thread of the background-removal model, a stuck socket):
+  // a process left behind would block the next launch
+  setTimeout(() => app.exit(0), 3000).unref()
 })
