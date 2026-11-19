@@ -12,10 +12,28 @@ import './ui/plugins.css'
 const hash = location.hash.slice(1)
 const root = createRoot(document.getElementById('root')!)
 
+/** the launch splash (index.html) stays at least this long from the start of the page, then fades out */
+const SPLASH_MS = 5000
+function hideSplash(minMs = 0): void {
+  const el = document.getElementById('boot')
+  if (!el) return
+  setTimeout(() => {
+    el.classList.add('leaving')
+    setTimeout(() => el.remove(), 400)
+  }, Math.max(0, minMs - performance.now()))
+}
+
 if (isDesktop && hash.startsWith('doc=')) {
+  hideSplash()
   import('./ui/DocApp').then(({ DocApp }) => root.render(<DocApp path={decodeURIComponent(hash.slice(4))} />))
 } else if (isDesktop) {
-  import('./ui/Shell').then(({ Shell }) => root.render(<Shell />))
+  import('./ui/Shell').then(({ Shell }) => {
+    root.render(<Shell />)
+    hideSplash(SPLASH_MS)
+  })
 } else {
-  import('./ui/App').then(({ App }) => root.render(<App />))
+  import('./ui/App').then(({ App }) => {
+    root.render(<App />)
+    hideSplash()
+  })
 }
