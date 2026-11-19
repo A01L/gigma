@@ -263,6 +263,19 @@ Add a server of type `http` with the address:
 http://127.0.0.1:7331/mcp
 ```
 
+### MCP level
+
+Every tool description is sent to the model with every message, so a big tool list eats a subscription limit quickly. **Settings → AI (MCP) → MCP level** picks how much of Gigma the AI sees:
+
+| Level | Tools | Tool list size | What changes |
+|---|---|---|---|
+| Ultra | all 64 | ~15k tokens | Everything, full descriptions, large pictures |
+| Balanced | 44 | ~9k tokens | Rare tools (guideline editing, styles, variants, PDF, brushes) hidden, smaller pictures, compact answers |
+| Economy | 38 | ~5k tokens | Core tools only, one-line descriptions, small pictures |
+| Build locally | 24 | ~3k tokens | No editing: the AI designs on its side and places the result as SVG (`create_svg`); every read tool stays |
+
+Clients connected through the Claude Desktop bridge are told that the tool list changed; HTTP clients pick it up on their next request or reconnect.
+
 ### What the AI can do
 
 | Group | Tools |

@@ -42,7 +42,12 @@ export interface AppSettings {
   figmaToken?: string
   /** look for a new release on GitHub when the app starts; default true. false = never go to the network for it */
   autoUpdate?: boolean
+  /** how much of Gigma the MCP clients see; lighter levels cost the AI fewer tokens. Default 'ultra' */
+  mcpLevel?: McpLevel
 }
+
+/** ultra = every tool; balanced / economy = fewer tools and smaller answers; local = read only, the AI places its design as SVG */
+export type McpLevel = 'ultra' | 'balanced' | 'economy' | 'local'
 
 /**
  * Where the app is with updates. link = a newer release exists but this build cannot install it by itself (macOS):

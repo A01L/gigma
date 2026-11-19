@@ -955,7 +955,7 @@ app.whenReady().then(async () => {
           const wc = part === 'shell' || !t ? win!.webContents : t.view.webContents
           return (await wc.capturePage()).toPNG()
         }
-    mcp = await startMcpServer(runCommand, MCP_PORT, shot)
+    mcp = await startMcpServer(runCommand, MCP_PORT, () => getSettings().mcpLevel ?? 'ultra', shot)
   } catch (e) {
     mcpError = `Port ${MCP_PORT} unavailable: ${(e as Error).message}`
   }

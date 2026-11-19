@@ -79,3 +79,24 @@ rl.on('line', async (line) => {
   }
 })
 rl.on('close', () => process.exit(0))
+
+// The MCP level (Settings → AI (MCP)) changes the tool list. Gigma answers each HTTP request on its own,
+// so it cannot push a notification; the bridge watches /health and tells its client instead.
+let level = null
+function watchLevel() {
+  const req = http.get({ host: '127.0.0.1', port: PORT, path: '/health' }, (res) => {
+    const chunks = []
+    res.on('data', (c) => chunks.push(c))
+    res.on('end', () => {
+      try {
+        const now = JSON.parse(Buffer.concat(chunks).toString('utf8')).level || null
+        if (level && now && now !== level && client) write({ jsonrpc: '2.0', method: 'notifications/tools/list_changed' })
+        if (now) level = now
+      } catch {}
+    })
+  })
+  req.on('error', () => {})
+  req.setTimeout(2000, () => req.destroy())
+}
+setInterval(watchLevel, 3000).unref()
+watchLevel()

@@ -10,6 +10,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { z } from 'zod'
 import type { CommandName } from '../shared/commands'
+import type { McpLevel } from '../shared/api'
 
 /** client = name of the AI client that sent the call (shown next to its cursor on the canvas) */
 export type RunCommand = (name: CommandName, args: Record<string, unknown>, client?: string) => Promise<unknown>
@@ -48,6 +49,125 @@ const box = {
   width: z.number().positive(),
   height: z.number().positive()
 }
+
+// ---- MCP levels: how much of Gigma the AI client sees (Settings → AI (MCP)) ----
+// Every tool definition is sent to the model with every message, so fewer tools, shorter
+// descriptions, smaller pictures and compact JSON mean a much smaller token bill.
+//  ultra    — everything, full descriptions (the original behaviour)
+//  balanced — the everyday tools; rare ones (guideline editing, styles, variants, PDF, brushes…) hidden
+//  economy  — a small core set, one-line descriptions, small pictures
+//  local    — no editing at all: the AI designs on its side and only places the result as SVG;
+//             every read tool stays so it still knows the canvas, the specs and the guidelines
+
+/** reading and moving around: available on every level */
+const READ_TOOLS = [
+  'list_projects', 'create_project', 'open_project', 'list_tabs', 'switch_tab', 'show_tab',
+  'get_document', 'list_pages', 'set_current_page', 'get_selection', 'set_selection', 'get_node', 'find_nodes',
+  'list_styles', 'list_specs', 'list_guidelines', 'get_guideline', 'get_guideline_image', 'list_annotations',
+  'export_png', 'get_screenshot', 'export_svg', 'zoom_to'
+]
+const ECONOMY_TOOLS = new Set<string>([
+  ...READ_TOOLS,
+  'create_page', 'create_frame', 'create_rectangle', 'create_ellipse', 'create_text', 'create_svg', 'create_image', 'create_code',
+  'update_node', 'delete_nodes', 'group_nodes', 'duplicate_nodes', 'reorder_nodes', 'update_spec', 'resolve_annotation'
+])
+const LOCAL_TOOLS = new Set<string>([...READ_TOOLS, 'create_svg'])
+const BALANCED_HIDDEN = new Set<string>([
+  'create_guideline', 'update_guideline', 'place_guideline', 'place_guideline_image', 'link_guideline',
+  'create_spec', 'link_spec', 'add_variant', 'set_variant', 'create_style', 'update_style', 'delete_style',
+  'detach_instance', 'remove_background', 'export_pdf', 'flatten_nodes', 'outline_stroke', 'update_page',
+  'delete_page', 'create_annotation'
+])
+/** update_node on the lighter levels: the exotic stroke / brush / style fields are dropped from its schema */
+const UPDATE_BALANCED_DROP = new Set<string>([
+  'strokeStartCap', 'strokeEndCap', 'strokeJoin', 'strokeMiterAngle', 'dashPattern', 'dashCap', 'strokeDynamic', 'strokeBrush',
+  'strokeProfile', 'strokeProfileFlip', 'arrowEnd', 'fillStyleId', 'strokeStyleId', 'textStyleId', 'verticalTrim', 'wrapStyle',
+  'truncate', 'listStyle', 'paragraphSpacing', 'constrainProportions', 'flipX', 'flipY'
+])
+const UPDATE_ECONOMY_KEEP = new Set<string>([
+  'id', 'name', 'x', 'y', 'width', 'height', 'fill', 'stroke', 'strokeWeight', 'cornerRadius', 'opacity', 'visible', 'text',
+  'fontSize', 'fontWeight', 'fontFamily', 'align', 'parentId', 'fills', 'effects', 'rotation', 'lineHeight', 'letterSpacing',
+  'textAutoResize', 'clipsContent', 'layoutMode', 'itemSpacing', 'padding', 'primaryAxisAlignItems', 'counterAxisAlignItems',
+  'html', 'css'
+])
+const TEXT_ECONOMY_DROP = new Set<string>(Object.keys(typographyShape).filter((k) => k !== 'italic'))
+/** default picture sizes and tree depth per level (the model pays for every pixel it looks at) */
+const LEVEL_DEFAULTS: Record<McpLevel, { png: number; screen: number; depth: number }> = {
+  ultra: { png: 1600, screen: 1400, depth: 4 },
+  balanced: { png: 1024, screen: 1024, depth: 3 },
+  economy: { png: 768, screen: 768, depth: 2 },
+  local: { png: 1024, screen: 1024, depth: 3 }
+}
+
+function toolVisible(level: McpLevel, name: string): boolean {
+  if (level === 'ultra') return true
+  if (level === 'balanced') return !BALANCED_HIDDEN.has(name)
+  if (level === 'economy') return ECONOMY_TOOLS.has(name)
+  return LOCAL_TOOLS.has(name)
+}
+
+/** the schema a level shows for a tool: fewer fields, smaller default pictures */
+function levelShape(level: McpLevel, name: string, shape: z.ZodRawShape): z.ZodRawShape {
+  if (level === 'ultra') return shape
+  const d = LEVEL_DEFAULTS[level]
+  let out: Record<string, z.core.$ZodType> = { ...shape }
+  const drop = (test: (k: string) => boolean): void => {
+    out = Object.fromEntries(Object.entries(out).filter(([k]) => !test(k)))
+  }
+  if (name === 'update_node') drop(level === 'economy' ? (k) => !UPDATE_ECONOMY_KEEP.has(k) : (k) => UPDATE_BALANCED_DROP.has(k))
+  if (level === 'economy' && name === 'create_text') drop((k) => TEXT_ECONOMY_DROP.has(k))
+  if (name === 'export_png') out.maxSize = z.number().min(64).max(4096).default(d.png).describe('Longest side limit in px')
+  if (name === 'get_screenshot') out.maxSize = z.number().min(64).max(4096).default(d.screen)
+  if (name === 'get_document') out.depth = z.number().int().min(1).max(20).default(d.depth)
+  return out
+}
+
+/** economy keeps only the first sentence of a description; local explains its only editing tool */
+function levelDescription(level: McpLevel, name: string, description: string): string {
+  if (level === 'local' && name === 'create_svg')
+    return 'Place a finished design into Gigma: SVG markup becomes editable vector layers (paths, shapes, text) inside a new group. This is the only way to change the canvas at this level: build the whole design on your side as one SVG, then place it.'
+  if (level !== 'economy') return description
+  const m = /^.*?[.!?](?=\s|$)/.exec(description)
+  return m ? m[0] : description
+}
+
+/** drop "description" from a JSON schema and its nested schemas (not from argument names) */
+function stripDescriptions(s: unknown): void {
+  if (!s || typeof s !== 'object') return
+  const n = s as Record<string, unknown>
+  delete n.description
+  if (n.properties && typeof n.properties === 'object') for (const p of Object.values(n.properties)) stripDescriptions(p)
+  for (const k of ['items', 'additionalProperties']) stripDescriptions(n[k])
+  for (const k of ['anyOf', 'oneOf', 'allOf']) if (Array.isArray(n[k])) (n[k] as unknown[]).forEach(stripDescriptions)
+}
+
+/** compact result JSON on the lighter levels: no nulls, no empty lists or objects, numbers rounded to 0.01 */
+function compact(v: unknown): unknown {
+  if (typeof v === 'number') return Number.isInteger(v) ? v : Math.round(v * 100) / 100
+  if (Array.isArray(v)) return v.map(compact)
+  if (v && typeof v === 'object') {
+    const out: Record<string, unknown> = {}
+    for (const [k, x] of Object.entries(v)) {
+      if (x === null || x === undefined || (Array.isArray(x) && !x.length)) continue
+      if (typeof x === 'object' && !Array.isArray(x) && !Object.keys(x as object).length) continue
+      out[k] = compact(x)
+    }
+    return out
+  }
+  return v
+}
+
+const INSTRUCTIONS_SHORT =
+  'Gigma is a local Figma-like design tool. Pixels; x/y of a child are relative to its parent. You work in a background tab of your own (create_project / open_project), the screen of the user does not change. ' +
+  'Flow: create_frame -> add layers with parentId = frame id -> export_png to check. get_document / get_selection / get_node inspect; get_screenshot shows what the user sees. ' +
+  'Check list_specs (TASK = do it, then update_spec DONE; RULES = follow them) and list_annotations. A frame that lists specs or guidelines must follow them (get_guideline). ' +
+  'Keep pictures small (export_png maxSize) and read only what you need.'
+const INSTRUCTIONS_LOCAL =
+  'Gigma is a local Figma-like design tool, in "build locally" mode: you cannot edit layers. Design on your side and place the result with create_svg ' +
+  '(one complete <svg> per screen or block, with a viewBox, real text as <text>, fonts by family name). Pixels; x/y of a child are relative to its parent. ' +
+  'Read what you need first: get_document / get_selection / get_node for the canvas, list_specs and list_annotations for tasks, ' +
+  'list_guidelines / get_guideline / get_guideline_image for the design system (use exactly its colours and fonts), get_screenshot or export_png to look. ' +
+  'Place inside a frame with parentId and check the result with export_png. You work in a background tab of your own (create_project / open_project).'
 
 /** Every command with its argument schema: shared by MCP and by plugins (same names, same arguments). */
 const TOOLS = new Map<CommandName, { description: string; shape: z.ZodRawShape; map: (a: Record<string, unknown>) => Record<string, unknown> }>()
@@ -97,11 +217,11 @@ export function commandReference(): string {
   return out
 }
 
-function buildServer(run: RunCommand, client = 'AI'): McpServer {
+function buildServer(run: RunCommand, client = 'AI', level: McpLevel = 'ultra'): McpServer {
   const server = new McpServer(
     { name: 'gigma', version: '0.1.0' },
     {
-      instructions:
+      instructions: level === 'local' ? INSTRUCTIONS_LOCAL : level !== 'ultra' ? INSTRUCTIONS_SHORT :
         'Gigma is a local Figma-like design tool. Coordinates are in pixels; x/y of a child are relative to its parent frame. ' +
         'Projects open in tabs. You work in a tab of your own, in the background: create_project and open_project open the project there without changing what the user looks at, ' +
         'and your document tools keep acting on that tab even when the user switches to another project (list_tabs shows it as aiTabId; switch_tab moves you to another tab). ' +
@@ -128,7 +248,8 @@ function buildServer(run: RunCommand, client = 'AI'): McpServer {
     map: (a: Record<string, unknown>) => Record<string, unknown> = (a) => a
   ) => {
     TOOLS.set(name, { description, shape, map })
-    server.registerTool(name, { description, inputSchema: shape }, async (args: Record<string, unknown>) => {
+    if (!toolVisible(level, name)) return
+    server.registerTool(name, { description: levelDescription(level, name, description), inputSchema: levelShape(level, name, shape) }, async (args: Record<string, unknown>) => {
       try {
         const result = await run(name, map(args), client)
         if (result && typeof result === 'object' && 'pngBase64' in (result as object)) {
@@ -140,7 +261,7 @@ function buildServer(run: RunCommand, client = 'AI'): McpServer {
             ]
           }
         }
-        return { content: [{ type: 'text' as const, text: JSON.stringify(result ?? { ok: true }) }] }
+        return { content: [{ type: 'text' as const, text: JSON.stringify((level === 'ultra' ? result : compact(result)) ?? { ok: true }) }] }
       } catch (e) {
         return { isError: true, content: [{ type: 'text' as const, text: String((e as Error).message ?? e) }] }
       }
@@ -611,6 +732,18 @@ function buildServer(run: RunCommand, client = 'AI'): McpServer {
   )
   tool('zoom_to', 'Scroll and zoom the user viewport to fit given nodes.', { ids: z.array(z.string()).min(1) })
 
+  // economy: argument descriptions go too (names and types are usually enough), about a third of the list
+  if (level === 'economy') {
+    type Handler = (req: unknown, extra: unknown) => Promise<{ tools: { inputSchema?: unknown }[] }>
+    const handlers = (server.server as unknown as { _requestHandlers?: Map<string, Handler> })._requestHandlers
+    const list = handlers?.get('tools/list')
+    if (handlers && list)
+      handlers.set('tools/list', async (req, extra) => {
+        const r = await list(req, extra)
+        for (const t of r.tools) stripDescriptions(t.inputSchema)
+        return r
+      })
+  }
   return server
 }
 
@@ -619,7 +752,7 @@ export interface McpHandle {
   close: () => void
 }
 
-export function startMcpServer(run: RunCommand, port: number, devScreenshot?: (part: string) => Promise<Buffer>): Promise<McpHandle> {
+export function startMcpServer(run: RunCommand, port: number, level: () => McpLevel, devScreenshot?: (part: string) => Promise<Buffer>): Promise<McpHandle> {
   const httpServer = http.createServer(async (req, res) => {
     // DNS-rebinding protection: only accept requests addressed to localhost.
     const host = (req.headers.host ?? '').split(':')[0]
@@ -633,7 +766,8 @@ export function startMcpServer(run: RunCommand, port: number, devScreenshot?: (p
     }
     const url = new URL(req.url ?? '/', 'http://127.0.0.1')
     if (url.pathname === '/health') {
-      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ app: 'gigma', ok: true }))
+      // the stdio bridge polls this and tells its client that the tool list changed when the level does
+      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ app: 'gigma', ok: true, level: level() }))
       return
     }
     if (url.pathname === '/debug/screenshot' && devScreenshot) {
@@ -662,7 +796,7 @@ export function startMcpServer(run: RunCommand, port: number, devScreenshot?: (p
       const named = req.headers['x-gigma-client']
       const agent = String(req.headers['user-agent'] ?? '')
       const who = (typeof named === 'string' && named) || lastClient || (/node|undici|^$/i.test(agent) ? '' : agent)
-      const server = buildServer(run, who ? nickname(who) : 'AI')
+      const server = buildServer(run, who ? nickname(who) : 'AI', level())
       const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true })
       res.on('close', () => {
         transport.close()

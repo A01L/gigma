@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { McpStatus, ProjectInfo, SpecBoardItem, UpdateState } from '@shared/api'
+import type { McpLevel, McpStatus, ProjectInfo, SpecBoardItem, UpdateState } from '@shared/api'
 import { backend } from '../backend'
 import { Icons } from './icons'
 import logoUrl from '../assets/logo.svg'
@@ -403,6 +403,7 @@ function SettingsView() {
                 (mcp.error ?? t('MCP server is not running.'))
               )}
             </p>
+            <McpLevelRow />
             {mcp.running && (
               <>
                 <p className="muted">{t('Claude Desktop: Settings → Developer → Edit Config, paste the config and restart Claude.')}</p>
@@ -736,6 +737,36 @@ function FileBadge() {
 
 export function Logo({ size = 28 }: { size?: number }) {
   return <img src={logoUrl} width={size} height={size} alt="" draggable={false} />
+}
+
+/** Settings → AI (MCP): how much of Gigma the AI sees. Lighter levels cost fewer tokens (e.g. the 5-hour limit of Claude Pro). */
+const MCP_LEVELS: { id: McpLevel; label: string; hint: string }[] = [
+  { id: 'ultra', label: 'Ultra', hint: 'Every tool with full descriptions and large pictures. The smartest and the most expensive in tokens.' },
+  { id: 'balanced', label: 'Balanced mode', hint: 'Everyday tools only (rare ones like guideline editing, styles, variants, PDF and brushes are hidden), smaller pictures and compact answers.' },
+  { id: 'economy', label: 'Economy', hint: 'A small core set: frames, shapes, text, SVG, images and basic edits, one-line descriptions, small pictures. The cheapest mode that still edits.' },
+  { id: 'local', label: 'Build locally', hint: 'Editing is off. The AI designs on its side and only places the result into Gigma as SVG. It can still read the canvas, specs, guidelines and take screenshots.' }
+]
+function McpLevelRow() {
+  const t = useT()
+  const s = useSettings()
+  const level = s.mcpLevel ?? 'ultra'
+  return (
+    <>
+      <div className="set-row">
+        <span>{t('MCP level')}</span>
+        <div className="pill-seg wide">
+          {MCP_LEVELS.map((l) => (
+            <button key={l.id} className={level === l.id ? 'on' : ''} onClick={() => setSettings({ mcpLevel: l.id })}>
+              {t(l.label)}
+            </button>
+          ))}
+        </div>
+      </div>
+      <p className="muted">
+        {t(MCP_LEVELS.find((l) => l.id === level)!.hint)} {t('Connected clients get the new tool list on their next request; some need a reconnect.')}
+      </p>
+    </>
+  )
 }
 
 /** Settings → About: look for a new release now, and whether to look by itself when the app starts */
